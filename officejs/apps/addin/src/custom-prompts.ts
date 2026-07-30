@@ -1,0 +1,95 @@
+import type { RuntimeClient } from "./runtime-client";
+import i18n from "./i18n.ts";
+
+export type CustomPromptOutputMode = "Insert" | "TrackedChanges" | "Comment";
+
+export interface CustomPromptDefinition {
+  id: string;
+  name: string;
+  prompt: string;
+  outputMode: CustomPromptOutputMode;
+  quickSlot?: 1 | 2 | 3 | 4;
+}
+
+const STORAGE_KEY = "wordollama-custom-prompts";
+const MAX_PROMPTS = 50;
+const MAX_PROMPT_LENGTH = 20_000;
+
+export function loadCustomPrompts(storage: Storage): CustomPromptDefinition[] {
+  try {
+    const parsed = JSON.parse(storage.getItem(STORAGE_KEY) ?? "[]") as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is CustomPromptDefinition => {
+      if (!item || typeof item !== "object") return false;
+      const prompt = item as CustomPromptDefinition;
+      return typeof prompt.id === "string" &&
+        typeof prompt.name === "string" &&
+        typeof prompt.prompt === "string" &&
+        ["Insert", "TrackedChanges", "Comment"].includes(prompt.outputMode);
+    }).slice(0, MAX_PROMPTS);
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomPrompts(storage: Storage, prompts: CustomPromptDefinition[]): void {
+  if (prompts.length > MAX_PROMPTS) {
+    throw new Error(i18n.t("taskpane.prompts.errors.maxCount", { count: MAX_PROMPTS }));
+  }
+  const names = new Set<string>();
+  const slots = new Set<number>();
+  for (const prompt of prompts) {
+    const normalizedName = prompt.name.trim().toLocaleLowerCase();
+    if (!normalizedName || prompt.name.length > 80) {
+      throw new Error(i18n.t("taskpane.prompts.errors.invalidName"));
+    }
+    if (names.has(normalizedName)) {
+      throw new Error(i18n.t("taskpane.prompts.errors.duplicateName", { name: prompt.name }));
+    }
+    names.add(normalizedName);
+    if (!prompt.prompt.trim() || prompt.prompt.length > MAX_PROMPT_LENGTH) {
+      throw new Error(i18n.t("taskpane.prompts.errors.invalidBody", {
+        name: prompt.name,
+        max: MAX_PROMPT_LENGTH,
+      }));
+    }
+    if (prompt.quickSlot) {
+      if (slots.has(prompt.quickSlot)) {
+        throw new Error(i18n.t("taskpane.prompts.errors.duplicateSlot", { slot: prompt.quickSlot }));
+      }
+      slots.add(prompt.quickSlot);
+    }
+  }
+  storage.setItem(STORAGE_KEY, JSON.stringify(prompts));
+}
+
+export async function runCustomPrompt(
+  runtime: RuntimeClient,
+  definition: CustomPromptDefinition,
+  selectedText: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (!selectedText.trim()) throw new Error(i18n.t("taskpane.prompts.errors.selectText"));
+  const response = await runtime.chat([
+    {
+      role: "system",
+      content: [
+        i18n.t("taskpane.prompts.model.systemApply"),
+        i18n.t("taskpane.prompts.model.systemPreserve"),
+        definition.outputMode === "Comment"
+          ? i18n.t("taskpane.prompts.model.returnComment")
+          : i18n.t("taskpane.prompts.model.returnDocument"),
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: i18n.t("taskpane.prompts.model.userMessage", {
+        instruction: definition.prompt,
+        selection: selectedText.slice(0, 100_000),
+        interpolation: { escapeValue: false },
+      }),
+    },
+  ], undefined, signal);
+  if (!response.content.trim()) throw new Error(i18n.t("taskpane.prompts.errors.emptyResult"));
+  return response.content.trim();
+}

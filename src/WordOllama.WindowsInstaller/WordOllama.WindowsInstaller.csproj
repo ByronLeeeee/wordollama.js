@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>WordOllama.JS.Setup</AssemblyName>
+    <RootNamespace>WordOllama.WindowsInstaller</RootNamespace>
+    <Product>WordOllama.JS Desktop Bridge</Product>
+    <Company>WordOllama</Company>
+    <Description>Per-user setup for the WordOllama.JS Desktop Bridge</Description>
+    <ApplicationIcon>..\..\WordOllama\wordollama-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(BridgeArchive)' != ''">
+    <EmbeddedResource Include="$(BridgeArchive)"
+                      LogicalName="WordOllama.WindowsInstaller.BridgePayload.zip" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(BridgeMetadata)' != ''">
+    <EmbeddedResource Include="$(BridgeMetadata)"
+                      LogicalName="WordOllama.WindowsInstaller.BridgeMetadata.json" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,19 @@
+{
+  "Bridge": {
+    "Urls": "https://127.0.0.1:37421",
+    "HttpsCertificate": {
+      "Path": "/Library/Application Support/WordOllama.JS/certs/bridge.pfx",
+      "Password": ""
+    },
+    "AllowedOrigins": [
+      "https://addin.wordollama.com"
+    ],
+    "Updates": {
+      "IndexUrl": "",
+      "ExpectedPublisherSubject": ""
+    },
+    "LocalTools": {
+      "AllowHttpRequests": false
+    }
+  }
+}

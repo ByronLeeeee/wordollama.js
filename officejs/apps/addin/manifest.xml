@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xsi:type="TaskPaneApp">
+  <Id>4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701</Id>
+  <Version>1.1.0.0</Version>
+  <ProviderName>WordOllama.JS</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="WordOllama.JS" />
+  <Description DefaultValue="WordOllama.JS unified add-in for Word on Windows and Mac">
+    <Override Locale="zh-CN" Value="适用于 Windows 和 Mac Word 的 WordOllama.JS 统一加载项" />
+  </Description>
+  <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-80.png" />
+  <SupportUrl DefaultValue="https://www.wordollama.com" />
+  <AppDomains>
+    <AppDomain>https://localhost:3000</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Document" />
+  </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="WordApi" MinVersion="1.1" />
+    </Sets>
+  </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:3000/index.html" />
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+                    xsi:type="VersionOverridesV1_0">
+    <Description resid="residDescription" />
+    <Requirements>
+      <bt:Sets DefaultMinVersion="1.1">
+        <bt:Set Name="WordApi" MinVersion="1.1" />
+      </bt:Sets>
+    </Requirements>
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <FunctionFile resid="Commands.Url" />
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <CustomTab id="WordOllama.JS.Tab">
+              <Group id="WordOllama.JS.CreateGroup">
+                <Label resid="CreateGroup.Label" />
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16" />
+                  <bt:Image size="32" resid="Icon.32" />
+                  <bt:Image size="80" resid="Icon.80" />
+                </Icon>
+                <Control xsi:type="Button" id="WordOllama.JS.Writing">
+                  <Label resid="Writing.Label" />
+                  <Supertip>
+                    <Title resid="Writing.Label" />
+                    <Description resid="Workflow.Tooltip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16" />
+                    <bt:Image size="32" resid="Icon.32" />
+                    <bt:Image size="80" resid="Icon.80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>WordOllama.JS.WritingPane</TaskpaneId>
+                    <SourceLocation resid="Writing.Url" />
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="WordOllama.JS.Modify">
+                  <Label resid="Modify.Label" /><Supertip><Title resid="Modify.Label" /><Description resid="Workflow.Tooltip" /></Supertip>
+                  <Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
+                  <Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.ModifyPane</TaskpaneId><SourceLocation resid="Modify.Url" /></Action>
+                </Control>
+                <Control xsi:type="Menu" id="WordOllama.JS.CreateMore">
+                  <Label resid="CreateMore.Label" /><Supertip><Title resid="CreateMore.Label" /><Description resid="Workflow.Tooltip" /></Supertip>
+                  <Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
+                  <Items>
+                    <Item id="WordOllama.JS.Image"><Label resid="Image.Label" /><Supertip><Title resid="Image.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.ImagePane</TaskpaneId><SourceLocation resid="Image.Url" /></Action></Item>
+                    <Item id="WordOllama.JS.Table"><Label resid="Table.Label" /><Supertip><Title resid="Table.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.TablePane</TaskpaneId><SourceLocation resid="Table.Url" /></Action></Item>
+                    <Item id="WordOllama.JS.Html"><Label resid="Html.Label" /><Supertip><Title resid="Html.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.HtmlPane</TaskpaneId><SourceLocation resid="Html.Url" /></Action></Item>
+                    <Item id="WordOllama.JS.Markdown"><Label resid="Markdown.Label" /><Supertip><Title resid="Markdown.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.MarkdownPane</TaskpaneId><SourceLocation resid="Markdown.Url" /></Action></Item>
+                  </Items>
+                </Control>
+                <Control xsi:type="Button" id="WordOllama.JS.Agent">
+                  <Label resid="Agent.Label" /><Supertip><Title resid="Agent.Label" /><Description resid="Workflow.Tooltip" /></Supertip>
+                  <Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
+                  <Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.AgentPane</TaskpaneId><SourceLocation resid="Agent.Url" /></Action>
+                </Control>
+              </Group>
+              <Group id="WordOllama.JS.EditGroup">
+                <Label resid="EditGroup.Label" />
+                <Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
+                <Control xsi:type="Menu" id="WordOllama.JS.EditMenu">
+                  <Label resid="EditMenu.Label" /><Supertip><Title resid="EditMenu.Label" /><Description resid="Workflow.Tooltip" /></Supertip>
+                  <Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
+                  <Items>
+                    <Item id="WordOllama.JS.Polish"><Label resid="Polish.Label" /><Supertip><Title resid="Polish.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.EditPane</TaskpaneId><SourceLocation resid="Polish.Url" /></Action></Item>
+                    <Item id="WordOllama.JS.Expand"><Label resid="Expand.Label" /><Supertip><Title resid="Expand.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.EditPane</TaskpaneId><SourceLocation resid="Expand.Url" /></Action></Item>
+                    <Item id="WordOllama.JS.Simplify"><Label resid="Simplify.Label" /><Supertip><Title resid="Simplify.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.EditPane</TaskpaneId><SourceLocation resid="Simplify.Url" /></Action></Item>
+                    <Item id="WordOllama.JS.Continue"><Label resid="Continue.Label" /><Supertip><Title resid="Continue.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.EditPane</TaskpaneId><SourceLocation resid="Continue.Url" /></Action></Item>
+                    <Item id="WordOllama.JS.Summarize"><Label resid="Summarize.Label" /><Supertip><Title resid="Summarize.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.EditPane</TaskpaneId><SourceLocation resid="Summarize.Url" /></Action></Item>
+                    <Item id="WordOllama.JS.Fix"><Label resid="Fix.Label" /><Supertip><Title resid="Fix.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.EditPane</TaskpaneId><SourceLocation resid="Fix.Url" /></Action></Item>
+                    <Item id="WordOllama.JS.Compare"><Label resid="Compare.Label" /><Supertip><Title resid="Compare.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.ComparePane</TaskpaneId><SourceLocation resid="Compare.Url" /></Action></Item>
+                  </Items>
+                </Control>
+              </Group>
+              <Group id="WordOllama.JS.TranslateGroup">
+                <Label resid="TranslateGroup.Label" /><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
+                <Control xsi:type="Menu" id="WordOllama.JS.TranslateMenu"><Label resid="TranslateMenu.Label" /><Supertip><Title resid="TranslateMenu.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Items>
+                  <Item id="WordOllama.JS.Translate"><Label resid="Translate.Label" /><Supertip><Title resid="Translate.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.TranslatePane</TaskpaneId><SourceLocation resid="Translate.Url" /></Action></Item>
+                  <Item id="WordOllama.JS.TranslateZh"><Label resid="TranslateZh.Label" /><Supertip><Title resid="TranslateZh.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.TranslatePane</TaskpaneId><SourceLocation resid="TranslateZh.Url" /></Action></Item>
+                  <Item id="WordOllama.JS.TranslateEn"><Label resid="TranslateEn.Label" /><Supertip><Title resid="TranslateEn.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.TranslatePane</TaskpaneId><SourceLocation resid="TranslateEn.Url" /></Action></Item>
+                </Items></Control>
+              </Group>
+              <Group id="WordOllama.JS.LegalGroup">
+                <Label resid="LegalGroup.Label" /><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
+                <Control xsi:type="Menu" id="WordOllama.JS.LegalMenu"><Label resid="LegalMenu.Label" /><Supertip><Title resid="LegalMenu.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Items>
+                  <Item id="WordOllama.JS.Risk"><Label resid="Risk.Label" /><Supertip><Title resid="Risk.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.LegalPane</TaskpaneId><SourceLocation resid="Risk.Url" /></Action></Item>
+                  <Item id="WordOllama.JS.Fairness"><Label resid="Fairness.Label" /><Supertip><Title resid="Fairness.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.LegalPane</TaskpaneId><SourceLocation resid="Fairness.Url" /></Action></Item>
+                  <Item id="WordOllama.JS.MootCourt"><Label resid="MootCourt.Label" /><Supertip><Title resid="MootCourt.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.MootCourtPane</TaskpaneId><SourceLocation resid="MootCourt.Url" /></Action></Item>
+                  <Item id="WordOllama.JS.ContractCompare"><Label resid="ContractCompare.Label" /><Supertip><Title resid="ContractCompare.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.ComparePane</TaskpaneId><SourceLocation resid="ContractCompare.Url" /></Action></Item>
+                  <Item id="WordOllama.JS.LawSearch"><Label resid="LawSearch.Label" /><Supertip><Title resid="LawSearch.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.LawSearchPane</TaskpaneId><SourceLocation resid="LawSearch.Url" /></Action></Item>
+                </Items></Control>
+                <Control xsi:type="Button" id="WordOllama.JS.Review">
+                  <Label resid="Review.Label" /><Supertip><Title resid="Review.Label" /><Description resid="Workflow.Tooltip" /></Supertip>
+                  <Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
+                  <Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.ReviewPane</TaskpaneId><SourceLocation resid="Review.Url" /></Action>
+                </Control>
+              </Group>
+              <Group id="WordOllama.JS.SettingsGroup">
+                <Label resid="SettingsGroup.Label" /><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
+                <Control xsi:type="Button" id="WordOllama.JS.CustomPrompts"><Label resid="CustomPrompts.Label" /><Supertip><Title resid="CustomPrompts.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.CustomPromptPane</TaskpaneId><SourceLocation resid="CustomPrompts.Url" /></Action></Control>
+                <Control xsi:type="Button" id="WordOllama.JS.Settings"><Label resid="Settings.Label" /><Supertip><Title resid="Settings.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ExecuteFunction"><FunctionName>openSettingsDialog</FunctionName></Action></Control>
+                <Control xsi:type="Button" id="WordOllama.JS.Diagnostics"><Label resid="Diagnostics.Label" /><Supertip><Title resid="Diagnostics.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.DiagnosticsPane</TaskpaneId><SourceLocation resid="Diagnostics.Url" /></Action></Control>
+              </Group>
+              <Label resid="Tab.Label" />
+            </CustomTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://localhost:3000/assets/icon-16.png" />
+        <bt:Image id="Icon.32" DefaultValue="https://localhost:3000/assets/icon-32.png" />
+        <bt:Image id="Icon.80" DefaultValue="https://localhost:3000/assets/icon-80.png" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Commands.Url" DefaultValue="https://localhost:3000/commands.html" />
+        <bt:Url id="Taskpane.Url" DefaultValue="https://localhost:3000/index.html" />
+        <bt:Url id="Writing.Url" DefaultValue="https://localhost:3000/index.html?surface=create&amp;workflow=writing" />
+        <bt:Url id="Modify.Url" DefaultValue="https://localhost:3000/index.html?surface=create&amp;workflow=modify" />
+        <bt:Url id="Image.Url" DefaultValue="https://localhost:3000/index.html?surface=create&amp;workflow=image" />
+        <bt:Url id="Table.Url" DefaultValue="https://localhost:3000/index.html?surface=create&amp;workflow=table" />
+        <bt:Url id="Html.Url" DefaultValue="https://localhost:3000/index.html?surface=create&amp;workflow=html" />
+        <bt:Url id="Markdown.Url" DefaultValue="https://localhost:3000/index.html?surface=create&amp;workflow=markdown" />
+        <bt:Url id="Agent.Url" DefaultValue="https://localhost:3000/index.html?surface=agent&amp;workflow=agent" />
+        <bt:Url id="Polish.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=polish" />
+        <bt:Url id="Expand.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=expand" />
+        <bt:Url id="Simplify.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=simplify" />
+        <bt:Url id="Continue.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=continue" />
+        <bt:Url id="Summarize.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=summarize" />
+        <bt:Url id="Fix.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=fix" />
+        <bt:Url id="Compare.Url" DefaultValue="https://localhost:3000/index.html?surface=compare&amp;workflow=compare" />
+        <bt:Url id="Translate.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=translate" />
+        <bt:Url id="TranslateZh.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=translate-zh" />
+        <bt:Url id="TranslateEn.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=translate-en" />
+        <bt:Url id="Risk.Url" DefaultValue="https://localhost:3000/index.html?surface=legal&amp;workflow=risk" />
+        <bt:Url id="Fairness.Url" DefaultValue="https://localhost:3000/index.html?surface=legal&amp;workflow=fairness" />
+        <bt:Url id="MootCourt.Url" DefaultValue="https://localhost:3000/index.html?surface=legal&amp;workflow=moot-court" />
+        <bt:Url id="ContractCompare.Url" DefaultValue="https://localhost:3000/index.html?surface=compare&amp;workflow=contract-compare" />
+        <bt:Url id="LawSearch.Url" DefaultValue="https://localhost:3000/index.html?surface=legal&amp;workflow=law-search" />
+        <bt:Url id="Review.Url" DefaultValue="https://localhost:3000/index.html?surface=review&amp;workflow=review" />
+        <bt:Url id="CustomPrompts.Url" DefaultValue="https://localhost:3000/index.html?surface=create&amp;workflow=custom-prompts" />
+        <bt:Url id="Settings.Url" DefaultValue="https://localhost:3000/settings.html" />
+        <bt:Url id="Diagnostics.Url" DefaultValue="https://localhost:3000/index.html?surface=diagnostics&amp;workflow=diagnostics" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="Tab.Label" DefaultValue="WordOllama.JS" />
+        <bt:String id="CreateGroup.Label" DefaultValue="Create"><bt:Override Locale="zh-CN" Value="创作" /></bt:String>
+        <bt:String id="Writing.Label" DefaultValue="Write"><bt:Override Locale="zh-CN" Value="自由创作" /></bt:String>
+        <bt:String id="Modify.Label" DefaultValue="Edit with Instructions"><bt:Override Locale="zh-CN" Value="按需修改" /></bt:String>
+        <bt:String id="CreateMore.Label" DefaultValue="More Creation"><bt:Override Locale="zh-CN" Value="更多创作" /></bt:String>
+        <bt:String id="Image.Label" DefaultValue="Understand Image"><bt:Override Locale="zh-CN" Value="图片理解" /></bt:String>
+        <bt:String id="Table.Label" DefaultValue="Generate Table"><bt:Override Locale="zh-CN" Value="生成表格" /></bt:String>
+        <bt:String id="Html.Label" DefaultValue="HTML App"><bt:Override Locale="zh-CN" Value="HTML 应用" /></bt:String>
+        <bt:String id="Markdown.Label" DefaultValue="Markdown Conversion"><bt:Override Locale="zh-CN" Value="Markdown 转换" /></bt:String>
+        <bt:String id="Agent.Label" DefaultValue="Agent" />
+        <bt:String id="EditGroup.Label" DefaultValue="Edit"><bt:Override Locale="zh-CN" Value="编辑" /></bt:String>
+        <bt:String id="EditMenu.Label" DefaultValue="Edit Text"><bt:Override Locale="zh-CN" Value="编辑文本" /></bt:String>
+        <bt:String id="Polish.Label" DefaultValue="Polish"><bt:Override Locale="zh-CN" Value="润色文本" /></bt:String>
+        <bt:String id="Expand.Label" DefaultValue="Expand"><bt:Override Locale="zh-CN" Value="扩写" /></bt:String>
+        <bt:String id="Simplify.Label" DefaultValue="Simplify"><bt:Override Locale="zh-CN" Value="简化" /></bt:String>
+        <bt:String id="Continue.Label" DefaultValue="Continue Writing"><bt:Override Locale="zh-CN" Value="续写" /></bt:String>
+        <bt:String id="Summarize.Label" DefaultValue="Summarize"><bt:Override Locale="zh-CN" Value="归纳" /></bt:String>
+        <bt:String id="Fix.Label" DefaultValue="Correct Errors"><bt:Override Locale="zh-CN" Value="改错" /></bt:String>
+        <bt:String id="Compare.Label" DefaultValue="Compare Results"><bt:Override Locale="zh-CN" Value="对比结果" /></bt:String>
+        <bt:String id="TranslateGroup.Label" DefaultValue="Translate"><bt:Override Locale="zh-CN" Value="翻译" /></bt:String>
+        <bt:String id="TranslateMenu.Label" DefaultValue="Translate"><bt:Override Locale="zh-CN" Value="翻译" /></bt:String>
+        <bt:String id="Translate.Label" DefaultValue="Free Translation"><bt:Override Locale="zh-CN" Value="自由翻译" /></bt:String>
+        <bt:String id="TranslateZh.Label" DefaultValue="Translate to Chinese"><bt:Override Locale="zh-CN" Value="翻译到中文" /></bt:String>
+        <bt:String id="TranslateEn.Label" DefaultValue="Translate to English"><bt:Override Locale="zh-CN" Value="翻译到英文" /></bt:String>
+        <bt:String id="LegalGroup.Label" DefaultValue="Legal"><bt:Override Locale="zh-CN" Value="法务" /></bt:String>
+        <bt:String id="LegalMenu.Label" DefaultValue="Legal Tools"><bt:Override Locale="zh-CN" Value="法律工具" /></bt:String>
+        <bt:String id="Risk.Label" DefaultValue="Comment on Risks"><bt:Override Locale="zh-CN" Value="批注风险" /></bt:String>
+        <bt:String id="Fairness.Label" DefaultValue="Fairness Rewrite"><bt:Override Locale="zh-CN" Value="公平性改写" /></bt:String>
+        <bt:String id="MootCourt.Label" DefaultValue="Moot Court Investigation"><bt:Override Locale="zh-CN" Value="模拟法庭调查" /></bt:String>
+        <bt:String id="ContractCompare.Label" DefaultValue="Contract Revision Assessment"><bt:Override Locale="zh-CN" Value="合同修订评估" /></bt:String>
+        <bt:String id="LawSearch.Label" DefaultValue="Legal Search"><bt:Override Locale="zh-CN" Value="法律检索" /></bt:String>
+        <bt:String id="Review.Label" DefaultValue="Document Review"><bt:Override Locale="zh-CN" Value="文档审阅" /></bt:String>
+        <bt:String id="SettingsGroup.Label" DefaultValue="Settings"><bt:Override Locale="zh-CN" Value="设置" /></bt:String>
+        <bt:String id="CustomPrompts.Label" DefaultValue="Custom Prompts"><bt:Override Locale="zh-CN" Value="自定义提示词" /></bt:String>
+        <bt:String id="Settings.Label" DefaultValue="Settings"><bt:Override Locale="zh-CN" Value="设置" /></bt:String>
+        <bt:String id="Diagnostics.Label" DefaultValue="Diagnostics"><bt:Override Locale="zh-CN" Value="诊断" /></bt:String>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="residDescription" DefaultValue="WordOllama.JS unified add-in for Word on Windows and Mac"><bt:Override Locale="zh-CN" Value="适用于 Windows 和 Mac Word 的 WordOllama.JS 统一加载项" /></bt:String>
+        <bt:String id="Workflow.Tooltip" DefaultValue="Open this workflow in its dedicated WordOllama.JS task pane"><bt:Override Locale="zh-CN" Value="在 WordOllama.JS 的独立任务窗格中打开此工作流" /></bt:String>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

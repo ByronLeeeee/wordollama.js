@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AgentSessionCancelled" xml:space="preserve"><value>Agent session cancelled.</value></data>
+  <data name="AgentPlanPending" xml:space="preserve"><value>The Agent plan must be confirmed before execution.</value></data>
+  <data name="AgentPlanRejected" xml:space="preserve"><value>The Agent plan was rejected by the user.</value></data>
+  <data name="AgentToolBlocked" xml:space="preserve"><value>Tool '{0}' is blocked in {1} mode.</value></data>
+  <data name="AgentExternalToolDisabled" xml:space="preserve"><value>External tool '{0}' is disabled for this session.</value></data>
+  <data name="AgentHighRiskRejected" xml:space="preserve"><value>The user rejected this high-risk tool call.</value></data>
+  <data name="AgentIterationLimit" xml:space="preserve"><value>Agent iteration limit reached.</value></data>
+  <data name="OAuthComplete" xml:space="preserve"><value>Authorization complete. You can close this window and return to WordOllama.</value></data>
+  <data name="OAuthIncomplete" xml:space="preserve"><value>Authorization was not completed. Return to WordOllama to view the error.</value></data>
+  <data name="OAuthGeminiOnly" xml:space="preserve"><value>Google OAuth is available only for Gemini providers.</value></data>
+  <data name="OAuthClientIdInvalid" xml:space="preserve"><value>Google OAuth client ID is required and must be at most 512 characters.</value></data>
+  <data name="OAuthClientSecretTooLong" xml:space="preserve"><value>Google OAuth client secret must be at most 1,024 characters.</value></data>
+  <data name="OAuthProjectInvalid" xml:space="preserve"><value>Google Cloud project ID is invalid.</value></data>
+  <data name="OAuthBrowserOpenFailed" xml:space="preserve"><value>Unable to open the system browser for Google OAuth.</value></data>
+  <data name="OAuthTimeout" xml:space="preserve"><value>Google OAuth sign-in timed out after 3 minutes.</value></data>
+  <data name="OAuthStateMismatch" xml:space="preserve"><value>Google OAuth callback state did not match.</value></data>
+  <data name="OAuthNotCompleted" xml:space="preserve"><value>Google OAuth was not completed: {0}</value></data>
+  <data name="OAuthCodeMissing" xml:space="preserve"><value>Google OAuth callback did not contain an authorization code.</value></data>
+  <data name="OAuthTokenExchangeFailed" xml:space="preserve"><value>Google OAuth token exchange failed ({0}): {1}</value></data>
+  <data name="OAuthAccessTokenMissing" xml:space="preserve"><value>Google OAuth response did not contain access_token.</value></data>
+  <data name="OAuthCallbackNotLoopback" xml:space="preserve"><value>Google OAuth callback was not received from loopback.</value></data>
+  <data name="OAuthRequestLineInvalid" xml:space="preserve"><value>Google OAuth callback request line is invalid.</value></data>
+  <data name="OAuthRequestInvalid" xml:space="preserve"><value>Google OAuth callback request is invalid.</value></data>
+  <data name="OAuthHeadersInvalid" xml:space="preserve"><value>Google OAuth callback headers are invalid.</value></data>
+  <data name="OAuthTooManyHeaders" xml:space="preserve"><value>Google OAuth callback contains too many headers.</value></data>
+  <data name="OAuthFailedTitle" xml:space="preserve"><value>Google OAuth failed</value></data>
+  <data name="OllamaProviderRequired" xml:space="preserve"><value>The active provider is not Ollama, so local Ollama models cannot be managed.</value></data>
+</root>

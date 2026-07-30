@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "source": "WordOllama COM/VSTO product baseline captured before repository split",
+  "agentPane": [
+    "ChatTabItem",
+    "IssuesTabItem",
+    "ReviewTabItem",
+    "btnCancelTask",
+    "chatPanel",
+    "txtInput",
+    "suggestionList"
+  ],
+  "ribbonControls": [
+    "CreateButton",
+    "BtnModifyText",
+    "AgentBtn",
+    "TranslatePane",
+    "RiskAssessment",
+    "PleadingReview",
+    "SettingButton"
+  ],
+  "settingsCapabilities": [
+    "OllamaMode",
+    "ChatGPTMode",
+    "SkillDataGrid",
+    "McpServerDataGrid",
+    "AgentMaxIterationsBox"
+  ]
+}

@@ -1,0 +1,141 @@
+import { ArrowUp, ImagePlus, Sparkles } from "lucide-react";
+
+export function AgentWorkspace() {
+  return (
+    <>
+      <nav
+        className="main-tabs"
+        aria-label="Agent workspace"
+        data-i18n-aria-label="taskpane.agent.workspace"
+      >
+        <button
+          className="tab-button active"
+          type="button"
+          data-tab="chat"
+          data-i18n="taskpane.agent.chat"
+        >
+          Chat
+        </button>
+        <button className="tab-button" type="button" data-tab="issues">
+          <span data-i18n="taskpane.agent.issues">Issues</span>{" "}
+          <span id="issue-count" className="count-badge">
+            0
+          </span>
+        </button>
+        <button
+          className="tab-button"
+          type="button"
+          data-tab="review"
+          data-i18n="taskpane.agent.review"
+        >
+          Review
+        </button>
+      </nav>
+
+      <section id="tab-chat" className="tab-panel active" data-panel="chat">
+        <aside id="workflow-banner" className="workflow-banner" hidden>
+          <strong id="workflow-title" />
+        </aside>
+        <aside id="agent-recovery" className="workflow-banner" hidden>
+          <strong data-i18n="taskpane.agent.recoveryFound">
+            Unfinished Agent task found
+          </strong>
+          <p id="agent-recovery-detail" />
+          <div className="action-row">
+            <button
+              id="resume-agent-session"
+              type="button"
+              data-i18n="taskpane.agent.resume"
+            >
+              Resume
+            </button>
+            <button
+              id="discard-agent-session"
+              className="secondary-button"
+              type="button"
+              data-i18n="taskpane.agent.discard"
+            >
+              Discard
+            </button>
+          </div>
+        </aside>
+
+        <div id="agent-output" className="chat-thread" aria-live="polite">
+          <div id="empty-chat-state" className="empty-state">
+            <span className="empty-icon" aria-hidden="true">
+              <Sparkles size={22} strokeWidth={1.8} />
+            </span>
+            <h2>WordOllama.JS Agent</h2>
+            <p className="muted" data-i18n="taskpane.agent.emptyHint">
+              Enter an instruction below, or use the menu to invoke tools
+            </p>
+          </div>
+        </div>
+
+        <div className="composer">
+          <input
+            id="agent-image-input"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            hidden
+          />
+          <div id="agent-image-preview" className="agent-image-preview" hidden>
+            <img
+              id="agent-image-preview-img"
+              alt="Image to send"
+              data-i18n-alt="taskpane.agent.imageAlt"
+            />
+            <button
+              id="agent-image-remove"
+              className="text-button"
+              type="button"
+              data-i18n="taskpane.agent.removeImage"
+            >
+              Remove image
+            </button>
+          </div>
+          <div className="composer-toolbar">
+            <button
+              id="attach-image"
+              className="icon-button"
+              type="button"
+              aria-label="Add image"
+              title="Add image"
+              data-i18n-aria-label="taskpane.agent.addImage"
+              data-i18n-title="taskpane.agent.addImage"
+            >
+              <ImagePlus size={16} strokeWidth={2} aria-hidden="true" />
+            </button>
+          </div>
+          <div
+            id="command-menu"
+            className="command-menu"
+            role="listbox"
+            aria-label="Agent commands"
+            data-i18n-aria-label="taskpane.agent.commands"
+            hidden
+          />
+          <div className="composer-row">
+            <textarea
+              id="agent-requirement"
+              rows={2}
+              placeholder="Enter an instruction, or type / for quick actions…"
+              aria-label="Agent instruction"
+              data-i18n-placeholder="taskpane.agent.instructionPlaceholder"
+              data-i18n-aria-label="taskpane.agent.instruction"
+            />
+            <button
+              id="agent-run"
+              className="send-button"
+              type="button"
+              aria-label="Send"
+              data-i18n-aria-label="taskpane.agent.send"
+            >
+              <ArrowUp size={17} strokeWidth={2.2} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}

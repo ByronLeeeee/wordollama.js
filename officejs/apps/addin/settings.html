@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en" data-theme="wordollama">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WordOllama.JS</title>
+    <style>
+      html,
+      body,
+      #settings-root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+
+      .settings-bootstrap {
+        display: grid;
+        width: 100%;
+        height: 100%;
+        place-items: center;
+        background: #f5f7fb;
+        color: #172033;
+        font: 12px/1.5 "Segoe UI", sans-serif;
+      }
+
+      .settings-bootstrap-indicator {
+        width: 22px;
+        height: 22px;
+        border: 2px solid #d7deea;
+        border-top-color: #185abd;
+        border-radius: 50%;
+        animation: settings-bootstrap-spin .8s linear infinite;
+      }
+
+      .settings-bootstrap-error {
+        box-sizing: border-box;
+        max-width: min(720px, calc(100% - 48px));
+        max-height: calc(100% - 48px);
+        overflow: auto;
+        padding: 16px;
+        border: 1px solid #b42318;
+        border-radius: 8px;
+        background: #fff;
+        color: #7a271a;
+        white-space: pre-wrap;
+      }
+
+      @keyframes settings-bootstrap-spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+    <script>
+      (() => {
+        const showBootstrapError = (value) => {
+          const root = document.querySelector("#settings-root");
+          if (!root || root.dataset.reactMounted === "true") return;
+          const error = value instanceof Error ? (value.stack || value.message) : String(value);
+          root.innerHTML = "";
+          const output = document.createElement("pre");
+          output.className = "settings-bootstrap-error";
+          output.textContent = error;
+          root.append(output);
+        };
+        window.addEventListener("error", (event) => showBootstrapError(event.error || event.message));
+        window.addEventListener("unhandledrejection", (event) => showBootstrapError(event.reason));
+        window.__wordOllamaShowSettingsBootstrapError = showBootstrapError;
+      })();
+    </script>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  </head>
+  <body>
+    <div id="settings-root">
+      <div class="settings-bootstrap" role="status">
+        <span class="settings-bootstrap-indicator"></span>
+      </div>
+    </div>
+    <script type="module" src="/src/settings/main.tsx"></script>
+  </body>
+</html>

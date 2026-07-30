@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "kind": "word-host-supplemental",
+  "startedAt": "REPLACE_WITH_ISO_8601_START",
+  "finishedAt": "REPLACE_WITH_ISO_8601_FINISH",
+  "release": {
+    "addinVersion": "REPLACE_WITH_RELEASE_VERSION",
+    "bridgeVersion": "REPLACE_WITH_RELEASE_VERSION",
+    "protocolVersion": "1.0"
+  },
+  "host": {
+    "host": "Word",
+    "platform": "REPLACE_WITH_PC_OR_Mac",
+    "version": "REPLACE_WITH_WORD_VERSION",
+    "language": "REPLACE_WITH_DISPLAY_LANGUAGE"
+  },
+  "compare": {
+    "status": "REPLACE_WITH_passed",
+    "documents": {
+      "originalSha256": "REPLACE_WITH_64_HEX_SHA256",
+      "revisedSha256": "REPLACE_WITH_DIFFERENT_64_HEX_SHA256"
+    },
+    "appliedRevisionCount": 1,
+    "cases": [
+      {
+        "name": "complex-contract-structure-and-style",
+        "status": "REPLACE_WITH_passed"
+      },
+      {
+        "name": "selected-differences-applied-as-word-revisions",
+        "status": "REPLACE_WITH_passed"
+      }
+    ],
+    "errors": []
+  },
+  "coauthoring": {
+    "status": "REPLACE_WITH_passed",
+    "clientCount": 2,
+    "documentId": "REPLACE_WITH_SHARED_DOCUMENT_ID",
+    "clients": [
+      {
+        "clientId": "client-1",
+        "host": "Word",
+        "platform": "REPLACE_WITH_PC_Mac_OR_Web",
+        "version": "REPLACE_WITH_WORD_VERSION"
+      },
+      {
+        "clientId": "client-2",
+        "host": "Word",
+        "platform": "REPLACE_WITH_PC_Mac_OR_Web",
+        "version": "REPLACE_WITH_WORD_VERSION"
+      }
+    ],
+    "cases": [
+      {
+        "name": "concurrent-edit-stable-anchor-relocation",
+        "status": "REPLACE_WITH_passed"
+      },
+      {
+        "name": "stale-write-is-rejected-before-application",
+        "status": "REPLACE_WITH_passed"
+      }
+    ],
+    "errors": []
+  },
+  "multiPane": {
+    "status": "REPLACE_WITH_passed",
+    "taskpaneIds": [
+      "WordOllama.JS.AgentPane",
+      "WordOllama.JS.WritingPane",
+      "WordOllama.JS.ModifyPane",
+      "WordOllama.JS.ImagePane",
+      "WordOllama.JS.TablePane",
+      "WordOllama.JS.HtmlPane",
+      "WordOllama.JS.MarkdownPane",
+      "WordOllama.JS.EditPane",
+      "WordOllama.JS.TranslatePane",
+      "WordOllama.JS.ComparePane",
+      "WordOllama.JS.ReviewPane",
+      "WordOllama.JS.LegalPane",
+      "WordOllama.JS.MootCourtPane",
+      "WordOllama.JS.LawSearchPane",
+      "WordOllama.JS.CustomPromptPane",
+      "WordOllama.JS.DiagnosticsPane"
+    ],
+    "cases": [
+      {
+        "name": "independent-panes-open-without-replacing-each-other",
+        "status": "REPLACE_WITH_passed"
+      }
+    ],
+    "errors": []
+  },
+  "dialogs": {
+    "status": "REPLACE_WITH_passed",
+    "dialogIds": [
+      "WordOllama.JS.SettingsDialog"
+    ],
+    "cases": [
+      {
+        "name": "settings-opens-as-office-dialog",
+        "status": "REPLACE_WITH_passed"
+      }
+    ],
+    "errors": []
+  },
+  "appearance": {
+    "status": "REPLACE_WITH_passed",
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "languages": [
+      "zh-CN",
+      "en-US"
+    ],
+    "widths": [
+      "narrow",
+      "wide"
+    ],
+    "cases": [
+      {
+        "name": "light-zh-CN-narrow",
+        "status": "REPLACE_WITH_passed"
+      },
+      {
+        "name": "light-zh-CN-wide",
+        "status": "REPLACE_WITH_passed"
+      },
+      {
+        "name": "light-en-US-narrow",
+        "status": "REPLACE_WITH_passed"
+      },
+      {
+        "name": "light-en-US-wide",
+        "status": "REPLACE_WITH_passed"
+      },
+      {
+        "name": "dark-zh-CN-narrow",
+        "status": "REPLACE_WITH_passed"
+      },
+      {
+        "name": "dark-zh-CN-wide",
+        "status": "REPLACE_WITH_passed"
+      },
+      {
+        "name": "dark-en-US-narrow",
+        "status": "REPLACE_WITH_passed"
+      },
+      {
+        "name": "dark-en-US-wide",
+        "status": "REPLACE_WITH_passed"
+      }
+    ],
+    "errors": []
+  }
+}

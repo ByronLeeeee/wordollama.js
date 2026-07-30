@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-07-29T12:44:29.076Z",
+  "finishedAt": "2026-07-29T12:44:40.339Z",
+  "host": {
+    "host": "Word",
+    "platform": "PC",
+    "version": "16.0.20228.20110",
+    "language": "zh-CN"
+  },
+  "operationBudgetMs": 30000,
+  "cases": [
+    {
+      "paragraphCount": 1000,
+      "characterCount": 77892,
+      "status": "passed",
+      "prepareMs": 117,
+      "overviewMs": 809,
+      "fullReadMs": 95,
+      "nearEndChunkMs": 94,
+      "semanticMapMs": 87,
+      "relocationMs": 961,
+      "observedParagraphCount": 1000,
+      "semanticEntryCount": 100,
+      "relocatedIndex": 801,
+      "errors": []
+    },
+    {
+      "paragraphCount": 5000,
+      "characterCount": 393892,
+      "status": "passed",
+      "prepareMs": 3567,
+      "overviewMs": 384,
+      "fullReadMs": 279,
+      "nearEndChunkMs": 288,
+      "semanticMapMs": 278,
+      "relocationMs": 4306,
+      "observedParagraphCount": 5000,
+      "semanticEntryCount": 500,
+      "relocatedIndex": 4001,
+      "errors": []
+    }
+  ]
+}

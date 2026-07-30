@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-07-29T12:58:51.994Z",
+  "finishedAt": "2026-07-29T12:58:53.304Z",
+  "host": {
+    "host": "Word",
+    "platform": "PC",
+    "version": "16.0.20228.20110",
+    "language": "zh-CN"
+  },
+  "status": "passed",
+  "capabilities": {
+    "wordApi14ChangeTracking": true,
+    "wordApiDesktop14Revisions": true
+  },
+  "initialRevisionCount": 1,
+  "afterAcceptCount": 0,
+  "afterRejectCount": 0,
+  "afterAcceptAllCount": 0,
+  "acceptedMarkerRetained": true,
+  "rejectedMarkerRemoved": true,
+  "batchMarkerRetained": true,
+  "focusVerified": true,
+  "errors": []
+}

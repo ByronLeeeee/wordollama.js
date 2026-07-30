@@ -1,0 +1,124 @@
+name: Office.js unified CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/officejs-unified-ci.yml"
+      - ".github/workflows/officejs-signed-candidate.yml"
+      - "officejs/**"
+      - "packaging/**"
+      - "src/WordOllama.Contracts/**"
+      - "src/WordOllama.Core/**"
+      - "src/WordOllama.DesktopBridge/**"
+      - "src/WordOllama.Mcp/**"
+      - "src/WordOllama.Platform/**"
+      - "tools/**"
+  push:
+    branches:
+      - office.js
+    paths:
+      - ".github/workflows/officejs-unified-ci.yml"
+      - ".github/workflows/officejs-signed-candidate.yml"
+      - "officejs/**"
+      - "packaging/**"
+      - "src/WordOllama.Contracts/**"
+      - "src/WordOllama.Core/**"
+      - "src/WordOllama.DesktopBridge/**"
+      - "src/WordOllama.Mcp/**"
+      - "src/WordOllama.Platform/**"
+      - "tools/**"
+
+permissions:
+  contents: read
+
+jobs:
+  unified-smoke:
+    name: Unified smoke (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: officejs/apps/addin/package-lock.json
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+      - name: Install Office.js dependencies
+        working-directory: officejs/apps/addin
+        run: npm ci
+      - name: Run unified smoke
+        shell: pwsh
+        run: ./tools/unified-smoke-test.ps1 -Configuration Release -SkipManifestValidation
+
+  target-package:
+    name: Package ${{ matrix.runtime }} on ${{ matrix.runner }}
+    needs: unified-smoke
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            runtime: win-x64
+          - runner: macos-15
+            runtime: osx-arm64
+          - runner: macos-15-intel
+            runtime: osx-x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: officejs/apps/addin/package-lock.json
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+      - name: Install Office.js dependencies
+        working-directory: officejs/apps/addin
+        run: npm ci
+      - name: Verify target-native Bridge package
+        shell: pwsh
+        run: ./tools/bridge-package-smoke-test.ps1 -Configuration Release
+      - name: Verify target-native platform secret store
+        shell: pwsh
+        run: >
+          dotnet run
+          --project ./tools/platform-secret-store-smoke/WordOllama.PlatformSecretStoreSmoke.csproj
+          --configuration Release
+          --
+          --allow-user-vault-test
+      - name: Verify target-native Bridge live API
+        shell: pwsh
+        run: |
+          $executable = if ("${{ matrix.runtime }}" -eq "win-x64") {
+            "./.build-bridge-package-smoke/smoke-${{ matrix.runtime }}/WordOllama.DesktopBridge.exe"
+          } else {
+            "./.build-bridge-package-smoke/smoke-${{ matrix.runtime }}/WordOllama.DesktopBridge"
+          }
+          ./tools/bridge-live-api-smoke-test.ps1 -Configuration Release -BridgeAssemblyPath $executable
+      - name: Build unsigned unified artifacts
+        shell: pwsh
+        run: >
+          ./packaging/package-unified-release.ps1
+          -Runtime ${{ matrix.runtime }}
+          -Configuration Release
+          -Version ci-${{ github.run_number }}-${{ github.run_attempt }}
+          -ManifestVersion 1.2.${{ github.run_number }}.${{ github.run_attempt }}
+          -BaseUrl https://addin.wordollama.invalid
+          -BridgeUrl https://127.0.0.1:37421
+          -UpdateIndexUrl https://updates.wordollama.invalid/ci-${{ github.run_number }}-${{ github.run_attempt }}/index.json
+          -ExpectedUpdatePublisherSubject 'CN=WordOllama CI Unsigned Test'
+          -OutputRoot ./ci-unified
+      - name: Upload unsigned build evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: wordollama-js-${{ matrix.runtime }}-unsigned
+          path: ci-unified/
+          if-no-files-found: error
+          retention-days: 7
