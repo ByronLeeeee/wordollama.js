@@ -5,7 +5,8 @@ param(
     [string]$Configuration = "Release",
     [ValidatePattern("^[0-9A-Za-z][0-9A-Za-z._-]*$")]
     [string]$Version = "0.1.0",
-    [string]$AddinOrigin = "https://addin.wordollama.com",
+    [string]$AddinOrigin = "https://localhost:37421",
+    [string]$AddinStaticRoot = "",
     [string]$UpdateIndexUrl = "",
     [string]$ExpectedUpdatePublisherSubject = "",
     [string]$OutputRoot = "",
@@ -19,14 +20,16 @@ $project = Join-Path $repoRoot "src\WordOllama.DesktopBridge\WordOllama.DesktopB
 [Uri]$addinUri = $null
 if (-not [Uri]::TryCreate($AddinOrigin, [UriKind]::Absolute, [ref]$addinUri) -or
     $addinUri.Scheme -ne [Uri]::UriSchemeHttps -or
-    $addinUri.IsLoopback -or
     -not [string]::IsNullOrEmpty($addinUri.UserInfo) -or
     -not [string]::IsNullOrEmpty($addinUri.Query) -or
     -not [string]::IsNullOrEmpty($addinUri.Fragment) -or
     $addinUri.AbsolutePath -ne "/") {
-    throw "AddinOrigin must be a non-loopback HTTPS origin without credentials, path, query, or fragment."
+    throw "AddinOrigin must be an HTTPS origin without credentials, path, query, or fragment."
 }
 $productionAddinOrigin = $addinUri.GetLeftPart([UriPartial]::Authority)
+if ($addinUri.IsLoopback -and [string]::IsNullOrWhiteSpace($AddinStaticRoot)) {
+    throw "A loopback AddinOrigin requires AddinStaticRoot so the Bridge can host the Office.js frontend."
+}
 
 $productionUpdateIndexUrl = ""
 if (-not [string]::IsNullOrWhiteSpace($UpdateIndexUrl)) {
@@ -122,6 +125,30 @@ if ($productionSettings.Bridge.Urls -notlike "https://*" -or
     $productionSettings.Bridge.Updates.ExpectedPublisherSubject -ne
         $productionUpdatePublisherSubject) {
     throw "Published Bridge production settings failed the HTTPS/security invariant."
+}
+
+if (-not [string]::IsNullOrWhiteSpace($AddinStaticRoot)) {
+    $addinStaticRootFullPath = (Resolve-Path -LiteralPath $AddinStaticRoot).Path
+    foreach ($requiredFile in @("index.html", "settings.html", "commands.html", "manifest.xml")) {
+        if (-not (Test-Path -LiteralPath (Join-Path $addinStaticRootFullPath $requiredFile) -PathType Leaf)) {
+            throw "Packaged Add-in static root is missing $requiredFile."
+        }
+    }
+    $addinAssets = Join-Path $addinStaticRootFullPath "assets"
+    if (-not (Test-Path -LiteralPath $addinAssets -PathType Container)) {
+        throw "Packaged Add-in static root is missing its assets directory."
+    }
+
+    $webRoot = Join-Path $output "wwwroot"
+    New-Item -ItemType Directory -Force -Path $webRoot | Out-Null
+    foreach ($entry in Get-ChildItem -LiteralPath $addinStaticRootFullPath -Force) {
+        if ($entry.Name -eq "manifest.xml") {
+            continue
+        }
+        Copy-Item -LiteralPath $entry.FullName -Destination $webRoot -Recurse -Force
+    }
+    Copy-Item -LiteralPath (Join-Path $addinStaticRootFullPath "manifest.xml") `
+        -Destination (Join-Path $output "WordOllama.JS.xml") -Force
 }
 
 if ($CrossBuildOnly) {

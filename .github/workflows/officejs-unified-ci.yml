@@ -110,8 +110,8 @@ jobs:
           -Configuration Release
           -Version ci-${{ github.run_number }}-${{ github.run_attempt }}
           -ManifestVersion 1.2.${{ github.run_number }}.${{ github.run_attempt }}
-          -BaseUrl https://addin.wordollama.invalid
-          -BridgeUrl https://127.0.0.1:37421
+          -BaseUrl https://localhost:37421
+          -BridgeUrl https://localhost:37421
           -UpdateIndexUrl https://updates.wordollama.invalid/ci-${{ github.run_number }}-${{ github.run_attempt }}/index.json
           -ExpectedUpdatePublisherSubject 'CN=WordOllama CI Unsigned Test'
           -OutputRoot ./ci-unified

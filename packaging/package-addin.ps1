@@ -1,6 +1,6 @@
 param(
-    [string]$BaseUrl = "https://addin.wordollama.com",
-    [string]$BridgeUrl = "https://127.0.0.1:37421",
+    [string]$BaseUrl = "https://localhost:37421",
+    [string]$BridgeUrl = "https://localhost:37421",
     [ValidatePattern("^[0-9A-Za-z][0-9A-Za-z._-]*$")]
     [string]$Version = "0.1.0",
     [ValidatePattern("^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$")]
@@ -16,12 +16,11 @@ $addinRoot = Join-Path $repoRoot "officejs\apps\addin"
 [Uri]$baseUri = $null
 if (-not [Uri]::TryCreate($BaseUrl, [UriKind]::Absolute, [ref]$baseUri) -or
     $baseUri.Scheme -ne [Uri]::UriSchemeHttps -or
-    $baseUri.IsLoopback -or
     -not [string]::IsNullOrEmpty($baseUri.UserInfo) -or
     -not [string]::IsNullOrEmpty($baseUri.Query) -or
     -not [string]::IsNullOrEmpty($baseUri.Fragment) -or
     $baseUri.AbsolutePath -ne "/") {
-    throw "BaseUrl must be a non-loopback HTTPS origin without credentials, path, query, or fragment."
+    throw "BaseUrl must be an HTTPS origin without credentials, path, query, or fragment."
 }
 
 [Uri]$bridgeUri = $null
@@ -35,6 +34,11 @@ if (-not [Uri]::TryCreate($BridgeUrl, [UriKind]::Absolute, [ref]$bridgeUri) -or
     throw "BridgeUrl must be a loopback HTTPS origin without credentials, path, query, or fragment."
 }
 $productionBridgeUrl = $bridgeUri.GetLeftPart([UriPartial]::Authority)
+$productionAddinUrl = $baseUri.GetLeftPart([UriPartial]::Authority)
+if ($baseUri.IsLoopback -and
+    -not $productionAddinUrl.Equals($productionBridgeUrl, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "A loopback Add-in BaseUrl must use the same origin as BridgeUrl."
+}
 
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = Join-Path $repoRoot "artifacts\addin"

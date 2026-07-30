@@ -11,10 +11,6 @@ on:
         description: Four-part Office manifest version
         required: true
         type: string
-      addin_origin:
-        description: Production Add-in HTTPS origin
-        required: true
-        type: string
       update_index_url:
         description: Production HTTPS update-index URL
         required: true
@@ -68,8 +64,8 @@ jobs:
           -Configuration Release
           -Version '${{ inputs.version }}'
           -ManifestVersion '${{ inputs.manifest_version }}'
-          -BaseUrl '${{ inputs.addin_origin }}'
-          -BridgeUrl https://127.0.0.1:37421
+          -BaseUrl https://localhost:37421
+          -BridgeUrl https://localhost:37421
           -UpdateIndexUrl '${{ inputs.update_index_url }}'
           -ExpectedUpdatePublisherSubject $env:UPDATE_INSTALLER_PUBLISHER
           -OutputRoot ./signed-candidate

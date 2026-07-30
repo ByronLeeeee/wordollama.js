@@ -276,6 +276,18 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+var addinWebRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+if (Directory.Exists(addinWebRoot))
+{
+    app.UseDefaultFiles(new DefaultFilesOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(addinWebRoot),
+    });
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(addinWebRoot),
+    });
+}
 app.UseCors("officejs");
 var eventJsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 var agentRecoveryCapabilities = agentRecoveryStore.Enabled

@@ -35,7 +35,7 @@ MCP stdio 已独立为 `WordOllama.Mcp` net8.0 项目，Bridge 提供 `/mcp/serv
 
 已授权并连接的 MCP 工具会以 `mcp__server__tool` 名称自动加入 Agent schema，并在 Bridge 内部执行；Office.js 不需要了解 MCP 进程或传输细节。
 
-Bridge 当前使用本机回环 HTTP 便于开发；程序会拒绝非回环 HTTP。生产配置已支持回环 HTTPS PFX，打包流程已提供 Windows Authenticode 自包含用户 EXE、macOS Developer ID/notarized 用户 PKG 和平台密钥库读取/写入；`provision-bridge-https.ps1` 会验证受信任 PFX 并通过标准输入把密码写入 Windows Credential Manager 或 macOS Keychain，避免密码进入命令行和 JSON，并在成功后激活对应用户自启项。真实证书签名、公证及目标平台信任链仍须在对应发布环境执行。Windows/Mac 统一版的受支持基线是 Microsoft 365 Word（Windows、Mac、Web）；老版本或缺少对应 WordApi 集的宿主会隐藏/拒绝不支持的工具，保留基础文本操作。
+Bridge 当前使用本机回环 HTTP 便于开发；程序会拒绝非回环 HTTP。正式桌面版由同一个 Bridge 在 `https://localhost:37421` 同时托管 React 前端与本地 API，生成的 manifest 也指向该本地宿主，因此用户安装后不需要 Vite、在线静态站点或手动启动 Bridge。Windows EXE/macOS PKG 会安装本地前端、manifest 和用户级登录自启项；生产配置使用回环 HTTPS PFX，`provision-bridge-https.ps1` 会验证受信任 PFX 并通过标准输入把密码写入 Windows Credential Manager 或 macOS Keychain，避免密码进入命令行和 JSON。真实证书签名、公证及目标平台信任链仍须在对应发布环境执行。Windows/Mac 统一版的受支持基线是 Microsoft 365 Word（Windows、Mac）；老版本或缺少对应 WordApi 集的宿主会隐藏/拒绝不支持的工具，保留基础文本操作。完全离线的桌面发行不支持 Word 网页版。
 
 Windows EXE 会登记当前用户卸载入口；macOS PKG 会在
 `~/Applications/WordOllama.JS` 安装双语原生卸载器。两端卸载都删除安装文件、

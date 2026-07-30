@@ -102,10 +102,10 @@ try {
         -SkipManifestValidation
 }
 catch {
-    $insecureBaseUrlRejected = $_.Exception.Message -like "*non-loopback HTTPS origin*"
+    $insecureBaseUrlRejected = $_.Exception.Message -like "*must be an HTTPS origin*"
 }
 if (-not $insecureBaseUrlRejected) {
-    throw "Add-in packaging security regression: insecure or loopback BaseUrl was accepted."
+    throw "Add-in packaging security regression: insecure BaseUrl was accepted."
 }
 
 $nonOriginBaseUrlRejected = $false
@@ -138,8 +138,24 @@ if (-not $insecureBridgeUrlRejected) {
     throw "Add-in packaging security regression: insecure BridgeUrl was accepted."
 }
 
+$mismatchedLoopbackOriginRejected = $false
+try {
+    & $packageScript `
+        -BaseUrl "https://localhost:37421" `
+        -BridgeUrl "https://127.0.0.1:37421" `
+        -Version "mismatched-loopback-smoke" `
+        -OutputRoot $packageOutputRoot `
+        -SkipManifestValidation
+}
+catch {
+    $mismatchedLoopbackOriginRejected =
+        $_.Exception.Message -like "*must use the same origin*"
+}
+if (-not $mismatchedLoopbackOriginRejected) {
+    throw "Add-in packaging security regression: mismatched local UI/API origins were accepted."
+}
+
 & $packageScript `
-    -BaseUrl "https://addin.wordollama.invalid" `
     -Version "smoke" `
     -OutputRoot $packageOutputRoot `
     -SkipManifestValidation
@@ -168,9 +184,9 @@ try {
         $reader.Dispose()
     }
     if ($packagedManifest -match "https://localhost:3000" -or
-        $packagedManifest -notmatch "https://addin.wordollama.invalid" -or
+        $packagedManifest -notmatch "https://localhost:37421" -or
         $packagedManifest -notmatch 'DisplayName DefaultValue="WordOllama.JS"') {
-        throw "Add-in packaging regression: production manifest identity/origin replacement failed."
+        throw "Add-in packaging regression: desktop manifest identity/origin replacement failed."
     }
     [xml]$packagedManifestXml = $packagedManifest
     $packagedDefaultLocale = $packagedManifestXml.SelectSingleNode(
@@ -200,7 +216,7 @@ try {
         }
     }
     if ($packagedJavascript -match "http://127.0.0.1:37421" -or
-        $packagedJavascript -notmatch "https://127.0.0.1:37421") {
+        $packagedJavascript -notmatch "https://localhost:37421") {
         throw "Add-in packaging regression: production Bridge HTTPS URL injection failed."
     }
 }

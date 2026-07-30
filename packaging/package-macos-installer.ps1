@@ -200,6 +200,7 @@ set -eu
 root="$HOME/Library/Application Support/WordOllama.JS/DesktopBridge"
 launch_agent="$HOME/Library/LaunchAgents/com.wordollama.desktopbridge.plist"
 application_dir="$HOME/Applications/WordOllama.JS"
+addin_manifest="$HOME/Library/Containers/com.microsoft.Word/Data/Documents/wef/WordOllama.JS.xml"
 resources="$application_dir/Uninstaller Resources"
 expected_root="$HOME/Library/Application Support/WordOllama.JS/DesktopBridge"
 expected_agent="$HOME/Library/LaunchAgents/com.wordollama.desktopbridge.plist"
@@ -252,6 +253,9 @@ fi
   -s "WordOllama.JS/WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD" \
   -a "$(id -un)" >/dev/null 2>&1 || true
 rm -f "$launch_agent"
+if [ -f "$addin_manifest" ] && grep -q '4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701' "$addin_manifest"; then
+  rm -f "$addin_manifest"
+fi
 rm -rf "$root"
 /usr/sbin/pkgutil --forget com.wordollama.desktopbridge >/dev/null 2>&1 || true
 rm -f "$resources/messages.en-US" "$resources/messages.zh-CN"
@@ -288,6 +292,11 @@ case "`$previous" in
   ''|*[!0-9A-Za-z._-]*) previous="" ;;
 esac
 mkdir -p "`$root"
+addin_source="`$root/versions/$Version/WordOllama.JS.xml"
+addin_root="`$HOME/Library/Containers/com.microsoft.Word/Data/Documents/wef"
+[ -f "`$addin_source" ] || exit 5
+mkdir -p "`$addin_root"
+cp -f "`$addin_source" "`$addin_root/WordOllama.JS.xml"
 pointer_tmp="`$root/.current-version.`$`$"
 state_tmp="`$root/.current.json.`$`$"
 printf '%s' '$Version' > "`$pointer_tmp"

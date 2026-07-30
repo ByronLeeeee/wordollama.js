@@ -7,8 +7,8 @@ param(
     [string]$Version = "0.1.0",
     [ValidatePattern("^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$")]
     [string]$ManifestVersion = "1.1.0.0",
-    [string]$BaseUrl = "https://addin.wordollama.com",
-    [string]$BridgeUrl = "https://127.0.0.1:37421",
+    [string]$BaseUrl = "https://localhost:37421",
+    [string]$BridgeUrl = "https://localhost:37421",
     [string]$UpdateIndexUrl = "",
     [string]$ExpectedUpdatePublisherSubject = "",
     [string]$OutputRoot = "",
@@ -41,10 +41,12 @@ $normalizedUpdateIndexUrl = if ([string]::IsNullOrWhiteSpace($UpdateIndexUrl)) {
 & $packageAddin -BaseUrl $BaseUrl -BridgeUrl $BridgeUrl `
     -Version $Version -ManifestVersion $ManifestVersion `
     -OutputRoot $addinOutput -SkipManifestValidation:$SkipManifestValidation
+$addinStaticRoot = Join-Path $addinOutput $Version
 & $publishBridge -Runtime $Runtime -Configuration $Configuration `
     -Version $Version -AddinOrigin $addinOrigin -UpdateIndexUrl $UpdateIndexUrl `
     -ExpectedUpdatePublisherSubject $ExpectedUpdatePublisherSubject `
-    -OutputRoot $bridgeOutput -CrossBuildOnly:$CrossBuildOnly
+    -OutputRoot $bridgeOutput -AddinStaticRoot $addinStaticRoot `
+    -CrossBuildOnly:$CrossBuildOnly
 
 $addinArchive = Join-Path $addinOutput "WordOllama.JS-Addin-$Version.zip"
 $bridgeDirectory = Join-Path $bridgeOutput "$Version-$Runtime"

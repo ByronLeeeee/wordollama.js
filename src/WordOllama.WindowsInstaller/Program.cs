@@ -31,6 +31,10 @@ internal static class Program
         "WordOllama.WindowsInstaller.BridgeMetadata.json";
     private const string UninstallRegistryPath =
         @"Software\Microsoft\Windows\CurrentVersion\Uninstall\WordOllama.JS";
+    private const string OfficeAddinRegistryPath =
+        @"Software\Microsoft\Office\16.0\Wef\Developer";
+    private const string OfficeAddinId =
+        "4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701";
 
     [STAThread]
     private static int Main(string[] args)
@@ -361,6 +365,8 @@ internal static class Program
 
         if (!skipRegistration)
         {
+            RegisterOfficeAddin(
+                Path.Combine(target, "WordOllama.JS.xml"));
             var processPath = Environment.ProcessPath
                 ?? throw new InvalidOperationException(
                     "Unable to resolve the setup executable.");
@@ -465,7 +471,11 @@ internal static class Program
                 Path.GetDirectoryName(executables[0]),
                 staging,
                 StringComparison.OrdinalIgnoreCase) ||
-            !File.Exists(Path.Combine(staging, "appsettings.json")))
+            !File.Exists(Path.Combine(staging, "appsettings.json")) ||
+            !File.Exists(Path.Combine(staging, "WordOllama.JS.xml")) ||
+            !File.Exists(Path.Combine(staging, "wwwroot", "index.html")) ||
+            !File.Exists(Path.Combine(staging, "wwwroot", "settings.html")) ||
+            !File.Exists(Path.Combine(staging, "wwwroot", "commands.html")))
         {
             throw new InvalidDataException(
                 "The setup payload does not use the expected Bridge root layout.");
@@ -552,6 +562,7 @@ internal static class Program
         if (!skipRegistration)
         {
             DeleteHttpsCredential();
+            DeleteOfficeAddinRegistration(installRoot);
         }
         var startupPath = Path.Combine(
             startupRoot,
@@ -583,6 +594,46 @@ internal static class Program
         else
         {
             Directory.Delete(installRoot, recursive: true);
+        }
+    }
+
+    private static void RegisterOfficeAddin(string manifestPath)
+    {
+        if (!File.Exists(manifestPath))
+        {
+            throw new InvalidDataException(
+                "The WordOllama.JS Office manifest is missing.");
+        }
+
+        using var key = Registry.CurrentUser.CreateSubKey(
+            OfficeAddinRegistryPath,
+            writable: true)
+            ?? throw new InvalidOperationException(
+                "Unable to create the Office Add-in registration.");
+        key.SetValue(
+            OfficeAddinId,
+            Path.GetFullPath(manifestPath),
+            RegistryValueKind.String);
+    }
+
+    private static void DeleteOfficeAddinRegistration(string installRoot)
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(
+            OfficeAddinRegistryPath,
+            writable: true);
+        if (key?.GetValue(OfficeAddinId) is not string registeredPath)
+        {
+            return;
+        }
+
+        var ownedPrefix = Path.GetFullPath(installRoot).TrimEnd(
+            Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var registeredFullPath = Path.GetFullPath(registeredPath);
+        if (registeredFullPath.StartsWith(
+                ownedPrefix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            key.DeleteValue(OfficeAddinId, throwOnMissingValue: false);
         }
     }
 

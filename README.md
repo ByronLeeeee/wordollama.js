@@ -5,6 +5,12 @@ React 19 + TypeScript + Vite Office.js add-in and a cross-platform .NET 8
 Desktop Bridge for Agent, Provider, MCP, Skill, local-tool, and secure
 platform integration.
 
+The installed desktop edition is self-hosted: the per-user Desktop Bridge
+serves the bundled React frontend and local API from
+`https://localhost:37421`, registers the Office manifest, and starts
+automatically at sign-in after the one-time local HTTPS trust provisioning.
+End users do not run Vite or start a separate service.
+
 The legacy COM/VSTO edition is maintained separately in
 [`wordollama-community`](https://github.com/ByronLeeeee/wordollama-community).
 This repository contains no COM registration, XAML task pane, or VSTO project.

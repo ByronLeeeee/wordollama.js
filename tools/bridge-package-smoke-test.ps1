@@ -25,6 +25,29 @@ $version = "smoke"
 $smokeAddinOrigin = "https://release.wordollama.example"
 $smokeUpdateIndexUrl = "https://release.wordollama.example/bridge/update-index-smoke.json"
 $smokeUpdatePublisherSubject = "CN=WordOllama Package Smoke Publisher"
+$smokeAddinStaticRoot = Join-Path $buildRootFullPath "addin-static"
+New-Item -ItemType Directory -Force -Path `
+    (Join-Path $smokeAddinStaticRoot "assets") | Out-Null
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "index.html") `
+    -Value "<!doctype html><title>WordOllama.JS</title><div id=`"root`"></div>" `
+    -Encoding utf8NoBOM
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "settings.html") `
+    -Value "<!doctype html><title>WordOllama.JS Settings</title><div id=`"root`"></div>" `
+    -Encoding utf8NoBOM
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "commands.html") `
+    -Value "<!doctype html><title>WordOllama.JS Commands</title>" `
+    -Encoding utf8NoBOM
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "assets/app.js") `
+    -Value "globalThis.wordOllamaDesktopHost = true;" -Encoding utf8NoBOM
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "manifest.xml") `
+    -Value @'
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1">
+  <Id>4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701</Id>
+  <DisplayName DefaultValue="WordOllama.JS"/>
+  <DefaultSettings><SourceLocation DefaultValue="https://localhost:37421/index.html"/></DefaultSettings>
+</OfficeApp>
+'@ -Encoding utf8NoBOM
 
 if ($IsWindows) {
     $hostRuntime = "win-x64"
@@ -73,6 +96,11 @@ function Assert-PublishDirectory {
         $settings.Bridge.LocalTools.AllowHttpRequests -ne $false) {
         throw "Bridge package smoke: production HTTPS settings mismatch for $Runtime."
     }
+    if (-not (Test-Path -LiteralPath (Join-Path $directory "WordOllama.JS.xml") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/index.html") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/settings.html") -PathType Leaf)) {
+        throw "Bridge package smoke: locally hosted Add-in payload is missing for $Runtime."
+    }
 
     $archivePath = Join-Path $buildRootFullPath "WordOllama-Bridge-$version-$Runtime.zip"
     if ($ExpectArchive -and -not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
@@ -91,7 +119,9 @@ function Assert-PublishDirectory {
                 "WordOllama.DesktopBridge.exe"
             } else { "WordOllama.DesktopBridge" }
             if ($entryNames -notcontains "appsettings.json" -or $entryNames -notcontains $expectedExecutable -or
-                $entryNames -notcontains "Skills/contract-review/SKILL.md") {
+                $entryNames -notcontains "Skills/contract-review/SKILL.md" -or
+                $entryNames -notcontains "WordOllama.JS.xml" -or
+                $entryNames -notcontains "wwwroot/index.html") {
                 throw "Bridge package smoke: required entries must be at the archive root for $Runtime."
             }
         }
@@ -475,6 +505,10 @@ function Assert-MacInstallerDryRun {
         -Value "signed macOS Bridge fixture" -Encoding utf8NoBOM
     Set-Content -LiteralPath (Join-Path $fixtureDirectory "appsettings.json") `
         -Value "{}" -Encoding utf8NoBOM
+    Copy-Item -LiteralPath (Join-Path $smokeAddinStaticRoot "manifest.xml") `
+        -Destination (Join-Path $fixtureDirectory "WordOllama.JS.xml")
+    Copy-Item -LiteralPath $smokeAddinStaticRoot `
+        -Destination (Join-Path $fixtureDirectory "wwwroot") -Recurse
     $fixtureArchive = Join-Path $buildRootFullPath `
         "WordOllama-Bridge-$fixtureVersion-$runtime.zip"
     Compress-Archive -Path (Join-Path $fixtureDirectory "*") `
@@ -540,8 +574,10 @@ function Assert-MacInstallerDryRun {
         $launcher -notlike '*current-version*' -or
         @($launchAgent.plist.dict.string)[0] -ne "com.wordollama.desktopbridge" -or
         $postinstall -notlike '*current.json*' -or
+        $postinstall -notlike '*WordOllama.JS.xml*' -or
         $postinstall -notlike '*launchctl bootstrap*' -or
         $uninstaller -notlike '*launchctl bootout*' -or
+        $uninstaller -notlike '*WordOllama.JS.xml*' -or
         $uninstaller -notlike '*WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD*' -or
         $uninstaller -notlike '*pkgutil --forget com.wordollama.desktopbridge*' -or
         $uninstaller -notlike '*process_path*' -or
@@ -612,6 +648,12 @@ function Assert-WindowsInstallerLifecycle {
         $state.archiveSha256 -ne $expectedArchiveHash -or
         -not (Test-Path -LiteralPath `
             (Join-Path $installRoot "versions/$version/WordOllama.DesktopBridge.exe") `
+            -PathType Leaf) -or
+        -not (Test-Path -LiteralPath `
+            (Join-Path $installRoot "versions/$version/WordOllama.JS.xml") `
+            -PathType Leaf) -or
+        -not (Test-Path -LiteralPath `
+            (Join-Path $installRoot "versions/$version/wwwroot/index.html") `
             -PathType Leaf) -or
         -not (Test-Path -LiteralPath $startupScript -PathType Leaf) -or
         $launcher -notlike "*certs\bridge.pfx*" -or
@@ -769,7 +811,8 @@ if (-not $targetGuardPassed) {
 & $publishScript -Runtime $hostRuntime -Configuration $Configuration `
     -Version $version -OutputRoot $buildRootFullPath `
     -AddinOrigin $smokeAddinOrigin -UpdateIndexUrl $smokeUpdateIndexUrl `
-    -ExpectedUpdatePublisherSubject $smokeUpdatePublisherSubject
+    -ExpectedUpdatePublisherSubject $smokeUpdatePublisherSubject `
+    -AddinStaticRoot $smokeAddinStaticRoot
 Assert-PublishDirectory -Runtime $hostRuntime -ExpectArchive $true
 if ($hostRuntime -eq "win-x64") {
     $untimestampedSigningRejected = $false
@@ -822,6 +865,7 @@ if ($hostRuntime -eq "win-x64") {
         $macInstallerSource -notmatch 'apple-installer-package' -or
         $macInstallerSource -notmatch 'certs/bridge\.pfx' -or
         $macInstallerSource -notmatch 'WordOllama\.JS/WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD' -or
+        $macInstallerSource -notmatch 'WordOllama\.JS\.xml' -or
         $macInstallerSource -notmatch '-a "\$\(id -un\)"' -or
         $macInstallerSource -match 'WordOllama/WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD' -or
         $macInstallerSource -notmatch 'BuildUnsignedForTests' -or
@@ -835,6 +879,8 @@ if ($hostRuntime -eq "win-x64") {
         throw "Bridge package smoke: Windows signed EXE installer workflow is incomplete."
     }
     if ($windowsInstallerProgram -notmatch 'Registry\.CurrentUser' -or
+        $windowsInstallerProgram -notmatch 'OfficeAddinRegistryPath' -or
+        $windowsInstallerProgram -notmatch 'WordOllama\.JS\.xml' -or
         $windowsInstallerProgram -notmatch 'UninstallString' -or
         $windowsInstallerProgram -notmatch 'IsTestBuild' -or
         $windowsInstallerProgram -notmatch 'MoveFileEx' -or
@@ -860,7 +906,8 @@ if ($IncludeCrossBuilds) {
         & $publishScript -Runtime $runtime -Configuration $Configuration `
             -Version $version -OutputRoot $buildRootFullPath -CrossBuildOnly `
             -AddinOrigin $smokeAddinOrigin -UpdateIndexUrl $smokeUpdateIndexUrl `
-            -ExpectedUpdatePublisherSubject $smokeUpdatePublisherSubject
+            -ExpectedUpdatePublisherSubject $smokeUpdatePublisherSubject `
+            -AddinStaticRoot $smokeAddinStaticRoot
         Assert-PublishDirectory -Runtime $runtime -ExpectArchive $false
     }
 }

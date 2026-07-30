@@ -1,36 +1,46 @@
 # Windows/macOS 发布骨架
 
+桌面发行默认由 Desktop Bridge 在 `https://localhost:37421` 同时托管
+React 前端与本地 API。Bridge 以当前用户身份登录自启；用户安装后只需打开 Word，
+不需要运行 Vite、命令行服务或访问在线前端站点。
+
 `publish-bridge.ps1` 使用同一套 .NET 8 Bridge 生成三种目标，但正式归档必须在目标操作系统执行，以保留平台元数据并进入对应签名链：
 
 ```powershell
-# 在 Windows 发布机执行；origin 必须与 package-addin.ps1 的 BaseUrl 一致
+# 在 Windows 发布机执行；桌面前端与 API 使用本地 HTTPS
 pwsh ./packaging/publish-bridge.ps1 -Runtime win-x64 `
-  -AddinOrigin https://addin.wordollama.com `
+  -AddinOrigin https://localhost:37421 `
+  -AddinStaticRoot ./artifacts/addin/0.1.0 `
   -UpdateIndexUrl https://downloads.wordollama.com/update-index-0.1.0.json `
   -ExpectedUpdatePublisherSubject "CN=Your Exact Publisher Subject"
 
 # 在 macOS 发布机执行
 pwsh ./packaging/publish-bridge.ps1 -Runtime osx-arm64 `
-  -AddinOrigin https://addin.wordollama.com `
+  -AddinOrigin https://localhost:37421 `
+  -AddinStaticRoot ./artifacts/addin/0.1.0 `
   -UpdateIndexUrl https://downloads.wordollama.com/update-index-0.1.0.json `
   -ExpectedUpdatePublisherSubject "Developer ID Installer: Example (TEAMID)"
 pwsh ./packaging/publish-bridge.ps1 -Runtime osx-x64 `
-  -AddinOrigin https://addin.wordollama.com `
+  -AddinOrigin https://localhost:37421 `
+  -AddinStaticRoot ./artifacts/addin/0.1.0 `
   -UpdateIndexUrl https://downloads.wordollama.com/update-index-0.1.0.json `
   -ExpectedUpdatePublisherSubject "Developer ID Installer: Example (TEAMID)"
 ```
 
 非目标平台 CI 只能显式使用 `-CrossBuildOnly` 验证编译和生产配置，不会生成可误传为正式包的 ZIP，例如在 Windows 执行 `pwsh ./packaging/publish-bridge.ps1 -Runtime osx-arm64 -CrossBuildOnly`。
 
-`AddinOrigin` 只接受非回环 HTTPS origin，必须与加载项 `package-addin.ps1 -BaseUrl` 使用同一 origin；发布脚本会把它写入 Bridge 的唯一 CORS allowlist。`UpdateIndexUrl` 留空表示不启用检查更新；非空时只接受非回环 HTTPS URL，并强制同时提供 `ExpectedUpdatePublisherSubject`。该发布者固定值由上一版签名安装器部署，不能只相信新下载的更新索引。
+`AddinOrigin` 接受 HTTPS origin；使用回环 origin 时必须同时传入
+`AddinStaticRoot`。发布脚本会把任务窗格复制到 Bridge 的 `wwwroot`，
+把生产 manifest 作为 `WordOllama.JS.xml` 放入安装载荷，并将 origin 写入
+Bridge 的 CORS allowlist。`UpdateIndexUrl` 留空表示不启用检查更新；非空时只接受非回环 HTTPS URL，并强制同时提供 `ExpectedUpdatePublisherSubject`。该发布者固定值由上一版签名安装器部署，不能只相信新下载的更新索引。
 
 推荐通过统一入口同时构建加载项和当前平台 Bridge，避免手工传入两个不同域名：
 
 ```powershell
 pwsh ./packaging/package-unified-release.ps1 -Runtime win-x64 `
   -Version 0.1.0 -ManifestVersion 1.1.0.0 `
-  -BaseUrl https://addin.wordollama.com `
-  -BridgeUrl https://127.0.0.1:37421 `
+  -BaseUrl https://localhost:37421 `
+  -BridgeUrl https://localhost:37421 `
   -UpdateIndexUrl https://downloads.wordollama.com/update-index-0.1.0.json `
   -ExpectedUpdatePublisherSubject "CN=Your Exact Publisher Subject"
 ```
@@ -102,14 +112,19 @@ PowerShell。卸载器只接受固定的用户 Bridge/LaunchAgent 路径，先 b
 只终止当前版本目录内的 Bridge，再删除专用 HTTPS Keychain 项、Bridge 文件和
 `com.wordollama.desktopbridge` 安装收据；Provider、MCP、API Key 与用户设置默认保留。
 
-Office.js 静态包使用：
+桌面 Office.js 静态包使用：
 
 ```powershell
-pwsh ./packaging/package-addin.ps1 -BaseUrl https://addin.wordollama.com `
-  -BridgeUrl https://127.0.0.1:37421
+pwsh ./packaging/package-addin.ps1 `
+  -BaseUrl https://localhost:37421 `
+  -BridgeUrl https://localhost:37421
 ```
 
-`BaseUrl` 只接受无凭据、路径、查询或片段的非回环 HTTPS origin，`BridgeUrl` 只接受无路径/凭据/查询的回环 HTTPS origin。脚本会在 Vite 构建时注入 Bridge 地址，并检查生产 JavaScript 不含 `http://127.0.0.1:37421`；还会清理精确版本输出目录、严格检查 TypeScript/Vite 退出码、替换开发地址、验证生产 manifest 后生成 `WordOllama.JS-Addin-<version>.zip`。任何一步失败都不会继续生成新的发布 ZIP。
+`BaseUrl` 接受无凭据、路径、查询或片段的 HTTPS origin；桌面回环模式要求
+`BaseUrl` 与 `BridgeUrl` 完全相同。脚本会在 Vite 构建时注入 Bridge 地址，
+检查生产 JavaScript 不含开发 HTTP 地址，替换 manifest 地址并生成
+`WordOllama.JS-Addin-<version>.zip`。统一打包随后把静态文件和 manifest 合并进
+Bridge/安装器。任何一步失败都不会继续生成新的发布 ZIP。
 
 开发机旁加载与生产部署是两条不同路径。Windows/macOS 的本地开发旁加载可使用：
 
