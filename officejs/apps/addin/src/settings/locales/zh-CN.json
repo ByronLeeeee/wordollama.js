@@ -183,6 +183,7 @@
     "ollama": "Ollama 服务",
     "pairingCode": "配对码",
     "pair": "配对",
+    "automaticPairing": "受信任的本机加载项会自动连接 Desktop Bridge，无需输入配对码。",
     "checkBridge": "检查连接",
     "readSelection": "读取当前选区",
     "modelsPath": "模型目录",
@@ -423,6 +424,50 @@
       "defaultComment": "按默认方式应用（批注）",
       "sendToReview": "发送到文档审阅"
     },
+    "translation": {
+      "title": "翻译",
+      "sourceLanguage": "输入语言",
+      "targetLanguage": "输出语言",
+      "swap": "交换语言",
+      "sourceText": "原文",
+      "sourcePlaceholder": "输入文字，或在 Word 中框选文字…",
+      "loadSelection": "载入选区",
+      "instructions": "术语或风格要求（可选）",
+      "instructionsPlaceholder": "例如：使用正式的法律术语",
+      "translate": "翻译",
+      "result": "译文",
+      "resultPlaceholder": "译文会显示在这里，并且可以继续编辑…",
+      "replaceSelection": "替换原文",
+      "insertBelow": "插入下方",
+      "selectionLinked": "已关联 Word 选区（{{count}} 字）",
+      "translating": "正在翻译…",
+      "completed": "翻译完成",
+      "copied": "已复制译文",
+      "replaced": "已替换所选文字",
+      "inserted": "已插入译文",
+      "languages": {
+        "adaptive": "自适应",
+        "auto": "自适应",
+        "zh-CN": "中文",
+        "en": "英语",
+        "ja": "日语",
+        "ko": "韩语",
+        "fr": "法语",
+        "de": "德语",
+        "es": "西班牙语",
+        "ru": "俄语"
+      },
+      "model": {
+        "adaptivePrompt": "把下面这段文本翻译成{{targetLanguage}}。只输出译文，并保留原有段落、编号、专有名词、日期和标点。{{instructions}}\n\n{{source}}",
+        "explicitPrompt": "把下面这段{{sourceLanguage}}文本翻译成{{targetLanguage}}。只输出译文，并保留原有段落、编号、专有名词、日期和标点。{{instructions}}\n\n{{source}}",
+        "instructions": "\n补充要求：{{instructions}}"
+      },
+      "errors": {
+        "emptyResult": "模型没有返回可用的译文",
+        "selectionRequired": "替换前请重新载入 Word 选区",
+        "languageInvalid": "请选择有效的输入和输出语言"
+      }
+    },
     "table": {
       "title": "文本转表格",
       "source": "源文本",
@@ -634,7 +679,8 @@
       "providerRequired": "请配置模型 Provider",
       "unavailable": "Desktop Bridge 不可用",
       "activeProvider": "{{provider}} · {{model}}",
-      "activeProviderDetail": "当前 Provider：{{provider}}；模型：{{model}}"
+      "activeProviderDetail": "当前 Provider：{{provider}}；模型：{{model}}",
+      "noLoadedModel": "未载入模型"
     },
     "issues": {
       "empty": "暂无审查问题",
@@ -1019,6 +1065,7 @@
   "runtime": {
     "pairingCodeInvalid": "配对码不正确。",
     "pairingFailed": "配对失败（{{status}}）。",
+    "automaticPairingFailed": "自动配对失败（{{status}}）。",
     "protocolIncompatible": "协议版本不兼容：{{version}}。",
     "pairingInvalid": "配对会话无效或已过期。",
     "pairFirst": "请先配对 Desktop Bridge。",

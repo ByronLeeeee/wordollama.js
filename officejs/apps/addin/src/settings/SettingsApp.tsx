@@ -7,7 +7,6 @@ import {
   FolderOpen,
   House,
   Info,
-  Languages,
   Network,
   Plus,
   RefreshCw,
@@ -39,7 +38,6 @@ import {
   type UiLocalePreference,
 } from "./i18n";
 import {
-  adoptPairingInTaskPane,
   createWordParagraphStyle,
   listWordStyles,
 } from "./dialog-rpc";
@@ -804,7 +802,6 @@ function MarkdownPage() {
 
 function AdvancedPage() {
   const { t } = useTranslation();
-  const [pairingCode, setPairingCode] = useState("");
   const [status, setStatus] = useState<StatusState>(null);
   const [ollama, setOllama] = useState<OllamaServerSettingsUpdate>({
     modelsPath: "", host: "127.0.0.1:11434", keepAlive: "5m",
@@ -820,29 +817,14 @@ function AdvancedPage() {
   };
   const patch = <K extends keyof OllamaServerSettingsUpdate>(key: K, value: OllamaServerSettingsUpdate[K]) =>
     setOllama((current) => ({ ...current, [key]: value }));
-  const pairBridge = async () => {
-    try {
-      const pairing = await runtime.pair(pairingCode);
-      if (typeof Office !== "undefined") {
-        await adoptPairingInTaskPane(pairing);
-      }
-      setStatus({ text: t("common.saved") });
-    } catch (error) {
-      setStatus(toStatus(error, t("common.notConnected")));
-    }
-  };
   return (
     <div className="settings-page">
       <PageHeading title={t("advanced.title")} />
       <div className="settings-grid">
         <Card title={t("advanced.bridge")}>
-          <div className="settings-form-grid">
-            <label>{t("advanced.pairingCode")}</label>
-            <input className="input input-bordered input-sm" value={pairingCode} onChange={(event) => setPairingCode(event.currentTarget.value)} />
-          </div>
+          <p className="text-sm opacity-70">{t("advanced.automaticPairing")}</p>
           <div className="settings-actions">
-            <button className="btn btn-primary btn-sm" onClick={() => void pairBridge()}>{t("advanced.pair")}</button>
-            <button className="btn btn-sm" onClick={() => void runtime.health().then((health) => setStatus({ text: `${health.bridgeVersion} · ${health.protocolVersion} · ${health.ready ? "✓" : "×"}` })).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("advanced.checkBridge")}</button>
+            <button className="btn btn-primary btn-sm" onClick={() => void runtime.health().then((health) => setStatus({ text: `${health.bridgeVersion} · ${health.protocolVersion} · ${health.ready ? "✓" : "×"}` })).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("advanced.checkBridge")}</button>
           </div>
         </Card>
         <Card title={t("advanced.ollama")}>
@@ -1006,6 +988,12 @@ export function SettingsApp() {
     document.documentElement.dataset.theme = darkTheme ? "wordollama-dark" : "wordollama";
   }, [darkTheme]);
 
+  useEffect(() => {
+    if (!runtime.hasPairing()) {
+      void runtime.autoPair().catch(() => undefined);
+    }
+  }, []);
+
   const groups: Array<{ label: string; items: Array<{ id: PageId; icon: typeof House }> }> = [
     { label: t("nav.preferences"), items: [
       { id: "general", icon: House }, { id: "models", icon: Bot },
@@ -1030,7 +1018,6 @@ export function SettingsApp() {
             <span className="block text-[10px] opacity-55">{t("app.settings")}</span>
           </div>
         </div>
-        <Languages size={17} className="opacity-45" aria-hidden="true" />
       </header>
       <aside className="settings-sidebar" aria-label={t("app.settings")}>
         {groups.map((group) => (

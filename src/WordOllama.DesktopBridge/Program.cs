@@ -322,6 +322,34 @@ app.MapPost("/pair", (PairRequest request, BridgeSessionStore sessions) =>
         ["agent", "providers", "provider-settings", "mcp", "skills", "local-tools", .. agentRecoveryCapabilities]));
 });
 
+app.MapPost("/pair/automatic", (
+    AutomaticPairRequest request,
+    HttpContext httpContext,
+    BridgeSessionStore sessions) =>
+{
+    var remoteAddress = httpContext.Connection.RemoteIpAddress;
+    var requestOrigin = httpContext.Request.Headers["Origin"].FirstOrDefault();
+    if (remoteAddress is null ||
+        !IPAddress.IsLoopback(remoteAddress) ||
+        string.IsNullOrWhiteSpace(requestOrigin) ||
+        !string.Equals(requestOrigin, request.Origin, StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.Unauthorized();
+    }
+
+    if (!sessions.IsOriginAllowed(request.Origin))
+    {
+        return Results.BadRequest(new { error = "origin_not_allowed" });
+    }
+
+    var session = sessions.Create(request.Origin);
+    return Results.Ok(new PairResponse(
+        BridgeProtocol.CurrentVersion,
+        session.Token,
+        session.ExpiresAt,
+        ["agent", "providers", "provider-settings", "mcp", "skills", "local-tools", .. agentRecoveryCapabilities]));
+});
+
 app.MapGet("/updates/check", async (
     HttpRequest httpRequest,
     BridgeSessionStore sessions,
@@ -516,6 +544,31 @@ async Task<IResult> ListProviderModels(
 app.MapGet("/providers/models", ListProviderModels);
 // Kept for clients from the first migration preview.
 app.MapGet("/providers/ollama/models", ListProviderModels);
+
+app.MapGet("/providers/runtime", async (
+    HttpRequest httpRequest,
+    BridgeSessionStore sessions,
+    ProviderSettingsStore settings,
+    CancellationToken cancellationToken) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers["Origin"].FirstOrDefault();
+    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
+
+    var active = settings.GetActiveProfile();
+    try
+    {
+        IReadOnlyList<string> models =
+            string.Equals(active.Type, "Ollama", StringComparison.OrdinalIgnoreCase)
+                ? await new OllamaModelManager(active.Endpoint).GetRunningModelsAsync(cancellationToken)
+                : string.IsNullOrWhiteSpace(active.Model) ? [] : [active.Model];
+        return Results.Ok(new ProviderRuntimeResponse(active.Name, active.Type, models));
+    }
+    catch (HttpRequestException)
+    {
+        return Results.Ok(new ProviderRuntimeResponse(active.Name, active.Type, []));
+    }
+});
 
 app.MapPost("/providers/ollama/models/pull", async (
     HttpContext httpContext,

@@ -183,6 +183,7 @@
     "ollama": "Ollama service",
     "pairingCode": "Pairing code",
     "pair": "Pair",
+    "automaticPairing": "This trusted local add-in connects to Desktop Bridge automatically. No pairing code is required.",
     "checkBridge": "Check connection",
     "readSelection": "Read current selection",
     "modelsPath": "Models directory",
@@ -423,6 +424,50 @@
       "defaultComment": "Apply using default (comment)",
       "sendToReview": "Send to document review"
     },
+    "translation": {
+      "title": "Translation",
+      "sourceLanguage": "Source language",
+      "targetLanguage": "Target language",
+      "swap": "Swap languages",
+      "sourceText": "Source text",
+      "sourcePlaceholder": "Enter text or select text in Word…",
+      "loadSelection": "Load selection",
+      "instructions": "Terminology or style (optional)",
+      "instructionsPlaceholder": "For example: use formal legal terminology",
+      "translate": "Translate",
+      "result": "Translation",
+      "resultPlaceholder": "The translation appears here and remains editable…",
+      "replaceSelection": "Replace selection",
+      "insertBelow": "Insert below",
+      "selectionLinked": "Linked to the Word selection ({{count}} characters)",
+      "translating": "Translating…",
+      "completed": "Translation complete",
+      "copied": "Translation copied",
+      "replaced": "The selected text was replaced",
+      "inserted": "The translation was inserted",
+      "languages": {
+        "adaptive": "Adaptive",
+        "auto": "Adaptive",
+        "zh-CN": "Chinese",
+        "en": "English",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "fr": "French",
+        "de": "German",
+        "es": "Spanish",
+        "ru": "Russian"
+      },
+      "model": {
+        "adaptivePrompt": "Translate the following text into {{targetLanguage}}. Return only the translation, preserving paragraph breaks, numbering, names, dates, and punctuation.{{instructions}}\n\n{{source}}",
+        "explicitPrompt": "Translate the following {{sourceLanguage}} text into {{targetLanguage}}. Return only the translation, preserving paragraph breaks, numbering, names, dates, and punctuation.{{instructions}}\n\n{{source}}",
+        "instructions": "\nAdditional requirements: {{instructions}}"
+      },
+      "errors": {
+        "emptyResult": "The model did not return a usable translation",
+        "selectionRequired": "Reload the Word selection before replacing it",
+        "languageInvalid": "Choose a valid source and target language"
+      }
+    },
     "table": {
       "title": "Text to table",
       "source": "Source text",
@@ -634,7 +679,8 @@
       "providerRequired": "Configure a model provider",
       "unavailable": "Desktop Bridge unavailable",
       "activeProvider": "{{provider}} · {{model}}",
-      "activeProviderDetail": "Active provider: {{provider}}; model: {{model}}"
+      "activeProviderDetail": "Active provider: {{provider}}; model: {{model}}",
+      "noLoadedModel": "No model loaded"
     },
     "issues": {
       "empty": "No review issues",
@@ -1019,6 +1065,7 @@
   "runtime": {
     "pairingCodeInvalid": "The pairing code is incorrect.",
     "pairingFailed": "Pairing failed ({{status}}).",
+    "automaticPairingFailed": "Automatic pairing failed ({{status}}).",
     "protocolIncompatible": "Incompatible protocol version: {{version}}.",
     "pairingInvalid": "The pairing session is invalid or has expired.",
     "pairFirst": "Pair Desktop Bridge first.",

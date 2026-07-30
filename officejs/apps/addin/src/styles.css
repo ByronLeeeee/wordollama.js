@@ -281,6 +281,157 @@ textarea { resize: vertical; }
 .workflow-banner { margin: 10px 12px 0; padding: 10px 12px; border: 1px solid #bfdbfe; border-radius: 9px; background: #eff6ff; color: #1e3a8a; }
 .workflow-banner p { margin: 4px 0 0; font-size: 11px; }
 .text-workflow-workspace { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+.translation-workspace {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px 16px;
+  background: var(--canvas);
+}
+.translation-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+.translation-title svg { flex: none; color: var(--accent); }
+.translation-title h2 { margin: 0; font-size: 15px; }
+.translation-language-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px minmax(0, 1fr);
+  align-items: end;
+  gap: 7px;
+  margin-top: 0;
+}
+.translation-language-select {
+  min-width: 0;
+  margin: 0;
+}
+.translation-language-select span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+.translation-language-select input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 8px;
+}
+button.translation-swap-button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  padding: 0;
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--ink);
+}
+button.translation-swap-button:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-strong);
+}
+.translation-panel {
+  margin-top: 8px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.translation-panel-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.translation-panel-heading > label {
+  margin: 0;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+.translation-panel-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
+}
+.translation-panel-tools > span {
+  min-width: 18px;
+  color: var(--faint);
+  font-size: 9px;
+  text-align: right;
+}
+.translation-panel-tools .text-button,
+.translation-panel-tools .icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  font-size: 10px;
+}
+.translation-panel-tools .translation-load-button {
+  min-height: 30px;
+  padding: 4px 9px;
+  border-color: var(--border-strong);
+  background: var(--canvas);
+  color: var(--ink);
+  font-size: 10px;
+}
+.translation-panel-tools .translation-load-button:hover {
+  border-color: #a8c5eb;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+.translation-panel-tools .icon-button {
+  width: 30px;
+  height: 30px;
+  justify-content: center;
+}
+.translation-panel textarea {
+  height: 136px;
+  min-height: 96px;
+  max-height: 220px;
+  padding: 9px;
+  border-color: transparent;
+  background: var(--canvas);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.translation-panel textarea:focus { border-color: #a1a1aa; }
+.translation-status {
+  min-height: 0;
+  margin: 4px 1px 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.translation-instructions {
+  margin: 8px 0;
+}
+.translation-instructions > span {
+  display: block;
+  margin-bottom: 3px;
+}
+.translation-instructions input { height: 36px; }
+.translation-primary-actions,
+.translation-result-actions {
+  display: flex;
+  gap: 7px;
+}
+.translation-primary-actions { margin: 0 0 8px; }
+.translation-primary-actions button:first-child,
+.translation-result-actions button {
+  flex: 1 1 0;
+}
+.translation-output-panel { margin-top: 0; }
+.translation-result-actions { margin-top: 7px; }
+.translation-copy-button svg { flex: none; }
 .workflow-workspace-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
 .workflow-workspace-header h2 { margin: 1px 0 0; font-size: 16px; }
 .workflow-workspace-header p { margin: 3px 0 0; color: #64748b; font-size: 11px; }
@@ -569,12 +720,35 @@ label,
 }
 
 #workflow-cancel:disabled,
+#translation-cancel:disabled,
 #table-cancel:disabled,
 #html-app-cancel:disabled,
 #image-cancel:disabled,
 #moot-cancel:disabled,
 #custom-prompt-cancel:disabled {
   display: none;
+}
+
+@media (max-width: 330px) {
+  .translation-language-bar {
+    grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr);
+    gap: 4px;
+  }
+  button.translation-swap-button {
+    width: 34px;
+    height: 38px;
+  }
+  .translation-panel { padding: 9px; }
+  .translation-panel-tools .text-button { padding-inline: 4px; }
+}
+
+@media (max-height: 900px) {
+  .translation-workspace { padding-top: 8px; }
+  .translation-panel textarea {
+    height: 104px;
+    min-height: 80px;
+  }
+  .translation-instructions { margin-block: 6px; }
 }
 
 .generated-output {

@@ -84,6 +84,30 @@ public sealed class OllamaModelManager
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<string>> GetRunningModelsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync("api/ps", cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        using var document = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(cancellationToken));
+        if (!document.RootElement.TryGetProperty("models", out var models) ||
+            models.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return models.EnumerateArray()
+            .Select(model =>
+                model.TryGetProperty("name", out var name) ? name.GetString() :
+                model.TryGetProperty("model", out var value) ? value.GetString() :
+                null)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static string ValidateModel(string model)
     {
         model = model.Trim();

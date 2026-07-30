@@ -106,11 +106,7 @@
               </Group>
               <Group id="WordOllama.JS.TranslateGroup">
                 <Label resid="TranslateGroup.Label" /><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
-                <Control xsi:type="Menu" id="WordOllama.JS.TranslateMenu"><Label resid="TranslateMenu.Label" /><Supertip><Title resid="TranslateMenu.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Items>
-                  <Item id="WordOllama.JS.Translate"><Label resid="Translate.Label" /><Supertip><Title resid="Translate.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.TranslatePane</TaskpaneId><SourceLocation resid="Translate.Url" /></Action></Item>
-                  <Item id="WordOllama.JS.TranslateZh"><Label resid="TranslateZh.Label" /><Supertip><Title resid="TranslateZh.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.TranslatePane</TaskpaneId><SourceLocation resid="TranslateZh.Url" /></Action></Item>
-                  <Item id="WordOllama.JS.TranslateEn"><Label resid="TranslateEn.Label" /><Supertip><Title resid="TranslateEn.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.TranslatePane</TaskpaneId><SourceLocation resid="TranslateEn.Url" /></Action></Item>
-                </Items></Control>
+                <Control xsi:type="Button" id="WordOllama.JS.Translate"><Label resid="Translate.Label" /><Supertip><Title resid="Translate.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.TranslatePane</TaskpaneId><SourceLocation resid="Translate.Url" /></Action></Control>
               </Group>
               <Group id="WordOllama.JS.LegalGroup">
                 <Label resid="LegalGroup.Label" /><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
@@ -163,8 +159,6 @@
         <bt:Url id="Fix.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=fix" />
         <bt:Url id="Compare.Url" DefaultValue="https://localhost:3000/index.html?surface=compare&amp;workflow=compare" />
         <bt:Url id="Translate.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=translate" />
-        <bt:Url id="TranslateZh.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=translate-zh" />
-        <bt:Url id="TranslateEn.Url" DefaultValue="https://localhost:3000/index.html?surface=edit&amp;workflow=translate-en" />
         <bt:Url id="Risk.Url" DefaultValue="https://localhost:3000/index.html?surface=legal&amp;workflow=risk" />
         <bt:Url id="Fairness.Url" DefaultValue="https://localhost:3000/index.html?surface=legal&amp;workflow=fairness" />
         <bt:Url id="MootCourt.Url" DefaultValue="https://localhost:3000/index.html?surface=legal&amp;workflow=moot-court" />
@@ -196,10 +190,7 @@
         <bt:String id="Fix.Label" DefaultValue="Correct Errors"><bt:Override Locale="zh-CN" Value="改错" /></bt:String>
         <bt:String id="Compare.Label" DefaultValue="Compare Results"><bt:Override Locale="zh-CN" Value="对比结果" /></bt:String>
         <bt:String id="TranslateGroup.Label" DefaultValue="Translate"><bt:Override Locale="zh-CN" Value="翻译" /></bt:String>
-        <bt:String id="TranslateMenu.Label" DefaultValue="Translate"><bt:Override Locale="zh-CN" Value="翻译" /></bt:String>
-        <bt:String id="Translate.Label" DefaultValue="Free Translation"><bt:Override Locale="zh-CN" Value="自由翻译" /></bt:String>
-        <bt:String id="TranslateZh.Label" DefaultValue="Translate to Chinese"><bt:Override Locale="zh-CN" Value="翻译到中文" /></bt:String>
-        <bt:String id="TranslateEn.Label" DefaultValue="Translate to English"><bt:Override Locale="zh-CN" Value="翻译到英文" /></bt:String>
+        <bt:String id="Translate.Label" DefaultValue="Translate"><bt:Override Locale="zh-CN" Value="翻译" /></bt:String>
         <bt:String id="LegalGroup.Label" DefaultValue="Legal"><bt:Override Locale="zh-CN" Value="法务" /></bt:String>
         <bt:String id="LegalMenu.Label" DefaultValue="Legal Tools"><bt:Override Locale="zh-CN" Value="法律工具" /></bt:String>
         <bt:String id="Risk.Label" DefaultValue="Comment on Risks"><bt:Override Locale="zh-CN" Value="批注风险" /></bt:String>

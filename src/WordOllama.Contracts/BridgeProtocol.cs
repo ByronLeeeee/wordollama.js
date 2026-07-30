@@ -16,6 +16,8 @@ public sealed record BridgeHealthResponse(
 
 public sealed record PairRequest(string PairingCode, string Origin);
 
+public sealed record AutomaticPairRequest(string Origin);
+
 public sealed record PairResponse(
     string ProtocolVersion,
     string SessionToken,
@@ -94,6 +96,11 @@ public sealed record OllamaModelProgress(
     long? Completed = null,
     long? Total = null,
     bool Done = false);
+
+public sealed record ProviderRuntimeResponse(
+    string Provider,
+    string Type,
+    IReadOnlyList<string> Models);
 
 public sealed record AgentStartRequest(
     string UserRequirement,

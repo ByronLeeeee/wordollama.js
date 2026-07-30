@@ -15,6 +15,7 @@ import {
   type AgentRecoveryDescriptor,
   type SkillSummary,
   type ProviderModelsResponse,
+  type ProviderRuntimeResponse,
   type OllamaModelProgress,
   type OllamaServerSettingsUpdate,
   type OllamaServerSettingsView,
@@ -130,6 +131,23 @@ export class RuntimeClient {
       throw new Error(response.status === 401
         ? tr("runtime.pairingCodeInvalid")
         : tr("runtime.pairingFailed", { status: response.status }));
+    }
+
+    const result = (await response.json()) as PairResponse;
+    this.adoptPairing(result);
+    return result;
+  }
+
+  async autoPair(): Promise<PairResponse> {
+    const origin = window.location.origin;
+    const response = await fetch(`${BRIDGE_URL}/pair/automatic`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ origin }),
+    });
+
+    if (!response.ok) {
+      throw new Error(tr("runtime.automaticPairingFailed", { status: response.status }));
     }
 
     const result = (await response.json()) as PairResponse;
@@ -324,6 +342,10 @@ export class RuntimeClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model }),
     });
+  }
+
+  async getProviderRuntime(): Promise<ProviderRuntimeResponse> {
+    return this.settingsRequest<ProviderRuntimeResponse>("/providers/runtime");
   }
 
   async deleteOllamaModel(model: string): Promise<void> {

@@ -96,6 +96,7 @@ import i18n, {
 } from "./i18n";
 import { mountTaskpaneApp } from "./taskpane/TaskpaneApp";
 import { PAIRING_SESSION_STORAGE_KEY } from "./pairing-session";
+import { initializeTranslationWorkspace } from "./translation-workspace";
 import {
   buildPermissionScopeKey,
   formatPermissionParams,
@@ -247,8 +248,6 @@ const workflowSurfaceTitleKeys: Record<string, string> = {
   summarize: "taskpane.workflows.summarize.title",
   fix: "taskpane.workflows.fix.title",
   translate: "taskpane.workflows.translate.title",
-  "translate-zh": "taskpane.workflows.translateZh.title",
-  "translate-en": "taskpane.workflows.translateEn.title",
   compare: "taskpane.surfaces.compare",
   review: "taskpane.surfaces.review",
   risk: "taskpane.workflows.risk.title",
@@ -339,13 +338,20 @@ function appendDiagnostic(category: string, message: string): void {
 }
 
 async function activateBridgeSession(): Promise<ToolCatalogResponse> {
-  if (!runtime.hasPairing()) throw new Error(i18n.t("runtime.pairFirst"));
   if (bridgePaired && bridgeCatalog) return bridgeCatalog;
   if (bridgeActivation) return bridgeActivation;
 
   bridgeActivation = (async () => {
     try {
-      const catalog = await runtime.registerOfficeTools(tools.list());
+      if (!runtime.hasPairing()) await runtime.autoPair();
+      let catalog: ToolCatalogResponse;
+      try {
+        catalog = await runtime.registerOfficeTools(tools.list());
+      } catch (error) {
+        if (runtime.hasPairing()) throw error;
+        await runtime.autoPair();
+        catalog = await runtime.registerOfficeTools(tools.list());
+      }
       bridgeCatalog = catalog;
       bridgePaired = true;
       configureSilentLinter();
@@ -377,7 +383,9 @@ window.addEventListener("storage", (event) => {
   bridgePaired = false;
   bridgeCatalog = null;
   if (!runtime.refreshPairing()) {
-    setRuntimeStatus("pairRequired", "attention");
+    setRuntimeStatus("connecting", "connecting");
+    void activateBridgeSession().catch((error) =>
+      appendDiagnostic("bridge", `automatic re-pairing failed: ${error instanceof Error ? error.message : String(error)}`));
     return;
   }
   void activateBridgeSession().catch((error) =>
@@ -398,27 +406,26 @@ function setRuntimeStatus(
 
 async function refreshRuntimeStatus(): Promise<void> {
   if (!runtime.hasPairing()) {
-    setRuntimeStatus("pairRequired", "attention");
+    setRuntimeStatus("connecting", "connecting");
+    try {
+      await activateBridgeSession();
+    } catch {
+      setRuntimeStatus("unavailable", "attention");
+    }
     return;
   }
   try {
-    const settings = await runtime.getProviderSettings();
-    const active = settings.profiles.find((profile) =>
-      profile.id === settings.activeProviderId);
-    if (!active) {
-      setRuntimeStatus("providerRequired", "attention");
-      return;
-    }
-    const model = active.model.trim();
+    const active = await runtime.getProviderRuntime();
+    const model = active.models.join(", ");
     const text = i18n.t("taskpane.runtime.activeProvider", {
-      provider: active.name,
-      model: model || active.type,
+      provider: active.provider,
+      model: model || i18n.t("taskpane.runtime.noLoadedModel"),
     });
     runtimeStatus.dataset.state = "connected";
     runtimeStatusText.textContent = text;
     runtimeStatus.title = i18n.t("taskpane.runtime.activeProviderDetail", {
-      provider: active.name,
-      model: model || active.type,
+      provider: active.provider,
+      model: model || i18n.t("taskpane.runtime.noLoadedModel"),
     });
   } catch {
     setRuntimeStatus(
@@ -567,18 +574,26 @@ const WORKFLOW_ROUTES: Record<string, { titleKey: string; promptKey: string }> =
   summarize: { titleKey: "taskpane.workflows.summarize.title", promptKey: "taskpane.workflows.summarize.prompt" },
   fix: { titleKey: "taskpane.workflows.fix.title", promptKey: "taskpane.workflows.fix.prompt" },
   translate: { titleKey: "taskpane.workflows.translate.title", promptKey: "taskpane.workflows.translate.prompt" },
-  "translate-zh": { titleKey: "taskpane.workflows.translateZh.title", promptKey: "taskpane.workflows.translateZh.prompt" },
-  "translate-en": { titleKey: "taskpane.workflows.translateEn.title", promptKey: "taskpane.workflows.translateEn.prompt" },
   risk: { titleKey: "taskpane.workflows.risk.title", promptKey: "taskpane.workflows.risk.prompt" },
   fairness: { titleKey: "taskpane.workflows.fairness.title", promptKey: "taskpane.workflows.fairness.prompt" },
   "moot-court": { titleKey: "taskpane.moot.title", promptKey: "taskpane.workflows.moot.prompt" },
   "law-search": { titleKey: "taskpane.law.title", promptKey: "taskpane.workflows.law.prompt" },
 };
 
-type PrimaryWorkspace = "text" | "table" | "markdown" | "html" | "image" | "law" | "moot" | "custom";
+type PrimaryWorkspace =
+  | "text"
+  | "translation"
+  | "table"
+  | "markdown"
+  | "html"
+  | "image"
+  | "law"
+  | "moot"
+  | "custom";
 
 function setPrimaryWorkspace(workspace: PrimaryWorkspace | null): void {
   required<HTMLElement>("#text-workflow-workspace").hidden = workspace !== "text";
+  required<HTMLElement>("#translation-workspace").hidden = workspace !== "translation";
   required<HTMLElement>("#table-workflow-workspace").hidden = workspace !== "table";
   required<HTMLElement>("#markdown-workflow-workspace").hidden = workspace !== "markdown";
   required<HTMLElement>("#html-workflow-workspace").hidden = workspace !== "html";
@@ -592,6 +607,16 @@ function setPrimaryWorkspace(workspace: PrimaryWorkspace | null): void {
   });
   if (workspace === null) activateTab("chat");
 }
+
+const translationWorkspace = initializeTranslationWorkspace({
+  runtime,
+  word,
+  showError,
+  clearError,
+  refreshRuntimeStatus,
+  showWorkspace: () => setPrimaryWorkspace("translation"),
+  closeWorkspace: () => setPrimaryWorkspace(null),
+});
 
 function updateTextWorkflowActions(): void {
   const resultValue = required<HTMLTextAreaElement>("#workflow-result").value.trim();
@@ -1641,6 +1666,10 @@ function applyWorkflowRoute(): void {
     openCustomPromptWorkspace();
     return;
   }
+  if (workflow === "translate") {
+    void translationWorkspace.open().catch(showError);
+    return;
+  }
   const textWorkflow = TEXT_WORKFLOWS[workflow];
   if (textWorkflow) {
     void openTextWorkflow(textWorkflow);
@@ -2001,12 +2030,8 @@ if (typeof Office === "undefined") {
       ? i18n.t("taskpane.agent.hostConnected", { host: info.host })
       : "";
     applyWorkflowRoute();
-    if (runtime.hasPairing()) {
-      void activateBridgeSession().catch((error) =>
-        appendDiagnostic("bridge", `restored pairing failed: ${error instanceof Error ? error.message : String(error)}`));
-    } else {
-      setRuntimeStatus("pairRequired", "attention");
-    }
+    void activateBridgeSession().catch((error) =>
+      appendDiagnostic("bridge", `automatic pairing failed: ${error instanceof Error ? error.message : String(error)}`));
     if (activeSurface === "review") {
       void restoreReviewState().catch((error) =>
         appendDiagnostic("review", `restore failed: ${error instanceof Error ? error.message : String(error)}`));

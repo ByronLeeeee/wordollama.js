@@ -43,7 +43,7 @@ for (const group of ["CreateGroup", "EditGroup", "TranslateGroup", "LegalGroup",
 const routedWorkflows = [
   "writing", "modify", "image", "table", "html", "markdown", "agent",
   "polish", "expand", "simplify", "continue", "summarize", "fix", "compare",
-  "translate", "translate-zh", "translate-en", "risk", "fairness",
+  "translate", "risk", "fairness",
   "moot-court", "contract-compare", "law-search", "review", "custom-prompts",
   "diagnostics",
 ];
@@ -53,6 +53,15 @@ for (const workflow of routedWorkflows) {
     assert(main.includes(`"${workflow}"`) || main.includes(`${workflow}:`), `task pane route missing ${workflow}`);
   }
 }
+assert(
+  !manifest.includes("TranslateZh") && !manifest.includes("TranslateEn"),
+  "translation Ribbon must not include fixed Chinese/English shortcuts",
+);
+assert(
+  compactManifest.includes('<Controlxsi:type="Button"id="WordOllama.JS.Translate">')
+    && !manifest.includes("WordOllama.JS.TranslateMenu"),
+  "translation Ribbon entry must be one direct button instead of a menu",
+);
 
 for (const [resource, taskpane] of [
   ["Writing.Url", "WritingPane"],
@@ -119,7 +128,7 @@ const chineseOverrides = Array.from(
   (match) => match[1],
 );
 assert(
-  chineseOverrides.length === 36 &&
+  chineseOverrides.length === 33 &&
     chineseOverrides.every((value) => /[\u3400-\u9fff]/u.test(value)),
   "all localized Ribbon labels and descriptions must provide zh-CN overrides",
 );

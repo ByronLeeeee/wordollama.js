@@ -27,6 +27,10 @@ const contentWorkflows = readFileSync(
   resolve(repoRoot, "officejs/apps/addin/src/taskpane/ContentWorkflows.tsx"),
   "utf8",
 );
+const translationWorkspace = readFileSync(
+  resolve(repoRoot, "officejs/apps/addin/src/taskpane/TranslationWorkspace.tsx"),
+  "utf8",
+);
 const mediaWorkflows = readFileSync(
   resolve(repoRoot, "officejs/apps/addin/src/taskpane/MediaWorkflows.tsx"),
   "utf8",
@@ -43,7 +47,7 @@ const taskpaneApp = readFileSync(
   resolve(repoRoot, "officejs/apps/addin/src/taskpane/TaskpaneApp.tsx"),
   "utf8",
 );
-const taskpaneMarkup = `${html}\n${taskpaneApp}\n${taskpaneChrome}\n${contentWorkflows}\n${mediaWorkflows}\n${legalWorkflows}\n${agentWorkspace}\n${reviewWorkspace}\n${utilityDialog}`
+const taskpaneMarkup = `${html}\n${taskpaneApp}\n${taskpaneChrome}\n${contentWorkflows}\n${translationWorkspace}\n${mediaWorkflows}\n${legalWorkflows}\n${agentWorkspace}\n${reviewWorkspace}\n${utilityDialog}`
   .replaceAll("className=", "class=");
 const settingsHtml = readFileSync(resolve(repoRoot, "officejs/apps/addin/settings.html"), "utf8");
 const settingsApp = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/settings/SettingsApp.tsx"), "utf8");
@@ -337,14 +341,26 @@ assert(
   "the task-pane Settings button must open the React Office Dialog instead of the legacy inline panel",
 );
 assert(
-  settingsApp.includes("adoptPairingInTaskPane(pairing)") &&
-    settingsDialogRpc.includes('method: "runtime.adoptPairing"') &&
-    main.includes("Office.EventType.DialogMessageReceived") &&
-    main.includes("runtime.adoptPairing(request.pairing)") &&
-    main.includes("origin !== window.location.origin") &&
+  settingsApp.includes("runtime.autoPair()") &&
+    settingsApp.includes('t("advanced.automaticPairing")') &&
+    main.includes("if (!runtime.hasPairing()) await runtime.autoPair()") &&
     main.includes("runtime.registerOfficeTools(tools.list())"),
-  "the React settings dialog must securely transfer Bridge pairing to the task pane and register Word tools",
+  "the trusted local add-in must automatically pair with Desktop Bridge and register Word tools",
 );
+for (const translationControl of [
+  'id="translation-source"',
+  'id="translation-result"',
+  'id="translation-source-language"',
+  'id="translation-target-language"',
+  'id="translation-swap-languages"',
+  'id="translation-replace"',
+  'id="translation-insert"',
+]) {
+  assert(
+    taskpaneMarkup.includes(translationControl),
+    `the dedicated translation workspace must provide ${translationControl}`,
+  );
+}
 assert(
   settingsDialogRpc.includes('method: "word.listStyles"') &&
     settingsDialogRpc.includes('method: "word.createParagraphStyle"') &&
@@ -449,13 +465,13 @@ assert(
   "focused task panes must not repeat their page title inside the workspace",
 );
 assert(
-  main.includes("runtime.getProviderSettings()") &&
+  main.includes("runtime.getProviderRuntime()") &&
     main.includes('window.addEventListener("focus"') &&
     main.includes('document.addEventListener("visibilitychange"') &&
     main.includes("UI_LOCALE_STORAGE_KEY") &&
     main.includes("setUiLocalePreference(preference)") &&
     main.includes('runtimeStatus.dataset.state = "connected"'),
-  "the task pane must refresh and display the active Provider/model instead of relying on static Ribbon labels",
+  "the task pane must refresh and display the actually running Provider/model instead of relying on static labels",
 );
 for (const interactionContract of [
   "requestDecision(",

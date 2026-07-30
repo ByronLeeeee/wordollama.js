@@ -6,6 +6,7 @@ import { LegalWorkflows } from "./LegalWorkflows";
 import { MediaWorkflows } from "./MediaWorkflows";
 import { ReviewSurfaces } from "./ReviewWorkspace";
 import { TaskpaneChrome } from "./TaskpaneChrome";
+import { TranslationWorkspace } from "./TranslationWorkspace";
 import { UtilityDialog } from "./UtilityDialog";
 
 function TaskpaneApp() {
@@ -14,6 +15,7 @@ function TaskpaneApp() {
       <main className="agent-shell">
         <TaskpaneChrome />
         <ContentWorkflows />
+        <TranslationWorkspace />
         <MediaWorkflows />
         <LegalWorkflows />
         <AgentWorkspace />

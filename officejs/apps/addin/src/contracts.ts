@@ -80,6 +80,12 @@ export interface ProviderModelsResponse {
   models: string[];
 }
 
+export interface ProviderRuntimeResponse {
+  provider: string;
+  type: string;
+  models: string[];
+}
+
 export interface OllamaModelProgress {
   status: string;
   digest?: string;
