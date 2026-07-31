@@ -35,9 +35,10 @@ assert(duplicateRejected, "duplicate prompt names were accepted");
 
 let captured = "";
 const runtime = {
-  async chat(messages: Array<{ content: string }>) {
+  async *streamChat(messages: Array<{ content: string }>) {
     captured = messages.map((message) => message.content).join("\n");
-    return { provider: "fake", model: "fake", content: "修改结果" };
+    yield { provider: "fake", model: "fake", delta: "修改", done: false };
+    yield { provider: "fake", model: "fake", delta: "结果", done: true };
   },
 } as unknown as RuntimeClient;
 const result = await runCustomPrompt(runtime, prompts[0], "原始选区");

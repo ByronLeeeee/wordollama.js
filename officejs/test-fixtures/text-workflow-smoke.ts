@@ -5,7 +5,7 @@ import {
 } from "../apps/addin/src/text-workflow.ts";
 import { applyOutputLanguage } from "../apps/addin/src/output-language.ts";
 import { selectProviderForAiMode } from "../apps/addin/src/provider-mode.ts";
-import type { ChatMessage, ProviderChatResponse } from "../apps/addin/src/contracts.ts";
+import type { ChatMessage } from "../apps/addin/src/contracts.ts";
 import i18n from "../apps/addin/src/i18n.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -83,15 +83,17 @@ assert(selectProviderForAiMode({
 class FakeRuntime {
   messages: ChatMessage[] = [];
   signal?: AbortSignal;
-  async chat(messages: ChatMessage[], _model?: string, signal?: AbortSignal): Promise<ProviderChatResponse> {
+  async *streamChat(messages: ChatMessage[], _model?: string, signal?: AbortSignal) {
     this.messages = messages;
     this.signal = signal;
-    return { provider: "fake", model: "fake", content: "  修改后的文本  " };
+    yield { provider: "fake", model: "fake", delta: "  修改后", done: false };
+    yield { provider: "fake", model: "fake", delta: "的文本  ", done: true };
   }
 }
 
 const runtime = new FakeRuntime();
 const controller = new AbortController();
+const streamedUpdates: string[] = [];
 const result = await generateTextWorkflow(
   runtime as never,
   TEXT_WORKFLOWS.polish,
@@ -101,8 +103,10 @@ const result = await generateTextWorkflow(
   "强制中文",
   "简洁、专业",
   controller.signal,
+  (content) => streamedUpdates.push(content),
 );
 assert(result === "修改后的文本", "provider output is trimmed");
+assert(streamedUpdates.length === 2, "text workflow did not expose incremental output");
 assert(runtime.messages[0].content.includes("只输出润色后的完整文本"), "workflow system contract applied");
 assert(runtime.messages[0].content.includes("强制中文"), "language preference applied");
 assert(runtime.messages[1].content.includes("正式一些") && runtime.messages[1].content.includes("简洁、专业"),

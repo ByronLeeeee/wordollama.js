@@ -1,5 +1,6 @@
 import type { RuntimeClient } from "./runtime-client";
 import i18n from "./i18n.ts";
+import { streamText, type TextStreamUpdate } from "./stream-text.ts";
 
 export type CustomPromptOutputMode = "Insert" | "TrackedChanges" | "Comment";
 
@@ -68,9 +69,10 @@ export async function runCustomPrompt(
   definition: CustomPromptDefinition,
   selectedText: string,
   signal?: AbortSignal,
+  onUpdate?: TextStreamUpdate,
 ): Promise<string> {
   if (!selectedText.trim()) throw new Error(i18n.t("taskpane.prompts.errors.selectText"));
-  const response = await runtime.chat([
+  const result = await streamText(runtime, [
     {
       role: "system",
       content: [
@@ -89,7 +91,7 @@ export async function runCustomPrompt(
         interpolation: { escapeValue: false },
       }),
     },
-  ], undefined, signal);
-  if (!response.content.trim()) throw new Error(i18n.t("taskpane.prompts.errors.emptyResult"));
-  return response.content.trim();
+  ], signal, onUpdate);
+  if (!result) throw new Error(i18n.t("taskpane.prompts.errors.emptyResult"));
+  return result;
 }

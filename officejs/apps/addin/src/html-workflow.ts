@@ -1,5 +1,6 @@
 import type { RuntimeClient } from "./runtime-client";
 import i18n from "./i18n.ts";
+import { streamText, type TextStreamUpdate } from "./stream-text.ts";
 
 export interface SavedHtmlApp {
   id: string;
@@ -44,9 +45,10 @@ export async function generateHtmlApp(
   runtime: RuntimeClient,
   requirement: string,
   signal?: AbortSignal,
+  onUpdate?: TextStreamUpdate,
 ): Promise<string> {
   if (!requirement.trim()) throw new Error(i18n.t("taskpane.html.errors.requirementRequired"));
-  const response = await runtime.chat([
+  const result = await streamText(runtime, [
     {
       role: "system",
       content: [
@@ -59,8 +61,8 @@ export async function generateHtmlApp(
       ].join("\n"),
     },
     { role: "user", content: requirement.trim().slice(0, 20_000) },
-  ], undefined, signal);
-  return normalizeHtmlDocument(response.content);
+  ], signal, onUpdate);
+  return normalizeHtmlDocument(result);
 }
 
 export function loadHtmlLibrary(storage: Storage, key = "wordollama-html-apps"): SavedHtmlApp[] {

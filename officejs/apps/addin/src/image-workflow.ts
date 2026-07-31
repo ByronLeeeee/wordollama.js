@@ -1,5 +1,6 @@
 import type { RuntimeClient } from "./runtime-client";
 import i18n from "./i18n.ts";
+import { streamText, type TextStreamUpdate } from "./stream-text.ts";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -30,6 +31,7 @@ export async function analyzeImage(
   imageDataUrl: string,
   prompt: string,
   signal?: AbortSignal,
+  onUpdate?: TextStreamUpdate,
 ): Promise<string> {
   if (!imageDataUrl) throw new Error(i18n.t("taskpane.image.errors.selectImage"));
   const settings = await runtime.getProviderSettings();
@@ -38,7 +40,7 @@ export async function analyzeImage(
   if (!active.supportsVision) {
     throw new Error(i18n.t("taskpane.image.errors.visionRequired", { name: active.name }));
   }
-  const response = await runtime.chat([
+  const result = await streamText(runtime, [
     {
       role: "system",
       content: "Analyze the supplied image accurately. Distinguish visible facts from inference, and never invent unreadable details.",
@@ -48,7 +50,7 @@ export async function analyzeImage(
       content: prompt.trim() || i18n.t("taskpane.image.defaultPrompt"),
       imageDataUrl,
     },
-  ], undefined, signal);
-  if (!response.content.trim()) throw new Error(i18n.t("taskpane.image.errors.emptyResult"));
-  return response.content.trim();
+  ], signal, onUpdate);
+  if (!result) throw new Error(i18n.t("taskpane.image.errors.emptyResult"));
+  return result;
 }

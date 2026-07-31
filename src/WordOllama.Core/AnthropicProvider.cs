@@ -292,14 +292,30 @@ public sealed class AnthropicProvider : IModelProvider
         public StringBuilder Arguments { get; } = new();
     }
 
-    public Task<IReadOnlyList<string>> FetchModelsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<string>> FetchModelsAsync(CancellationToken cancellationToken = default)
     {
-        // Anthropic has no stable public model-list endpoint. Returning the configured model
-        // keeps the existing VSTO behavior and lets deployments use private model aliases.
-        IReadOnlyList<string> models = string.IsNullOrWhiteSpace(_defaultModel)
-            ? Array.Empty<string>()
-            : new[] { _defaultModel };
-        return Task.FromResult(models);
+        using var response = await _httpClient.GetAsync("models?limit=1000", cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"Claude returned {(int)response.StatusCode}: {Truncate(body)}",
+                null,
+                response.StatusCode);
+        }
+
+        using var document = JsonDocument.Parse(body);
+        if (!document.RootElement.TryGetProperty("data", out var data) ||
+            data.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<string>();
+        }
+
+        return data.EnumerateArray()
+            .Select(item => item.TryGetProperty("id", out var id) ? id.GetString() : null)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Cast<string>()
+            .ToArray();
     }
 
     private static object ToAnthropicMessage(ChatMessage message)

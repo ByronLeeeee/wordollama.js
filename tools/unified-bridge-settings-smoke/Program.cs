@@ -172,6 +172,64 @@ try
         Enabled: false,
         Trusted: true), manager);
     Assert(settings.IsToolAllowed("trusted", "any-tool"), "trusted MCP server allows discovered tools");
+    var imported = settings.ImportJson(
+        """
+        {
+          "mcpServers": {
+            "legal": {
+              "type": "streamable_http",
+              "url": "https://mcp.example.test/v2",
+              "headers": { "Authorization": "Bearer imported-secret" },
+              "enabled": false,
+              "trusted": true
+            },
+            "local-search": {
+              "command": "node",
+              "args": ["server.js", "--mode", "safe"],
+              "env": { "SEARCH_TOKEN": "import-token" }
+            }
+          }
+        }
+        """,
+        manager);
+    Assert(imported is { Total: 2, Added: 1, Updated: 1 }, "MCP JSON import add/update summary");
+    var importedViews = settings.GetViews(manager);
+    var importedLegal = importedViews.Single(item => item.Name == "legal");
+    Assert(importedLegal.Transport == "streamable-http" &&
+           importedLegal.Command == "https://mcp.example.test/v2" &&
+           !importedLegal.Trusted &&
+           importedLegal.ToolPermissions.Count == 0,
+        "MCP JSON import normalizes transport and resets trust and permissions");
+    var importedLocal = settings.GetRequest("local-search");
+    Assert(importedLocal.Arguments!.SequenceEqual(["server.js", "--mode", "safe"]) &&
+           importedLocal.Environment?["SEARCH_TOKEN"] == "import-token",
+        "MCP JSON import preserves argument arrays and secrets");
+    Assert(!File.ReadAllText(path).Contains("import-token", StringComparison.Ordinal),
+        "imported MCP secrets are excluded from JSON");
+    var legacyMcpPath = Path.Combine(root, "mcp-servers.json");
+    var migratedMcpPath = Path.Combine(root, "mcp-settings-migrated.json");
+    File.WriteAllText(legacyMcpPath,
+        """
+        {
+          "mcpServers": {
+            "legacy-search": {
+              "transport": "streamable_http",
+              "url": "https://legacy.example.test/mcp",
+              "enabled": true
+            }
+          }
+        }
+        """);
+    var migratedSettings = new McpSettingsStore(
+        migratedMcpPath,
+        secrets,
+        legacyMcpPath);
+    var migratedView = migratedSettings.GetViews(manager).Single(item =>
+        item.Name == "legacy-search");
+    Assert(File.Exists(migratedMcpPath) &&
+           migratedView.Transport == "streamable-http" &&
+           !migratedView.Trusted,
+        "COM mcp-servers.json is loaded and normalized into the JS settings store");
     var failedHealthRecorded = false;
     try
     {
@@ -190,6 +248,9 @@ try
             !state.LastError.Contains("top-secret", StringComparison.Ordinal);
     }
     Assert(failedHealthRecorded, "failed MCP health is retained with secrets redacted");
+    await manager.RemoveAsync("broken");
+    Assert(manager.GetServerStates().All(item => item.Name != "broken"),
+        "deleted MCP servers cannot reconnect from stale connection state");
     var tampered = Path.Combine(root, "tampered.json");
     File.WriteAllText(tampered,
         """[{"name":"bad","transport":"streamable-http","command":"http://example.com/rpc","arguments":[],"environmentKeys":[],"headerKeys":[],"enabled":true,"trusted":false,"toolPermissions":{}}]""");
@@ -198,6 +259,7 @@ try
     catch (ArgumentException) { rejected = true; }
     Assert(rejected, "persisted MCP endpoints are revalidated");
     settings.Delete("legal");
+    settings.Delete("local-search");
     Assert(secrets.Count == 0, "deleting MCP server deletes stored connection secrets");
 
     var recoveryPath = Path.Combine(root, "agent-recovery.bin");

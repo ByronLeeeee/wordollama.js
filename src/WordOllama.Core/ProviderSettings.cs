@@ -58,10 +58,12 @@ public sealed record ProviderProfileUpdate(
 
 internal sealed record ProviderSettingsDocument(
     string ActiveProviderId,
-    List<ProviderProfileSettings> Profiles);
+    List<ProviderProfileSettings> Profiles,
+    int SchemaVersion = 0);
 
 public sealed partial class ProviderSettingsStore
 {
+    private const int CurrentSchemaVersion = 1;
     private readonly string _path;
     private readonly IMutableSecretStore _secrets;
     private readonly object _gate = new();
@@ -79,7 +81,9 @@ public sealed partial class ProviderSettingsStore
         {
             _secrets.Set(SecretName("default"), initialProvider.ApiKey);
         }
-        _document = LoadOrCreate(initialProvider);
+        var loaded = LoadOrCreate(initialProvider);
+        _document = loaded.Document;
+        if (loaded.WasMigrated) Save();
     }
 
     public ProviderSettingsView GetView()
@@ -220,16 +224,17 @@ public sealed partial class ProviderSettingsStore
         }
     }
 
-    public ModelProviderOptions BuildOptionsForTest(ProviderProfileUpdate update)
+    public ModelProviderOptions BuildOptionsForModelFetch(ProviderProfileUpdate update)
     {
-        var profile = Validate(update);
+        var profile = Validate(update, allowEmptyModel: true);
         var apiKey = !string.IsNullOrEmpty(update.ApiKey)
             ? update.ApiKey
             : _secrets.Get(SecretName(profile.Id)) ?? string.Empty;
         return new ModelProviderOptions(profile.Type, profile.Endpoint, apiKey, profile.Model);
     }
 
-    private ProviderSettingsDocument LoadOrCreate(ModelProviderOptions initial)
+    private (ProviderSettingsDocument Document, bool WasMigrated) LoadOrCreate(
+        ModelProviderOptions initial)
     {
         if (File.Exists(_path))
         {
@@ -251,8 +256,23 @@ public sealed partial class ProviderSettingsStore
                         ContextWindow: profile.ContextWindow,
                         Temperature: profile.Temperature,
                         MaxTokens: profile.MaxTokens <= 0 ? 4096 : profile.MaxTokens,
-                        KeepAlive: string.IsNullOrWhiteSpace(profile.KeepAlive) ? "5m" : profile.KeepAlive))).ToList();
-                    return new ProviderSettingsDocument(loaded.ActiveProviderId, validated);
+                        KeepAlive: string.IsNullOrWhiteSpace(profile.KeepAlive) ? "5m" : profile.KeepAlive),
+                        allowEmptyModel: true)).ToList();
+                    var wasMigrated = loaded.SchemaVersion < CurrentSchemaVersion;
+                    if (wasMigrated)
+                    {
+                        validated = validated
+                            .Select(profile => IsLegacyGeneratedDefault(profile)
+                                ? profile with { Model = string.Empty }
+                                : profile)
+                            .ToList();
+                    }
+                    return (
+                        new ProviderSettingsDocument(
+                            loaded.ActiveProviderId,
+                            validated,
+                            CurrentSchemaVersion),
+                        wasMigrated);
                 }
                 throw new InvalidDataException("Provider settings must contain an active profile.");
             }
@@ -263,7 +283,9 @@ public sealed partial class ProviderSettingsStore
         }
         var profile = new ProviderProfileSettings(
             "default", initial.Type, initial.Type, initial.Endpoint, initial.Model);
-        return new ProviderSettingsDocument(profile.Id, [profile]);
+        return (
+            new ProviderSettingsDocument(profile.Id, [profile], CurrentSchemaVersion),
+            false);
     }
 
     private ModelProviderOptions ToOptions(ProviderProfileSettings profile) =>
@@ -294,7 +316,19 @@ public sealed partial class ProviderSettingsStore
         File.Move(temporary, _path, overwrite: true);
     }
 
-    private static ProviderProfileSettings Validate(ProviderProfileUpdate update)
+    private static bool IsLegacyGeneratedDefault(ProviderProfileSettings profile) =>
+        string.Equals(profile.Id, "default", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(profile.Name, "Ollama", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(profile.Type, "Ollama", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(profile.Model, "llama3.2", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(
+            profile.Endpoint.TrimEnd('/'),
+            "http://127.0.0.1:11434",
+            StringComparison.OrdinalIgnoreCase);
+
+    private static ProviderProfileSettings Validate(
+        ProviderProfileUpdate update,
+        bool allowEmptyModel = false)
     {
         var id = update.Id.Trim();
         if (!ProfileIdPattern().IsMatch(id)) throw new ArgumentException("Provider id must contain only letters, digits, '_' or '-'.");
@@ -304,7 +338,10 @@ public sealed partial class ProviderSettingsStore
         {
             throw new ArgumentException($"Unsupported model provider: {update.Type}");
         }
-        if (string.IsNullOrWhiteSpace(update.Model)) throw new ArgumentException("Provider model is required.");
+        if (!allowEmptyModel && string.IsNullOrWhiteSpace(update.Model))
+        {
+            throw new ArgumentException("Provider model is required.");
+        }
         if (!Uri.TryCreate(update.Endpoint, UriKind.Absolute, out var endpoint) ||
             (endpoint.Scheme != Uri.UriSchemeHttps &&
              !(endpoint.Scheme == Uri.UriSchemeHttp && endpoint.Host is "127.0.0.1" or "localhost" or "::1")))

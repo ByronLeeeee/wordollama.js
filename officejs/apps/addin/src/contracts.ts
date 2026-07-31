@@ -193,6 +193,15 @@ export interface McpServerUpdate {
   trusted: boolean;
 }
 
+export interface McpImportResult {
+  total: number;
+  added: number;
+  updated: number;
+  connected: number;
+  errors: Record<string, string>;
+  servers: McpServerView[];
+}
+
 export interface McpToolDefinition {
   name: string;
   description: string;

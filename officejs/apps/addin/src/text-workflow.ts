@@ -1,5 +1,6 @@
 import type { RuntimeClient } from "./runtime-client";
 import i18n from "./i18n.ts";
+import { streamText, type TextStreamUpdate } from "./stream-text.ts";
 
 export interface TextWorkflowDefinition {
   key: string;
@@ -95,6 +96,7 @@ export async function generateTextWorkflow(
   outputLanguage: string,
   writingProfile: string,
   signal?: AbortSignal,
+  onUpdate?: TextStreamUpdate,
 ): Promise<string> {
   const boundedSource = source.length > MAX_SOURCE_CHARACTERS
     ? i18n.t("taskpane.textWorkflowModel.truncatedSource", {
@@ -103,7 +105,7 @@ export async function generateTextWorkflow(
         interpolation: { escapeValue: false },
       })
     : source;
-  const response = await runtime.chat([
+  const result = await streamText(runtime, [
     {
       role: "system",
       content: i18n.t("taskpane.textWorkflowModel.systemMessage", {
@@ -128,8 +130,7 @@ export async function generateTextWorkflow(
         interpolation: { escapeValue: false },
       }),
     },
-  ], undefined, signal);
-  const result = response.content.trim();
+  ], signal, onUpdate);
   if (!result) throw new Error(i18n.t("taskpane.textWorkflowModel.emptyResult"));
   return result;
 }

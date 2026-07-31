@@ -1,22 +1,27 @@
-function IssuesWorkspace() {
+function ReviewWorkspace() {
   return (
-    <section id="tab-issues" className="tab-panel" data-panel="issues" hidden>
-      <div className="panel-toolbar">
-        <strong id="issue-summary" data-i18n="taskpane.issues.empty">
-          No review issues
-        </strong>
-        <button
-          id="clear-issues"
-          className="text-button"
-          type="button"
-          data-i18n="taskpane.common.clear"
-        >
-          Clear
-        </button>
-      </div>
-      <div className="action-row">
+    <section id="tab-review" className="tab-panel" data-panel="review" hidden>
+      <section className="review-scan-section">
+        <div className="review-section-heading">
+          <div>
+            <h2 data-i18n="taskpane.review.issueScan">Issue scan</h2>
+            <strong id="issue-summary" data-i18n="taskpane.issues.empty">
+              No review issues
+            </strong>
+          </div>
+          <button
+            id="clear-issues"
+            className="btn btn-ghost btn-xs text-button"
+            type="button"
+            data-i18n="taskpane.common.clear"
+          >
+            Clear
+          </button>
+        </div>
+        <div className="review-scan-actions">
         <button
           id="review-selection"
+          className="btn btn-primary btn-sm"
           type="button"
           data-i18n="taskpane.issues.reviewSelection"
         >
@@ -24,27 +29,28 @@ function IssuesWorkspace() {
         </button>
         <button
           id="review-document"
-          className="secondary-button"
+          className="btn btn-sm secondary-button"
           type="button"
           data-i18n="taskpane.issues.reviewDocument"
         >
           Review document
         </button>
-      </div>
-      <div id="issue-list" className="empty-panel" />
-    </section>
-  );
-}
+        </div>
+        <div id="issue-list" className="issue-list" hidden />
+      </section>
 
-function ReviewWorkspace() {
-  return (
-    <section id="tab-review" className="tab-panel" data-panel="review" hidden>
-      <div className="review-grid">
-        <article className="subtle-card">
-          <h3 data-i18n="taskpane.review.scope">Review scope</h3>
-          <div className="action-row wrap">
+      <div className="review-section-heading review-suggestion-heading">
+        <h2 data-i18n="taskpane.review.suggestionReview">Suggested changes</h2>
+      </div>
+      <div className="review-command-bar">
+        <article className="card card-border task-panel review-scope-panel">
+          <div className="task-panel-heading">
+            <h3 data-i18n="taskpane.review.scope">Review scope</h3>
+          </div>
+          <div className="review-scope-options">
             <button
               id="load-review-selection"
+              className="btn btn-sm secondary-button"
               type="button"
               data-i18n="taskpane.common.loadSelection"
             >
@@ -52,7 +58,7 @@ function ReviewWorkspace() {
             </button>
             <button
               id="load-review-paragraphs"
-              className="secondary-button"
+              className="btn btn-sm secondary-button"
               type="button"
               data-i18n="taskpane.review.loadParagraphs"
             >
@@ -60,17 +66,17 @@ function ReviewWorkspace() {
             </button>
             <button
               id="load-review-document"
-              className="secondary-button"
+              className="btn btn-sm secondary-button"
               type="button"
               data-i18n="taskpane.common.loadDocument"
             >
               Load document
             </button>
           </div>
-          <div className="action-row wrap">
+          <div className="review-pagination">
             <button
               id="review-page-previous"
-              className="text-button"
+              className="btn btn-ghost btn-xs text-button"
               type="button"
               disabled
               data-i18n="taskpane.review.previous"
@@ -79,7 +85,7 @@ function ReviewWorkspace() {
             </button>
             <button
               id="review-page-next"
-              className="text-button"
+              className="btn btn-ghost btn-xs text-button"
               type="button"
               disabled
               data-i18n="taskpane.review.next"
@@ -91,13 +97,16 @@ function ReviewWorkspace() {
           <p id="review-scope-status" className="muted" />
         </article>
 
-        <article className="subtle-card">
-          <h3 data-i18n="taskpane.review.generateSuggestions">
+        <article className="card card-border task-panel review-generate-panel">
+          <div className="task-panel-heading">
+            <h3 data-i18n="taskpane.review.generateSuggestions">
             Generate suggestions
-          </h3>
-          <div className="action-row wrap">
+            </h3>
+          </div>
+          <div className="task-primary-actions">
             <button
               id="generate-review"
+              className="btn btn-primary btn-sm"
               type="button"
               data-i18n="taskpane.review.generateAll"
             >
@@ -105,7 +114,7 @@ function ReviewWorkspace() {
             </button>
             <button
               id="cancel-review"
-              className="secondary-button"
+              className="btn btn-sm secondary-button"
               type="button"
               disabled
               data-i18n="taskpane.review.cancelGeneration"
@@ -118,41 +127,25 @@ function ReviewWorkspace() {
         </article>
       </div>
 
-      <div className="form-group">
+      <div className="form-group task-instructions review-instructions">
         <label htmlFor="review-instruction" data-i18n="taskpane.review.customRequirements">
           Custom requirements
         </label>
         <textarea
           id="review-instruction"
+          className="textarea"
           rows={3}
           placeholder="Add review priorities or writing requirements…"
           data-i18n-placeholder="taskpane.review.customRequirementsPlaceholder"
         />
       </div>
 
-      <details className="profile-panel">
-        <summary data-i18n="taskpane.review.writingProfile">Writing profile</summary>
-        <textarea
-          id="writing-profile"
-          rows={4}
-          placeholder="Record tone, formatting, and wording preferences…"
-          data-i18n-placeholder="taskpane.review.writingProfilePlaceholder"
-        />
-        <button
-          id="save-profile"
-          className="secondary-button"
-          type="button"
-          data-i18n="taskpane.review.saveProfile"
-        >
-          Save profile
-        </button>
-      </details>
-
-      <details id="review-batch-actions" className="profile-panel" hidden>
-        <summary data-i18n="taskpane.review.batchActions">Batch actions</summary>
-        <div className="action-row wrap">
+      <details id="review-batch-actions" className="collapse collapse-arrow task-options review-batch-actions" hidden>
+        <summary className="collapse-title" data-i18n="taskpane.review.batchActions">Batch actions</summary>
+        <div className="collapse-content action-row wrap">
           <button
             id="accept-all-suggestions"
+            className="btn btn-primary btn-sm"
             type="button"
             data-i18n="taskpane.review.acceptAll"
           >
@@ -160,7 +153,7 @@ function ReviewWorkspace() {
           </button>
           <button
             id="insert-all-suggestions"
-            className="secondary-button"
+            className="btn btn-sm secondary-button"
             type="button"
             data-i18n="taskpane.review.insertAll"
           >
@@ -168,7 +161,7 @@ function ReviewWorkspace() {
           </button>
           <button
             id="comment-all-suggestions"
-            className="secondary-button"
+            className="btn btn-sm secondary-button"
             type="button"
             data-i18n="taskpane.review.commentAll"
           >
@@ -176,7 +169,7 @@ function ReviewWorkspace() {
           </button>
           <button
             id="skip-all-suggestions"
-            className="text-button"
+            className="btn btn-ghost btn-xs text-button"
             type="button"
             data-i18n="taskpane.review.skipAll"
           >
@@ -185,16 +178,19 @@ function ReviewWorkspace() {
         </div>
       </details>
 
-      <details id="tracked-revision-panel" className="profile-panel">
-        <summary>
+      <div id="suggestion-list" className="empty-panel" hidden />
+
+      <details id="tracked-revision-panel" className="collapse collapse-arrow task-options">
+        <summary className="collapse-title">
           <span data-i18n="taskpane.review.wordRevisions">Word revisions</span>{" "}
-          <span id="tracked-revision-count" className="count-badge">
+          <span id="tracked-revision-count" className="badge badge-sm count-badge">
             0
           </span>
         </summary>
-        <div className="action-row wrap">
+        <div className="collapse-content action-row wrap">
           <button
             id="refresh-tracked-revisions"
+            className="btn btn-sm"
             type="button"
             data-i18n="taskpane.review.readRevisions"
           >
@@ -202,7 +198,7 @@ function ReviewWorkspace() {
           </button>
           <button
             id="accept-all-tracked-revisions"
-            className="secondary-button"
+            className="btn btn-sm secondary-button"
             type="button"
             disabled
             data-i18n="taskpane.review.acceptAll"
@@ -211,7 +207,7 @@ function ReviewWorkspace() {
           </button>
           <button
             id="reject-all-tracked-revisions"
-            className="secondary-button"
+            className="btn btn-sm secondary-button"
             type="button"
             disabled
             data-i18n="taskpane.review.rejectAll"
@@ -222,17 +218,10 @@ function ReviewWorkspace() {
         <p id="tracked-revision-status" className="muted" />
         <div id="tracked-revision-list" className="empty-panel" />
       </details>
-
-      <div id="suggestion-list" className="empty-panel" />
     </section>
   );
 }
 
 export function ReviewSurfaces() {
-  return (
-    <>
-      <IssuesWorkspace />
-      <ReviewWorkspace />
-    </>
-  );
+  return <ReviewWorkspace />;
 }

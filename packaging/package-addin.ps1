@@ -139,13 +139,29 @@ $localizedDefaults = @($productionManifest.SelectNodes("//*[@DefaultValue]"))
 $hardCodedChineseDefaults = @($localizedDefaults | Where-Object {
     $_.DefaultValue -match "[\u3400-\u9fff]"
 })
+$localizedResources = @($productionManifest.SelectNodes(
+    "//*[local-name()='ShortStrings' or local-name()='LongStrings']/*[local-name()='String']"))
 $chineseOverrides = @($productionManifest.SelectNodes(
     "//*[local-name()='Override' and @Locale='zh-CN']"))
+$intentionallyInvariantResourceIds = @("Tab.Label", "Agent.Label")
+$missingChineseOverrides = @($localizedResources | Where-Object {
+    $_.id -notin $intentionallyInvariantResourceIds -and
+    $null -eq $_.SelectSingleNode("*[local-name()='Override' and @Locale='zh-CN']")
+})
+$duplicateChineseOverrides = @($localizedResources | Where-Object {
+    @($_.SelectNodes("*[local-name()='Override' and @Locale='zh-CN']")).Count -gt 1
+})
+$invalidChineseOverrides = @($chineseOverrides | Where-Object {
+    [string]::IsNullOrWhiteSpace($_.Value)
+})
 if ($null -eq $defaultLocaleNode -or
     $defaultLocaleNode.InnerText -ne "en-US" -or
     $hardCodedChineseDefaults.Count -ne 0 -or
-    $chineseOverrides.Count -ne 37) {
-    throw "Production manifest localization must use en-US defaults and exactly 37 zh-CN overrides."
+    $localizedResources.Count -eq 0 -or
+    $missingChineseOverrides.Count -ne 0 -or
+    $duplicateChineseOverrides.Count -ne 0 -or
+    $invalidChineseOverrides.Count -ne 0) {
+    throw "Production manifest localization must use en-US defaults and valid zh-CN overrides for every translatable string resource."
 }
 
 if (-not $SkipManifestValidation) {

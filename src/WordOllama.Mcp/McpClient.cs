@@ -20,6 +20,50 @@ public sealed record McpToolDefinition(
     JsonElement InputSchema,
     string ServerName);
 
+internal static class McpToolListParser
+{
+    public static IReadOnlyList<McpToolDefinition> ParsePage(
+        JsonElement response,
+        string serverName,
+        out string? nextCursor)
+    {
+        nextCursor = null;
+        if (!response.TryGetProperty("result", out var result))
+        {
+            return Array.Empty<McpToolDefinition>();
+        }
+        if (result.TryGetProperty("nextCursor", out var cursorValue) &&
+            cursorValue.ValueKind == JsonValueKind.String)
+        {
+            nextCursor = cursorValue.GetString();
+        }
+        if (!result.TryGetProperty("tools", out var tools) ||
+            tools.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<McpToolDefinition>();
+        }
+        return tools.EnumerateArray()
+            .Select(tool =>
+            {
+                var name = tool.TryGetProperty("name", out var nameValue)
+                    ? nameValue.GetString()
+                    : null;
+                var description = tool.TryGetProperty("description", out var descriptionValue)
+                    ? descriptionValue.GetString() ?? string.Empty
+                    : string.Empty;
+                var schema = tool.TryGetProperty("inputSchema", out var schemaValue)
+                    ? schemaValue.Clone()
+                    : JsonSerializer.SerializeToElement(new { type = "object", properties = new { } });
+                return string.IsNullOrWhiteSpace(name)
+                    ? null
+                    : new McpToolDefinition(name!, description, schema, serverName);
+            })
+            .Where(tool => tool is not null)
+            .Cast<McpToolDefinition>()
+            .ToArray();
+    }
+}
+
 public interface IMcpClient : IAsyncDisposable
 {
     string ServerName { get; }
@@ -39,7 +83,7 @@ public interface IMcpClient : IAsyncDisposable
 /// </summary>
 public sealed class StdioMcpClient : IMcpClient
 {
-    private const string ProtocolVersion = "2025-11-25";
+    private const string ProtocolVersion = "2025-03-26";
     private readonly McpServerOptions _options;
     private readonly SemaphoreSlim _requestLock = new(1, 1);
     private Process? _process;
@@ -108,31 +152,20 @@ public sealed class StdioMcpClient : IMcpClient
         CancellationToken cancellationToken = default)
     {
         EnsureConnected();
-        var response = await SendRequestAsync("tools/list", new { }, cancellationToken);
-        if (!response.TryGetProperty("result", out var result) ||
-            !result.TryGetProperty("tools", out var tools) ||
-            tools.ValueKind != JsonValueKind.Array)
-        {
-            return Array.Empty<McpToolDefinition>();
-        }
-
         var definitions = new List<McpToolDefinition>();
-        foreach (var tool in tools.EnumerateArray())
+        string? cursor = null;
+        var pageCount = 0;
+        do
         {
-            var name = tool.TryGetProperty("name", out var nameValue) ? nameValue.GetString() : null;
-            if (string.IsNullOrWhiteSpace(name))
+            var parameters = new Dictionary<string, object?>();
+            if (!string.IsNullOrWhiteSpace(cursor))
             {
-                continue;
+                parameters["cursor"] = cursor;
             }
-
-            var description = tool.TryGetProperty("description", out var descriptionValue)
-                ? descriptionValue.GetString() ?? string.Empty
-                : string.Empty;
-            var schema = tool.TryGetProperty("inputSchema", out var schemaValue)
-                ? schemaValue.Clone()
-                : JsonSerializer.SerializeToElement(new { type = "object", properties = new { } });
-            definitions.Add(new McpToolDefinition(name, description, schema, ServerName));
-        }
+            var response = await SendRequestAsync("tools/list", parameters, cancellationToken);
+            definitions.AddRange(McpToolListParser.ParsePage(response, ServerName, out cursor));
+            pageCount++;
+        } while (!string.IsNullOrWhiteSpace(cursor) && pageCount < 100);
         return definitions;
     }
 
@@ -264,7 +297,7 @@ public sealed class StdioMcpClient : IMcpClient
 /// </summary>
 public sealed class StreamableHttpMcpClient : IMcpClient
 {
-    private const string ProtocolVersion = "2025-11-25";
+    private const string ProtocolVersion = "2025-03-26";
     private readonly McpServerOptions _options;
     private readonly HttpClient _httpClient;
     private readonly IReadOnlyDictionary<string, string> _headers;
@@ -314,30 +347,21 @@ public sealed class StreamableHttpMcpClient : IMcpClient
         CancellationToken cancellationToken = default)
     {
         EnsureConnected();
-        var response = await SendRequestAsync("tools/list", new { }, cancellationToken);
-        if (!response.TryGetProperty("result", out var result) ||
-            !result.TryGetProperty("tools", out var tools) ||
-            tools.ValueKind != JsonValueKind.Array)
+        var definitions = new List<McpToolDefinition>();
+        string? cursor = null;
+        var pageCount = 0;
+        do
         {
-            return Array.Empty<McpToolDefinition>();
-        }
-        return tools.EnumerateArray()
-            .Select(tool =>
+            var parameters = new Dictionary<string, object?>();
+            if (!string.IsNullOrWhiteSpace(cursor))
             {
-                var name = tool.TryGetProperty("name", out var nameValue) ? nameValue.GetString() : null;
-                var description = tool.TryGetProperty("description", out var descriptionValue)
-                    ? descriptionValue.GetString() ?? string.Empty
-                    : string.Empty;
-                var schema = tool.TryGetProperty("inputSchema", out var schemaValue)
-                    ? schemaValue.Clone()
-                    : JsonSerializer.SerializeToElement(new { type = "object", properties = new { } });
-                return string.IsNullOrWhiteSpace(name)
-                    ? null
-                    : new McpToolDefinition(name!, description, schema, ServerName);
-            })
-            .Where(tool => tool is not null)
-            .Cast<McpToolDefinition>()
-            .ToArray();
+                parameters["cursor"] = cursor;
+            }
+            var response = await SendRequestAsync("tools/list", parameters, cancellationToken);
+            definitions.AddRange(McpToolListParser.ParsePage(response, ServerName, out cursor));
+            pageCount++;
+        } while (!string.IsNullOrWhiteSpace(cursor) && pageCount < 100);
+        return definitions;
     }
 
     public async Task<string> CallToolAsync(
@@ -429,6 +453,8 @@ public sealed class StreamableHttpMcpClient : IMcpClient
         {
             Content = JsonContent.Create(new { jsonrpc = "2.0", method, @params = parameters }),
         };
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
         request.Headers.TryAddWithoutValidation("MCP-Protocol-Version", ProtocolVersion);
         if (!string.IsNullOrWhiteSpace(_sessionId)) request.Headers.TryAddWithoutValidation("Mcp-Session-Id", _sessionId);
         foreach (var header in _headers) request.Headers.TryAddWithoutValidation(header.Key, header.Value);
@@ -483,7 +509,7 @@ public sealed class StreamableHttpMcpClient : IMcpClient
 /// <summary>Legacy MCP SSE transport used by older remote servers.</summary>
 public sealed class SseMcpClient : IMcpClient
 {
-    private const string ProtocolVersion = "2025-11-25";
+    private const string ProtocolVersion = "2025-03-26";
     private readonly McpServerOptions _options;
     private readonly IReadOnlyDictionary<string, string> _headers;
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromMinutes(2) };
@@ -536,18 +562,21 @@ public sealed class SseMcpClient : IMcpClient
     public async Task<IReadOnlyList<McpToolDefinition>> ListToolsAsync(CancellationToken cancellationToken = default)
     {
         EnsureConnected();
-        var response = await SendRequestAsync("tools/list", new { }, cancellationToken);
-        if (!response.TryGetProperty("result", out var result) || !result.TryGetProperty("tools", out var tools) ||
-            tools.ValueKind != JsonValueKind.Array) return Array.Empty<McpToolDefinition>();
-        return tools.EnumerateArray().Select(tool =>
+        var definitions = new List<McpToolDefinition>();
+        string? cursor = null;
+        var pageCount = 0;
+        do
         {
-            var name = tool.TryGetProperty("name", out var n) ? n.GetString() : null;
-            var description = tool.TryGetProperty("description", out var d) ? d.GetString() ?? string.Empty : string.Empty;
-            var schema = tool.TryGetProperty("inputSchema", out var s)
-                ? s.Clone()
-                : JsonSerializer.SerializeToElement(new { type = "object", properties = new { } });
-            return string.IsNullOrWhiteSpace(name) ? null : new McpToolDefinition(name!, description, schema, ServerName);
-        }).Where(tool => tool is not null).Cast<McpToolDefinition>().ToArray();
+            var parameters = new Dictionary<string, object?>();
+            if (!string.IsNullOrWhiteSpace(cursor))
+            {
+                parameters["cursor"] = cursor;
+            }
+            var response = await SendRequestAsync("tools/list", parameters, cancellationToken);
+            definitions.AddRange(McpToolListParser.ParsePage(response, ServerName, out cursor));
+            pageCount++;
+        } while (!string.IsNullOrWhiteSpace(cursor) && pageCount < 100);
+        return definitions;
     }
 
     public async Task<string> CallToolAsync(string name, JsonElement arguments, CancellationToken cancellationToken = default)

@@ -154,7 +154,7 @@ try
     var settingsPath = Path.Combine(settingsTestRoot, "providers.json");
     var providerSettings = new ProviderSettingsStore(
         settingsPath,
-        new ModelProviderOptions("Ollama", "http://127.0.0.1:11434", "", "llama3.2"),
+        new ModelProviderOptions("Ollama", "http://127.0.0.1:11434", "", "test-model"),
         secretStore);
     var view = providerSettings.Upsert(new ProviderProfileUpdate(
         "cloud", "Cloud", "OpenAI", "https://api.openai.com/v1", "gpt-test", "top-secret",
@@ -221,7 +221,7 @@ try
     {
         _ = new ProviderSettingsStore(
             tamperedPath,
-            new ModelProviderOptions("Ollama", "http://127.0.0.1:11434", "", "llama3.2"),
+            new ModelProviderOptions("Ollama", "http://127.0.0.1:11434", "", "test-model"),
             secretStore);
     }
     catch (ArgumentException)
@@ -229,6 +229,19 @@ try
         tamperedRejected = true;
     }
     Assert(tamperedRejected, "tampered persisted provider endpoints are revalidated on load");
+    var legacyDefaultPath = Path.Combine(settingsTestRoot, "legacy-default.json");
+    File.WriteAllText(
+        legacyDefaultPath,
+        """{"activeProviderId":"default","profiles":[{"id":"default","name":"Ollama","type":"Ollama","endpoint":"http://127.0.0.1:11434","model":"llama3.2","toolCallingMode":"Auto","supportsStreaming":true,"supportsVision":false,"supportsJsonOutput":false,"contextWindow":0,"temperature":0.5,"maxTokens":4096,"keepAlive":"5m"}]}""");
+    var migratedDefaults = new ProviderSettingsStore(
+        legacyDefaultPath,
+        new ModelProviderOptions("Ollama", "http://127.0.0.1:11434", "", ""),
+        secretStore);
+    Assert(
+        migratedDefaults.GetActiveProfile().Model == "" &&
+        File.ReadAllText(legacyDefaultPath).Contains("\"schemaVersion\": 1", StringComparison.Ordinal) &&
+        !File.ReadAllText(legacyDefaultPath).Contains("\"model\": \"llama3.2\"", StringComparison.Ordinal),
+        "legacy generated llama3.2 default is removed exactly once");
     providerSettings.Delete("cloud");
     Assert(secretStore.Get("WORDOLLAMA_PROVIDER_CLOUD_API_KEY") is null,
         "deleting a profile deletes its secret");

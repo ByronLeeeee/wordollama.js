@@ -24,6 +24,7 @@ export function TranslationWorkspace() {
           <span data-i18n="taskpane.translation.sourceLanguage">Source language</span>
           <input
             id="translation-source-language"
+            className="input input-sm"
             list="translation-source-language-options"
             autoComplete="off"
             role="combobox"
@@ -33,7 +34,7 @@ export function TranslationWorkspace() {
         </label>
         <button
           id="translation-swap-languages"
-          className="translation-swap-button"
+          className="btn btn-square btn-sm translation-swap-button"
           type="button"
           aria-label="Swap languages"
           title="Swap languages"
@@ -46,6 +47,7 @@ export function TranslationWorkspace() {
           <span data-i18n="taskpane.translation.targetLanguage">Target language</span>
           <input
             id="translation-target-language"
+            className="input input-sm"
             list="translation-target-language-options"
             autoComplete="off"
             role="combobox"
@@ -55,7 +57,7 @@ export function TranslationWorkspace() {
         </label>
       </div>
 
-      <section className="translation-panel">
+      <section className="card card-border translation-panel">
         <div className="translation-panel-heading">
           <label htmlFor="translation-source" data-i18n="taskpane.translation.sourceText">
             Source text
@@ -64,7 +66,7 @@ export function TranslationWorkspace() {
             <span id="translation-source-count">0</span>
             <button
               id="translation-load-selection"
-              className="secondary-button translation-load-button"
+              className="btn btn-sm secondary-button translation-load-button"
               type="button"
               data-i18n="taskpane.translation.loadSelection"
             >
@@ -72,7 +74,7 @@ export function TranslationWorkspace() {
             </button>
             <button
               id="translation-clear"
-              className="icon-button"
+              className="btn btn-ghost btn-square btn-sm icon-button"
               type="button"
               aria-label="Clear"
               title="Clear"
@@ -85,6 +87,7 @@ export function TranslationWorkspace() {
         </div>
         <textarea
           id="translation-source"
+          className="textarea"
           rows={5}
           placeholder="Enter text or select text in Word…"
           data-i18n-placeholder="taskpane.translation.sourcePlaceholder"
@@ -96,6 +99,7 @@ export function TranslationWorkspace() {
         <span data-i18n="taskpane.translation.instructions">Terminology or style (optional)</span>
         <input
           id="translation-instructions"
+          className="input input-sm"
           type="text"
           placeholder="For example: use formal legal terminology"
           data-i18n-placeholder="taskpane.translation.instructionsPlaceholder"
@@ -103,12 +107,12 @@ export function TranslationWorkspace() {
       </label>
 
       <div className="translation-primary-actions">
-        <button id="translation-run" type="button" data-i18n="taskpane.translation.translate">
+        <button id="translation-run" className="btn btn-primary btn-sm" type="button" data-i18n="taskpane.translation.translate">
           Translate
         </button>
         <button
           id="translation-cancel"
-          className="secondary-button"
+          className="btn btn-sm secondary-button"
           type="button"
           disabled
           data-i18n="taskpane.common.cancel"
@@ -117,7 +121,7 @@ export function TranslationWorkspace() {
         </button>
       </div>
 
-      <section className="translation-panel translation-output-panel">
+      <section className="card card-border translation-panel translation-output-panel">
         <div className="translation-panel-heading">
           <label htmlFor="translation-result" data-i18n="taskpane.translation.result">
             Translation
@@ -126,7 +130,7 @@ export function TranslationWorkspace() {
             <span id="translation-result-count">0</span>
             <button
               id="translation-copy"
-              className="text-button translation-copy-button"
+              className="btn btn-ghost btn-xs text-button translation-copy-button"
               type="button"
               disabled
             >
@@ -137,6 +141,7 @@ export function TranslationWorkspace() {
         </div>
         <textarea
           id="translation-result"
+          className="textarea"
           rows={5}
           placeholder="The translation appears here and remains editable…"
           data-i18n-placeholder="taskpane.translation.resultPlaceholder"
@@ -144,6 +149,7 @@ export function TranslationWorkspace() {
         <div className="translation-result-actions">
           <button
             id="translation-replace"
+            className="btn btn-primary btn-sm"
             type="button"
             disabled
             data-i18n="taskpane.translation.replaceSelection"
@@ -152,7 +158,7 @@ export function TranslationWorkspace() {
           </button>
           <button
             id="translation-insert"
-            className="secondary-button"
+            className="btn btn-sm secondary-button"
             type="button"
             disabled
             data-i18n="taskpane.translation.insertBelow"

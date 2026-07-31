@@ -12,9 +12,10 @@ function assert(condition: unknown, message: string): asserts condition {
 
 let captured = "";
 const runtime = {
-  async chat(messages: Array<{ content: string }>) {
+  async *streamChat(messages: Array<{ content: string }>) {
     captured = messages.map((message) => message.content).join("\n");
-    return { provider: "fake", model: "legal", content: "1. 核实合同原件" };
+    yield { provider: "fake", model: "legal", delta: "1. 核实", done: false };
+    yield { provider: "fake", model: "legal", delta: "合同原件", done: true };
   },
 } as unknown as RuntimeClient;
 const investigation = await investigatePleading(runtime, "indictment", "原告主张被告欠款。");

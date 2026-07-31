@@ -16,6 +16,7 @@
     "test:review": "node --experimental-strip-types ../../test-fixtures/review-workspace-smoke.ts",
     "test:ribbon": "node --experimental-strip-types ../../test-fixtures/officejs-ribbon-smoke.ts",
     "test:workflow": "node --experimental-strip-types ../../test-fixtures/text-workflow-smoke.ts",
+    "test:streaming": "node --experimental-strip-types ../../test-fixtures/text-streaming-contract-smoke.ts",
     "test:translation": "node --experimental-strip-types ../../test-fixtures/translation-workflow-smoke.ts",
     "test:formats": "node --experimental-strip-types ../../test-fixtures/format-workflows-smoke.ts",
     "test:image": "node --experimental-strip-types ../../test-fixtures/image-workflow-smoke.ts",

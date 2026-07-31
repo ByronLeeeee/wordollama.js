@@ -98,6 +98,11 @@ import { mountTaskpaneApp } from "./taskpane/TaskpaneApp";
 import { PAIRING_SESSION_STORAGE_KEY } from "./pairing-session";
 import { initializeTranslationWorkspace } from "./translation-workspace";
 import {
+  beginStreamingText,
+  endStreamingText,
+  updateStreamingText,
+} from "./streaming-ui";
+import {
   buildPermissionScopeKey,
   formatPermissionParams,
 } from "./permission-scope";
@@ -280,6 +285,7 @@ let reviewScopeKind: "selection" | "paragraphs" | "document" | "" = "";
 let reviewIssues: ReviewIssue[] = [];
 let reviewSuggestions: ReviewSuggestion[] = [];
 let reviewAbortController: AbortController | null = null;
+let reviewWritingProfile = "";
 let reviewScopeAnchors = new Map<number, ReviewAnchor>();
 let reviewScopeChunks: Array<{ source: string; anchors: Map<number, ReviewAnchor> }> = [];
 let reviewPageStart = 1;
@@ -511,7 +517,8 @@ function openReactSettingsDialog(): void {
 type ReactSettingsRequest =
   | { id: string; method: "word.listStyles" }
   | { id: string; method: "word.createParagraphStyle"; name: string }
-  | { id: string; method: "runtime.adoptPairing"; pairing: PairResponse };
+  | { id: string; method: "runtime.adoptPairing"; pairing: PairResponse }
+  | { id: string; method: "settings.close" };
 
 async function handleReactSettingsMessage(
   dialog: Office.Dialog,
@@ -523,6 +530,12 @@ async function handleReactSettingsMessage(
   try {
     request = JSON.parse(message) as ReactSettingsRequest;
   } catch {
+    return;
+  }
+
+  if (request.method === "settings.close") {
+    dialog.close();
+    settingsOfficeDialog = null;
     return;
   }
 
@@ -766,13 +779,13 @@ required<HTMLButtonElement>("#workflow-generate").addEventListener("click", asyn
   textWorkflowAbortController = new AbortController();
   generate.disabled = true;
   cancel.disabled = false;
-  result.value = i18n.t("taskpane.status.generating");
+  beginStreamingText(result);
   updateTextWorkflowActions();
   try {
     const settings = readLocalSettings("wordollama-general-settings", { language: "auto" });
     let writingProfile = "";
     try { writingProfile = localStorage.getItem("wordollama-writing-profile") ?? ""; } catch { /* Ignore host storage policy. */ }
-    result.value = await generateTextWorkflow(
+    const finalResult = await generateTextWorkflow(
       runtime,
       activeTextWorkflow,
       textWorkflowSource,
@@ -785,11 +798,17 @@ required<HTMLButtonElement>("#workflow-generate").addEventListener("click", asyn
       outputLanguageLabel(settings.language),
       writingProfile,
       textWorkflowAbortController.signal,
+      (content) => {
+        updateStreamingText(result, content);
+        updateTextWorkflowActions();
+      },
     );
+    endStreamingText(result, finalResult);
   } catch (error) {
-    result.value = "";
+    endStreamingText(result);
     if ((error as { name?: string }).name !== "AbortError") showError(error);
   } finally {
+    endStreamingText(result);
     textWorkflowAbortController = null;
     generate.disabled = false;
     cancel.disabled = true;
@@ -1134,19 +1153,25 @@ required<HTMLButtonElement>("#html-app-generate").addEventListener("click", asyn
   htmlAbortController = new AbortController();
   generate.disabled = true;
   cancel.disabled = false;
-  code.value = i18n.t("taskpane.status.generating");
+  beginStreamingText(code);
   updateHtmlAppActions();
   try {
-    code.value = await generateHtmlApp(
+    const finalResult = await generateHtmlApp(
       runtime,
       required<HTMLTextAreaElement>("#html-app-prompt").value,
       htmlAbortController.signal,
+      (content) => {
+        updateStreamingText(code, content);
+        updateHtmlAppActions();
+      },
     );
+    endStreamingText(code, finalResult);
     previewHtmlApp();
   } catch (error) {
-    code.value = "";
+    endStreamingText(code);
     if ((error as { name?: string }).name !== "AbortError") showError(error);
   } finally {
+    endStreamingText(code);
     htmlAbortController = null;
     generate.disabled = false;
     cancel.disabled = true;
@@ -1269,19 +1294,25 @@ required<HTMLButtonElement>("#image-analyze").addEventListener("click", async ()
   imageAbortController = new AbortController();
   analyze.disabled = true;
   cancel.disabled = false;
-  result.value = i18n.t("taskpane.status.analyzing");
+  beginStreamingText(result);
   updateImageActions();
   try {
-    result.value = await analyzeImage(
+    const finalResult = await analyzeImage(
       runtime,
       selectedImageDataUrl,
       required<HTMLTextAreaElement>("#image-prompt").value,
       imageAbortController.signal,
+      (content) => {
+        updateStreamingText(result, content);
+        updateImageActions();
+      },
     );
+    endStreamingText(result, finalResult);
   } catch (error) {
-    result.value = "";
+    endStreamingText(result);
     if ((error as { name?: string }).name !== "AbortError") showError(error);
   } finally {
+    endStreamingText(result);
     imageAbortController = null;
     analyze.disabled = false;
     cancel.disabled = true;
@@ -1412,19 +1443,25 @@ required<HTMLButtonElement>("#moot-generate").addEventListener("click", async ()
   mootAbortController = new AbortController();
   generate.disabled = true;
   cancel.disabled = false;
-  result.value = i18n.t("taskpane.status.investigating");
+  beginStreamingText(result);
   updateMootActions();
   try {
-    result.value = await investigatePleading(
+    const finalResult = await investigatePleading(
       runtime,
       required<HTMLSelectElement>("#moot-pleading-type").value as PleadingType,
       required<HTMLTextAreaElement>("#moot-source").value,
       mootAbortController.signal,
+      (content) => {
+        updateStreamingText(result, content);
+        updateMootActions();
+      },
     );
+    endStreamingText(result, finalResult);
   } catch (error) {
-    result.value = "";
+    endStreamingText(result);
     if ((error as { name?: string }).name !== "AbortError") showError(error);
   } finally {
+    endStreamingText(result);
     mootAbortController = null;
     generate.disabled = false;
     cancel.disabled = true;
@@ -1570,19 +1607,25 @@ required<HTMLButtonElement>("#custom-prompt-run").addEventListener("click", asyn
   customPromptAbortController = new AbortController();
   run.disabled = true;
   cancel.disabled = false;
-  result.value = i18n.t("taskpane.status.generating");
+  beginStreamingText(result);
   updateCustomPromptActions();
   try {
-    result.value = await runCustomPrompt(
+    const finalResult = await runCustomPrompt(
       runtime,
       collectCustomPromptDefinition(),
       customPromptSource,
       customPromptAbortController.signal,
+      (content) => {
+        updateStreamingText(result, content);
+        updateCustomPromptActions();
+      },
     );
+    endStreamingText(result, finalResult);
   } catch (error) {
-    result.value = "";
+    endStreamingText(result);
     if ((error as { name?: string }).name !== "AbortError") showError(error);
   } finally {
+    endStreamingText(result);
     customPromptAbortController = null;
     run.disabled = false;
     cancel.disabled = true;
@@ -1617,7 +1660,10 @@ required<HTMLButtonElement>("#custom-prompt-apply").addEventListener("click", as
 function applyWorkflowRoute(): void {
   const workflow = requestedWorkflow;
   if (!workflow || workflow === "agent") {
-    if (activeSurface === "review") activateTab("review");
+    if (activeSurface === "review") {
+      activateTab("review");
+      void loadReviewSettings();
+    }
     return;
   }
   if (workflow === "settings") {
@@ -1631,6 +1677,7 @@ function applyWorkflowRoute(): void {
   }
   if (workflow === "review") {
     activateTab("review");
+    void loadReviewSettings();
     return;
   }
   if (workflow === "compare" || workflow === "contract-compare") {
@@ -1830,10 +1877,11 @@ function requestDecision(message: string, approveLabel: string, rejectLabel: str
   actions.className = "action-row";
   const approve = document.createElement("button");
   approve.type = "button";
+  approve.className = "btn btn-primary btn-sm";
   approve.textContent = approveLabel;
   const reject = document.createElement("button");
   reject.type = "button";
-  reject.className = "secondary-button";
+  reject.className = "btn btn-sm secondary-button";
   reject.textContent = rejectLabel;
   actions.append(approve, reject);
   bubble.appendChild(actions);
@@ -1859,14 +1907,15 @@ function requestPermissionDecision(message: string): Promise<PermissionDecision>
   actions.className = "action-row wrap";
   const allowOnce = document.createElement("button");
   allowOnce.type = "button";
+  allowOnce.className = "btn btn-primary btn-sm";
   allowOnce.textContent = i18n.t("taskpane.agent.allowOnce");
   const allowAgentRun = document.createElement("button");
   allowAgentRun.type = "button";
-  allowAgentRun.className = "secondary-button";
+  allowAgentRun.className = "btn btn-sm secondary-button";
   allowAgentRun.textContent = i18n.t("taskpane.agent.allowAgentRun");
   const deny = document.createElement("button");
   deny.type = "button";
-  deny.className = "secondary-button";
+  deny.className = "btn btn-sm secondary-button";
   deny.textContent = i18n.t("taskpane.agent.deny");
   const buttons = [allowOnce, allowAgentRun, deny];
   actions.append(...buttons);
@@ -1887,7 +1936,7 @@ function requestPermissionDecision(message: string): Promise<PermissionDecision>
 function requestHumanInput(question: string): Promise<string | null> {
   return new Promise((resolve) => {
     const dialog = document.createElement("dialog");
-    dialog.className = "human-prompt-dialog";
+    dialog.className = "modal-box human-prompt-dialog";
     dialog.setAttribute("aria-labelledby", "human-prompt-title");
 
     const title = document.createElement("h2");
@@ -1899,6 +1948,7 @@ function requestHumanInput(question: string): Promise<string | null> {
 
     const input = document.createElement("input");
     input.type = "text";
+    input.className = "input input-sm";
     input.placeholder = i18n.t("taskpane.dialog.inputPlaceholder");
     input.setAttribute("aria-label", i18n.t("taskpane.dialog.answer"));
 
@@ -1906,10 +1956,11 @@ function requestHumanInput(question: string): Promise<string | null> {
     actions.className = "action-row";
     const approve = document.createElement("button");
     approve.type = "button";
+    approve.className = "btn btn-primary btn-sm";
     approve.textContent = i18n.t("taskpane.dialog.confirm");
     const cancel = document.createElement("button");
     cancel.type = "button";
-    cancel.className = "secondary-button";
+    cancel.className = "btn btn-sm secondary-button";
     cancel.textContent = i18n.t("taskpane.dialog.cancel");
     actions.append(approve, cancel);
     dialog.append(title, message, input, actions);
@@ -1949,7 +2000,7 @@ function requestConfirmation(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     const dialog = document.createElement("dialog");
-    dialog.className = "human-prompt-dialog";
+    dialog.className = "modal-box human-prompt-dialog";
 
     const title = document.createElement("h2");
     title.textContent = i18n.t("taskpane.dialog.confirmTitle");
@@ -1959,10 +2010,11 @@ function requestConfirmation(
     actions.className = "action-row";
     const approve = document.createElement("button");
     approve.type = "button";
+    approve.className = "btn btn-primary btn-sm";
     approve.textContent = approveLabel;
     const reject = document.createElement("button");
     reject.type = "button";
-    reject.className = "secondary-button";
+    reject.className = "btn btn-sm secondary-button";
     reject.textContent = rejectLabel;
     actions.append(approve, reject);
     dialog.append(title, message, actions);
@@ -1990,7 +2042,7 @@ function requestConfirmation(
 function showCopyFallback(titleText: string, value: string): Promise<void> {
   return new Promise((resolve) => {
     const dialog = document.createElement("dialog");
-    dialog.className = "human-prompt-dialog copy-fallback-dialog";
+    dialog.className = "modal-box human-prompt-dialog copy-fallback-dialog";
     const title = document.createElement("h2");
     title.textContent = titleText;
     const message = document.createElement("p");
@@ -2026,7 +2078,8 @@ if (typeof Office === "undefined") {
 } else {
   Office.onReady((info) => {
     officeReady = true;
-    hostStatus.textContent = info.host
+    hostStatus.textContent = "";
+    hostStatus.title = info.host
       ? i18n.t("taskpane.agent.hostConnected", { host: info.host })
       : "";
     applyWorkflowRoute();
@@ -2625,7 +2678,7 @@ function renderTrackedRevisions(
   trackedRevisionList.className = "suggestion-list";
   for (const revision of revisions) {
     const card = document.createElement("article");
-    card.className = "review-item severity-low";
+    card.className = "card card-border review-item severity-low";
     const heading = document.createElement("div");
     heading.className = "review-item-heading";
     const title = document.createElement("strong");
@@ -2633,7 +2686,7 @@ function renderTrackedRevisions(
       revision.author || i18n.t("taskpane.review.unknownAuthor")
     }`;
     const sequence = document.createElement("span");
-    sequence.className = "severity-badge";
+    sequence.className = "badge badge-sm severity-badge";
     sequence.textContent = `#${revision.index}`;
     heading.append(title, sequence);
     const detail = document.createElement("p");
@@ -2903,8 +2956,8 @@ async function loadReviewScope(
     reviewScopeStatus.textContent = i18n.t("taskpane.review.scopeLoaded", {
       scope: reviewScopeLabel,
     });
-    suggestionList.className = "empty-panel";
-    suggestionList.textContent = i18n.t("taskpane.review.rangeReady");
+    suggestionList.hidden = true;
+    suggestionList.replaceChildren();
   } catch (error) {
     reviewScopeStatus.textContent = i18n.t("taskpane.review.loadFailed");
     showError(error);
@@ -2915,7 +2968,12 @@ function actionButton(label: string, className = ""): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = label;
-  button.className = className;
+  const daisyClass = className.includes("text-button")
+    ? "btn btn-ghost btn-xs"
+    : className.includes("secondary-button")
+      ? "btn btn-sm"
+      : "btn btn-primary btn-sm";
+  button.className = `${daisyClass} ${className}`.trim();
   return button;
 }
 
@@ -2923,26 +2981,30 @@ function renderIssues(): void {
   const list = required<HTMLDivElement>("#issue-list");
   const count = required<HTMLElement>("#issue-count");
   const summary = required<HTMLElement>("#issue-summary");
+  const clearButton = required<HTMLButtonElement>("#clear-issues");
   list.replaceChildren();
   count.textContent = String(reviewIssues.length);
+  count.hidden = reviewIssues.length === 0;
+  clearButton.hidden = reviewIssues.length === 0;
   summary.textContent = reviewIssues.length
     ? i18n.t("taskpane.issues.found", { count: reviewIssues.length })
     : i18n.t("taskpane.issues.empty");
   if (!reviewIssues.length) {
-    list.className = "empty-panel";
-    list.textContent = i18n.t("taskpane.issues.noneStructured");
+    list.className = "issue-list";
+    list.hidden = true;
     return;
   }
   list.className = "issue-list";
+  list.hidden = false;
   for (const issue of reviewIssues) {
     const card = document.createElement("article");
-    card.className = `review-item severity-${issue.severity}`;
+    card.className = `card card-border review-item severity-${issue.severity}`;
     const heading = document.createElement("div");
     heading.className = "review-item-heading";
     const title = document.createElement("strong");
     title.textContent = issue.title;
     const badge = document.createElement("span");
-    badge.className = `severity-badge ${issue.severity}`;
+    badge.className = `badge badge-sm severity-badge ${issue.severity}`;
     badge.textContent = i18n.t(`taskpane.issues.severity.${issue.severity}`);
     heading.append(title, badge);
     const meta = document.createElement("p");
@@ -3006,7 +3068,7 @@ function renderIssues(): void {
 
 async function runIssueReview(kind: "selection" | "document"): Promise<void> {
   clearError();
-  activateTab("issues");
+  activateTab("review");
   const selectionButton = required<HTMLButtonElement>("#review-selection");
   const documentButton = required<HTMLButtonElement>("#review-document");
   selectionButton.disabled = true;
@@ -3138,7 +3200,6 @@ async function performSuggestionAction(
 }
 
 async function loadReviewSettings(): Promise<void> {
-  const editor = required<HTMLTextAreaElement>("#writing-profile");
   try {
     let settings = await runtime.getReviewSettings();
     const legacy = localStorage.getItem("wordollama-writing-profile")?.trim() ?? "";
@@ -3146,7 +3207,7 @@ async function loadReviewSettings(): Promise<void> {
       settings = await runtime.saveReviewSettings(legacy);
       localStorage.removeItem("wordollama-writing-profile");
     }
-    editor.value = settings.writingProfile;
+    reviewWritingProfile = settings.writingProfile;
   } catch (error) {
     showError(error);
   }
@@ -3163,7 +3224,7 @@ async function regenerateSuggestion(
       runtime,
       `[P${suggestion.paragraphIndex}] ${suggestion.originalText}`,
       required<HTMLTextAreaElement>("#review-instruction").value.trim(),
-      required<HTMLTextAreaElement>("#writing-profile").value.trim(),
+      reviewWritingProfile,
     );
     const replacement = generated[0];
     if (!replacement) throw new Error(i18n.t("taskpane.review.noRegeneratedSuggestion"));
@@ -3191,14 +3252,16 @@ function renderSuggestions(): void {
   const batchActions = required<HTMLDetailsElement>("#review-batch-actions");
   batchActions.hidden = reviewSuggestions.length === 0;
   if (!reviewSuggestions.length) {
+    suggestionList.hidden = false;
     suggestionList.className = "empty-panel";
     suggestionList.textContent = i18n.t("taskpane.review.noSuggestions");
     return;
   }
+  suggestionList.hidden = false;
   suggestionList.className = "suggestion-list";
   for (const item of reviewSuggestions) {
     const card = document.createElement("article");
-    card.className = `review-item suggestion-${item.status}`;
+    card.className = `card card-border review-item suggestion-${item.status}`;
     const heading = document.createElement("div");
     heading.className = "review-item-heading";
     const location = document.createElement("strong");
@@ -3206,7 +3269,7 @@ function renderSuggestions(): void {
       ? i18n.t("taskpane.review.paragraph", { index: item.paragraphIndex })
       : i18n.t("taskpane.review.unlocated");
     const status = document.createElement("span");
-    status.className = "status-badge";
+    status.className = "badge badge-sm status-badge";
     status.textContent = item.status === "pending"
       ? i18n.t("taskpane.review.pending")
       : i18n.t(`taskpane.review.status.${item.status}`, { defaultValue: item.status });
@@ -3220,6 +3283,7 @@ function renderSuggestions(): void {
     suggestionLabel.className = "field-label";
     suggestionLabel.textContent = i18n.t("taskpane.review.suggestion");
     const edited = document.createElement("textarea");
+    edited.className = "textarea";
     edited.rows = 4;
     edited.value = item.suggestedText;
     edited.disabled = item.status !== "pending";
@@ -3325,6 +3389,7 @@ required<HTMLButtonElement>("#generate-review").addEventListener("click", async 
   progress.hidden = false;
   progress.removeAttribute("value");
   progressStatus.textContent = i18n.t("taskpane.review.analyzing");
+  suggestionList.hidden = false;
   suggestionList.className = "empty-panel";
   suggestionList.textContent = i18n.t("taskpane.review.generatingItems");
   try {
@@ -3344,7 +3409,7 @@ required<HTMLButtonElement>("#generate-review").addEventListener("click", async 
         runtime,
         chunk.source,
         required<HTMLTextAreaElement>("#review-instruction").value.trim(),
-        required<HTMLTextAreaElement>("#writing-profile").value.trim(),
+        reviewWritingProfile,
         reviewAbortController.signal,
       );
       collected.push(...attachReviewAnchors(generated, chunk.anchors));
@@ -3382,20 +3447,6 @@ required<HTMLButtonElement>("#accept-all-suggestions").addEventListener("click",
 required<HTMLButtonElement>("#insert-all-suggestions").addEventListener("click", () => void applyAllSuggestions("insert"));
 required<HTMLButtonElement>("#comment-all-suggestions").addEventListener("click", () => void applyAllSuggestions("comment"));
 required<HTMLButtonElement>("#skip-all-suggestions").addEventListener("click", () => void applyAllSuggestions("skip"));
-required<HTMLButtonElement>("#save-profile").addEventListener("click", async () => {
-  const button = required<HTMLButtonElement>("#save-profile");
-  const profile = required<HTMLTextAreaElement>("#writing-profile").value;
-  try {
-    button.disabled = true;
-    const settings = await runtime.saveReviewSettings(profile);
-    required<HTMLTextAreaElement>("#writing-profile").value = settings.writingProfile;
-    reviewScopeStatus.textContent = i18n.t("taskpane.review.profileSaved");
-  } catch (error) {
-    showError(error);
-  } finally {
-    button.disabled = false;
-  }
-});
 
 function updateCompareApplyState(): void {
   const selected = compareReviewItems.filter((item) => item.applicable && item.selected);
@@ -3428,7 +3479,7 @@ function renderCompareReviewItems(): void {
   for (const item of compareReviewItems) {
     const change = item.change;
     const card = document.createElement("article");
-    card.className = "review-item";
+    card.className = "card card-border review-item";
     const choice = document.createElement("label");
     choice.className = "checkbox-row";
     const checkbox = document.createElement("input");

@@ -71,6 +71,7 @@ try {
     Invoke-NpmChecked -NpmArguments @("run", "test:review") -Label "Office.js structured review workflow"
     Invoke-NpmChecked -NpmArguments @("run", "test:ribbon") -Label "Office.js Ribbon parity routes"
     Invoke-NpmChecked -NpmArguments @("run", "test:workflow") -Label "Office.js dedicated text workflows"
+    Invoke-NpmChecked -NpmArguments @("run", "test:streaming") -Label "Office.js direct-text streaming contract"
     Invoke-NpmChecked -NpmArguments @("run", "test:formats") -Label "Office.js table and Markdown workflows"
     Invoke-NpmChecked -NpmArguments @("run", "test:image") -Label "Office.js image understanding workflow"
     Invoke-NpmChecked -NpmArguments @("run", "test:legal") -Label "Office.js legal workflows"
@@ -195,9 +196,16 @@ try {
         Where-Object { $_.DefaultValue -match "[\u3400-\u9fff]" })
     $packagedChineseOverrides = @($packagedManifestXml.SelectNodes(
         "//*[local-name()='Override' and @Locale='zh-CN']"))
+    [xml]$sourceManifestXml = Get-Content -LiteralPath (Join-Path $addinRoot "manifest.xml") -Raw
+    $sourceChineseOverrides = @($sourceManifestXml.SelectNodes(
+        "//*[local-name()='Override' and @Locale='zh-CN']"))
+    $invalidPackagedChineseOverrides = @($packagedChineseOverrides | Where-Object {
+        [string]::IsNullOrWhiteSpace($_.Value)
+    })
     if ($packagedDefaultLocale.InnerText -ne "en-US" -or
         $packagedChineseDefaults.Count -ne 0 -or
-        $packagedChineseOverrides.Count -ne 37) {
+        $packagedChineseOverrides.Count -ne $sourceChineseOverrides.Count -or
+        $invalidPackagedChineseOverrides.Count -ne 0) {
         throw "Add-in packaging regression: manifest en-US fallback or zh-CN overrides are incomplete."
     }
 

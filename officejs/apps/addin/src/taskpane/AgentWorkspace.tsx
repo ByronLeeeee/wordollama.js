@@ -4,39 +4,35 @@ export function AgentWorkspace() {
   return (
     <>
       <nav
-        className="main-tabs"
+        className="tabs tabs-border main-tabs"
         aria-label="Agent workspace"
         data-i18n-aria-label="taskpane.agent.workspace"
       >
         <button
-          className="tab-button active"
+          className="tab tab-active tab-button active"
           type="button"
           data-tab="chat"
           data-i18n="taskpane.agent.chat"
         >
           Chat
         </button>
-        <button className="tab-button" type="button" data-tab="issues">
-          <span data-i18n="taskpane.agent.issues">Issues</span>{" "}
-          <span id="issue-count" className="count-badge">
-            0
-          </span>
-        </button>
         <button
-          className="tab-button"
+          className="tab tab-button"
           type="button"
           data-tab="review"
-          data-i18n="taskpane.agent.review"
         >
-          Review
+          <span data-i18n="taskpane.agent.review">Review</span>{" "}
+          <span id="issue-count" className="badge badge-sm count-badge">
+            0
+          </span>
         </button>
       </nav>
 
       <section id="tab-chat" className="tab-panel active" data-panel="chat">
-        <aside id="workflow-banner" className="workflow-banner" hidden>
+        <aside id="workflow-banner" className="alert alert-info workflow-banner" hidden>
           <strong id="workflow-title" />
         </aside>
-        <aside id="agent-recovery" className="workflow-banner" hidden>
+        <aside id="agent-recovery" className="alert alert-info workflow-banner" hidden>
           <strong data-i18n="taskpane.agent.recoveryFound">
             Unfinished Agent task found
           </strong>
@@ -44,6 +40,7 @@ export function AgentWorkspace() {
           <div className="action-row">
             <button
               id="resume-agent-session"
+              className="btn btn-primary btn-sm"
               type="button"
               data-i18n="taskpane.agent.resume"
             >
@@ -51,7 +48,7 @@ export function AgentWorkspace() {
             </button>
             <button
               id="discard-agent-session"
-              className="secondary-button"
+              className="btn btn-sm secondary-button"
               type="button"
               data-i18n="taskpane.agent.discard"
             >
@@ -87,7 +84,7 @@ export function AgentWorkspace() {
             />
             <button
               id="agent-image-remove"
-              className="text-button"
+              className="btn btn-ghost btn-xs text-button"
               type="button"
               data-i18n="taskpane.agent.removeImage"
             >
@@ -97,7 +94,7 @@ export function AgentWorkspace() {
           <div className="composer-toolbar">
             <button
               id="attach-image"
-              className="icon-button"
+              className="btn btn-ghost btn-square btn-sm icon-button"
               type="button"
               aria-label="Add image"
               title="Add image"
@@ -118,6 +115,7 @@ export function AgentWorkspace() {
           <div className="composer-row">
             <textarea
               id="agent-requirement"
+              className="textarea"
               rows={2}
               placeholder="Enter an instruction, or type / for quick actions…"
               aria-label="Agent instruction"
@@ -126,7 +124,7 @@ export function AgentWorkspace() {
             />
             <button
               id="agent-run"
-              className="send-button"
+              className="btn btn-primary btn-square btn-sm send-button"
               type="button"
               aria-label="Send"
               data-i18n-aria-label="taskpane.agent.send"

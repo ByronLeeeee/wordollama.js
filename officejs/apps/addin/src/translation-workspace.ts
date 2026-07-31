@@ -10,6 +10,11 @@ import {
   type TranslationLanguageCode,
 } from "./translation-languages";
 import { generateTranslation } from "./translation-workflow";
+import {
+  beginStreamingText,
+  endStreamingText,
+  updateStreamingText,
+} from "./streaming-ui";
 
 type TranslationWordAdapter = Pick<
   OfficeJsWordAdapter,
@@ -232,23 +237,32 @@ export function initializeTranslationWorkspace(
     actionStatus.textContent = i18n.t("taskpane.translation.translating");
     abortController = new AbortController();
     cancelButton.disabled = false;
+    beginStreamingText(result);
     updateState();
     try {
-      result.value = await generateTranslation(dependencies.runtime, {
+      const finalResult = await generateTranslation(dependencies.runtime, {
         source: source.value,
         sourceLanguage: sourceLanguageValue,
         targetLanguage: targetLanguageValue,
         instructions: instructions.value,
-      }, abortController.signal);
+      }, abortController.signal, (content) => {
+        updateStreamingText(result, content);
+        updateState();
+      });
+      endStreamingText(result, finalResult);
       rememberLanguages(sourceLanguageValue, targetLanguageValue);
       await dependencies.refreshRuntimeStatus();
       actionStatus.textContent = i18n.t("taskpane.translation.completed");
     } catch (error) {
-      if ((error as { name?: string }).name !== "AbortError") {
+      endStreamingText(result);
+      if ((error as { name?: string }).name === "AbortError") {
+        actionStatus.textContent = i18n.t("taskpane.status.cancelled");
+      } else {
         dependencies.showError(error);
         actionStatus.textContent = "";
       }
     } finally {
+      endStreamingText(result);
       abortController = null;
       cancelButton.disabled = true;
       updateState();

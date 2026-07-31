@@ -3,7 +3,8 @@ import type { PairResponse, ToolCatalogResponse } from "../contracts";
 type DialogRequest =
   | { id: string; method: "word.listStyles" }
   | { id: string; method: "word.createParagraphStyle"; name: string }
-  | { id: string; method: "runtime.adoptPairing"; pairing: PairResponse };
+  | { id: string; method: "runtime.adoptPairing"; pairing: PairResponse }
+  | { id: string; method: "settings.close" };
 
 type DialogRequestInput =
   | { method: "word.listStyles" }
@@ -77,4 +78,17 @@ export function createWordParagraphStyle(name: string): Promise<void> {
 
 export function adoptPairingInTaskPane(pairing: PairResponse): Promise<ToolCatalogResponse> {
   return requestParent<ToolCatalogResponse>({ method: "runtime.adoptPairing", pairing });
+}
+
+export function closeSettingsWindow(): void {
+  if (typeof Office !== "undefined" && typeof Office.context?.ui?.messageParent === "function") {
+    Office.context.ui.messageParent(JSON.stringify({
+      id: crypto.randomUUID(),
+      method: "settings.close",
+    }), {
+      targetOrigin: window.location.origin,
+    });
+    return;
+  }
+  window.close();
 }

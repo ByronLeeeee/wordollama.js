@@ -1,5 +1,6 @@
 import type { RuntimeClient } from "./runtime-client";
 import i18n from "./i18n.ts";
+import { streamText, type TextStreamUpdate } from "./stream-text.ts";
 
 export type PleadingType = "indictment" | "defense";
 
@@ -8,10 +9,11 @@ export async function investigatePleading(
   pleadingType: PleadingType,
   documentText: string,
   signal?: AbortSignal,
+  onUpdate?: TextStreamUpdate,
 ): Promise<string> {
   if (!documentText.trim()) throw new Error(i18n.t("taskpane.moot.errors.sourceRequired"));
   const typeLabel = i18n.t(`taskpane.moot.${pleadingType === "indictment" ? "complaint" : "defense"}`);
-  const response = await runtime.chat([
+  const result = await streamText(runtime, [
     {
       role: "system",
       content: [
@@ -29,9 +31,9 @@ export async function investigatePleading(
         interpolation: { escapeValue: false },
       }),
     },
-  ], undefined, signal);
-  if (!response.content.trim()) throw new Error(i18n.t("taskpane.moot.errors.emptyResult"));
-  return response.content.trim();
+  ], signal, onUpdate);
+  if (!result) throw new Error(i18n.t("taskpane.moot.errors.emptyResult"));
+  return result;
 }
 
 export function formatLawArticle(article: {

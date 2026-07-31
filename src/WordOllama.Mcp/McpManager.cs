@@ -19,6 +19,7 @@ public sealed class McpManager : IAsyncDisposable
     private readonly ConcurrentDictionary<string, IMcpClient> _clients = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, IReadOnlyList<McpToolDefinition>> _tools = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, McpServerState> _health = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, McpServerRequest> _requests = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<IReadOnlyList<McpToolDefinition>> ConnectAsync(
         McpServerRequest request,
@@ -29,6 +30,7 @@ public sealed class McpManager : IAsyncDisposable
         {
             throw new ArgumentException("MCP server name and command are required.");
         }
+        _requests[request.Name] = request;
 
         if (_clients.TryRemove(request.Name, out var previous))
         {
@@ -80,9 +82,13 @@ public sealed class McpManager : IAsyncDisposable
         string serverName,
         CancellationToken cancellationToken = default)
     {
-        if (!_clients.TryGetValue(serverName, out var client))
+        if (!_clients.TryGetValue(serverName, out var client) || !client.IsConnected)
         {
-            throw new InvalidOperationException($"MCP server is not connected: {serverName}");
+            if (!_requests.TryGetValue(serverName, out var request))
+            {
+                throw new InvalidOperationException($"MCP server is not connected: {serverName}");
+            }
+            return await ConnectAsync(request, cancellationToken);
         }
         var stopwatch = Stopwatch.StartNew();
         try
@@ -154,6 +160,14 @@ public sealed class McpManager : IAsyncDisposable
         return true;
     }
 
+    public async Task<bool> RemoveAsync(string serverName)
+    {
+        var disconnected = await DisconnectAsync(serverName);
+        _requests.TryRemove(serverName, out _);
+        _health.TryRemove(serverName, out _);
+        return disconnected;
+    }
+
     public bool IsKnownTool(string qualifiedName) =>
         TryResolve(qualifiedName, out _, out _);
 
@@ -186,9 +200,17 @@ public sealed class McpManager : IAsyncDisposable
         McpToolCallRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!_clients.TryGetValue(request.ServerName, out var client))
+        if (!_clients.TryGetValue(request.ServerName, out var client) || !client.IsConnected)
         {
-            throw new InvalidOperationException($"MCP server is not connected: {request.ServerName}");
+            if (!_requests.TryGetValue(request.ServerName, out var connection))
+            {
+                throw new InvalidOperationException($"MCP server is not connected: {request.ServerName}");
+            }
+            await ConnectAsync(connection, cancellationToken);
+            if (!_clients.TryGetValue(request.ServerName, out client))
+            {
+                throw new InvalidOperationException($"MCP server reconnect failed: {request.ServerName}");
+            }
         }
         return await client.CallToolAsync(request.ToolName, request.Arguments, cancellationToken);
     }
@@ -202,6 +224,7 @@ public sealed class McpManager : IAsyncDisposable
         _clients.Clear();
         _tools.Clear();
         _health.Clear();
+        _requests.Clear();
     }
 
     private static string BoundedError(Exception exception)

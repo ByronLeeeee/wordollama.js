@@ -12,7 +12,7 @@ export function WorkspaceHeader({
     <div className="workflow-workspace-header">
       <button
         id={closeId}
-        className="icon-button"
+        className="btn btn-ghost btn-square btn-sm icon-button"
         type="button"
         aria-label="Back to Agent"
         data-i18n-aria-label="taskpane.common.backToAgent"

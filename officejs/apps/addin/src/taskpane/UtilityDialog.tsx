@@ -12,7 +12,7 @@ function ComparePanel() {
         </label>
         <input
           id="compare-original"
-          className="file-field"
+          className="file-input file-input-sm file-field"
           type="file"
           accept={docxAccept}
         />
@@ -21,23 +21,23 @@ function ComparePanel() {
         </label>
         <input
           id="compare-revised"
-          className="file-field"
+          className="file-input file-input-sm file-field"
           type="file"
           accept={docxAccept}
         />
         <label className="checkbox-row">
-          <input id="compare-ignore-case" type="checkbox" />
+          <input id="compare-ignore-case" className="checkbox checkbox-primary checkbox-sm" type="checkbox" />
           <span data-i18n="taskpane.utility.compare.ignoreCase">
             Ignore English letter case
           </span>
         </label>
         <div className="action-row">
-          <button id="compare-run" data-i18n="taskpane.utility.compare.run">
+          <button id="compare-run" className="btn btn-primary btn-sm" data-i18n="taskpane.utility.compare.run">
             Compare documents
           </button>
           <button
             id="compare-copy"
-            className="secondary-button"
+            className="btn btn-sm secondary-button"
             disabled
             data-i18n="taskpane.utility.copyJson"
           >
@@ -47,7 +47,7 @@ function ComparePanel() {
         <p id="compare-summary" />
         <div id="compare-review-list" className="empty-panel" />
         <label className="checkbox-row">
-          <input id="compare-apply-confirm" type="checkbox" disabled />
+          <input id="compare-apply-confirm" className="checkbox checkbox-primary checkbox-sm" type="checkbox" disabled />
           <span data-i18n="taskpane.utility.compare.confirmApply">
             I confirm the open document is a copy of the original and agree to
             apply selected items as Word revisions
@@ -55,6 +55,7 @@ function ComparePanel() {
         </label>
         <button
           id="compare-apply"
+          className="btn btn-primary btn-sm"
           type="button"
           disabled
           data-i18n="taskpane.utility.compare.apply"
@@ -62,8 +63,8 @@ function ComparePanel() {
           Apply selected items
         </button>
         <p id="compare-apply-status" className="muted" />
-        <details>
-          <summary data-i18n="taskpane.utility.compare.preview">
+        <details className="collapse collapse-arrow">
+          <summary className="collapse-title" data-i18n="taskpane.utility.compare.preview">
             Difference text preview
           </summary>
           <pre id="compare-output" />
@@ -78,25 +79,25 @@ function DiagnosticLogPanel() {
     <section className="settings-section">
       <h3 data-i18n="taskpane.utility.diagnostics.logTitle">Runtime log</h3>
       <label className="checkbox-row">
-        <input id="setting-diagnostic-logging" type="checkbox" />
+        <input id="setting-diagnostic-logging" className="checkbox checkbox-primary checkbox-sm" type="checkbox" />
         <span data-i18n="taskpane.utility.diagnostics.logToggle">
           Record runtime events and errors from this task pane
         </span>
       </label>
       <div className="action-row wrap">
-        <button id="save-diagnostic-settings" data-i18n="taskpane.utility.save">
+        <button id="save-diagnostic-settings" className="btn btn-primary btn-sm" data-i18n="taskpane.utility.save">
           Save
         </button>
         <button
           id="copy-diagnostic-log"
-          className="secondary-button"
+          className="btn btn-sm secondary-button"
           data-i18n="taskpane.utility.diagnostics.copyLog"
         >
           Copy log
         </button>
         <button
           id="clear-diagnostic-log"
-          className="text-button"
+          className="btn btn-ghost btn-xs text-button"
           data-i18n="taskpane.utility.diagnostics.clearLog"
         >
           Clear log
@@ -127,24 +128,24 @@ function AcceptancePanel({
   open?: boolean;
 }) {
   return (
-    <details className="settings-section developer-section" open={open}>
-      <summary data-i18n={titleKey}>{title}</summary>
+    <details className="collapse collapse-arrow settings-section developer-section" open={open}>
+      <summary className="collapse-title" data-i18n={titleKey}>{title}</summary>
       <p className="warning" data-i18n={warningKey}>
         {warning}
       </p>
       <label className="checkbox-row">
-        <input id={`${kind}-confirm`} type="checkbox" />
+        <input id={`${kind}-confirm`} className="checkbox checkbox-primary checkbox-sm" type="checkbox" />
         <span data-i18n="taskpane.utility.diagnostics.discardConfirm">
           I confirm the current document is unsaved and can be discarded
         </span>
       </label>
       <div className="action-row">
-        <button id={`${kind}-run`} disabled data-i18n={runKey}>
+        <button id={`${kind}-run`} className="btn btn-primary btn-sm" disabled data-i18n={runKey}>
           {runLabel}
         </button>
         <button
           id={`${kind}-copy`}
-          className="secondary-button"
+          className="btn btn-sm secondary-button"
           disabled
           data-i18n="taskpane.utility.diagnostics.copyReport"
         >
@@ -215,7 +216,7 @@ export function UtilityDialog() {
         </div>
         <button
           id="close-settings"
-          className="icon-button"
+          className="btn btn-ghost btn-square btn-sm icon-button"
           type="button"
           aria-label="Close"
           data-i18n-aria-label="taskpane.common.close"

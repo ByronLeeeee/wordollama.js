@@ -27,6 +27,7 @@ import {
   type McpServerUpdate,
   type McpServerView,
   type McpServerHealth,
+  type McpImportResult,
   type McpToolDefinition,
   type ToolCatalogResponse,
   type DocumentCompareResponse,
@@ -223,6 +224,7 @@ export class RuntimeClient {
   async *streamChat(
     messages: ChatMessage[],
     model?: string,
+    signal?: AbortSignal,
   ): AsyncGenerator<ProviderChatChunk> {
     if (!this.sessionToken) {
       throw new Error(tr("runtime.pairFirst"));
@@ -238,6 +240,7 @@ export class RuntimeClient {
         messages: applyOutputLanguage(messages, this.outputLanguage),
         model,
       }),
+      signal,
     });
     if (!response.ok || !response.body) {
       throw new Error(tr("runtime.providerStreamFailed", { status: response.status }));
@@ -555,6 +558,25 @@ export class RuntimeClient {
     return response.json() as Promise<SkillSummary[]>;
   }
 
+  async readSkill(name: string): Promise<string> {
+    if (!this.sessionToken) {
+      throw new Error(tr("runtime.pairFirst"));
+    }
+    const response = await this.sessionFetch(BRIDGE_URL + "/skills/read", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-WordOllama-Session": this.sessionToken,
+      },
+      body: JSON.stringify({ skillName: name }),
+    });
+    if (!response.ok) {
+      throw new Error(tr("runtime.skillsReadFailed", { status: response.status }));
+    }
+    const result = await response.json() as { content: string };
+    return result.content;
+  }
+
   async importSkill(fileName: string, zipBase64: string): Promise<SkillSummary> {
     return this.settingsRequest("/skills/import", {
       method: "POST",
@@ -614,8 +636,8 @@ export class RuntimeClient {
     return this.settingsRequest(`/settings/providers/${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 
-  async testProvider(profile: ProviderProfileUpdate): Promise<ProviderModelsResponse> {
-    return this.settingsRequest("/settings/providers/test", {
+  async fetchProviderModels(profile: ProviderProfileUpdate): Promise<ProviderModelsResponse> {
+    return this.settingsRequest("/settings/providers/models", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(profile),
@@ -635,6 +657,14 @@ export class RuntimeClient {
 
   async listMcpServers(): Promise<McpServerView[]> {
     return this.settingsRequest("/mcp/servers");
+  }
+
+  async importMcpJson(json: string): Promise<McpImportResult> {
+    return this.settingsRequest("/mcp/servers/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ json }),
+    });
   }
 
   async saveMcpServer(server: McpServerUpdate): Promise<{ server: McpServerView; tools: McpToolDefinition[] }> {

@@ -121,7 +121,7 @@ if (string.IsNullOrWhiteSpace(modelProviderApiKey))
 }
 var modelProviderModel = builder.Configuration["Bridge:ModelProvider:Model"]
     ?? builder.Configuration["Bridge:Ollama:Model"]
-    ?? "llama3.2";
+    ?? string.Empty;
 var initialProviderOptions = new ModelProviderOptions(
     modelProviderType,
     modelProviderEndpoint,
@@ -134,9 +134,16 @@ var providerSettings = new ProviderSettingsStore(
     initialProviderOptions,
     secretStore);
 var reloadableProvider = new ReloadableModelProvider(providerSettings.GetActiveOptions());
-var mcpSettingsPath = builder.Configuration["Bridge:McpSettingsPath"]
+var configuredMcpSettingsPath = builder.Configuration["Bridge:McpSettingsPath"];
+var mcpSettingsPath = configuredMcpSettingsPath
     ?? Path.Combine(settingsRoot, "mcp-settings.json");
-var mcpSettings = new McpSettingsStore(mcpSettingsPath, secretStore);
+var legacyMcpSettingsPath = string.IsNullOrWhiteSpace(configuredMcpSettingsPath)
+    ? Path.Combine(PlatformPaths.GetLegacySettingsRoot(), "mcp-servers.json")
+    : null;
+var mcpSettings = new McpSettingsStore(
+    mcpSettingsPath,
+    secretStore,
+    legacyMcpSettingsPath);
 var reviewSettingsPath = builder.Configuration["Bridge:ReviewSettingsPath"]
     ?? Path.Combine(settingsRoot, "review-settings.json");
 var reviewSettings = new ReviewSettingsStore(reviewSettingsPath);
@@ -798,7 +805,7 @@ app.MapDelete("/settings/providers/{id}", (
     }
 });
 
-app.MapPost("/settings/providers/test", async (
+app.MapPost("/settings/providers/models", async (
     HttpRequest httpRequest,
     ProviderProfileUpdate request,
     BridgeSessionStore sessions,
@@ -810,7 +817,7 @@ app.MapPost("/settings/providers/test", async (
     if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
     try
     {
-        var candidate = ModelProviderFactory.Create(settings.BuildOptionsForTest(request));
+        var candidate = ModelProviderFactory.Create(settings.BuildOptionsForModelFetch(request));
         var models = await candidate.FetchModelsAsync(cancellationToken);
         return Results.Ok(new { provider = candidate.ProviderType, models });
     }
@@ -1260,6 +1267,63 @@ app.MapGet("/mcp/servers", (
         : Results.Unauthorized();
 });
 
+app.MapPost("/mcp/servers/import", async (
+    HttpRequest httpRequest,
+    McpImportRequest request,
+    BridgeSessionStore sessions,
+    LocalToolService localTools,
+    McpSettingsStore settings,
+    McpManager manager,
+    CancellationToken cancellationToken) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers["Origin"].FirstOrDefault();
+    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
+    try
+    {
+        var imported = settings.ImportJson(request.Json, manager);
+        var connected = 0;
+        var errors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in imported.Names)
+        {
+            var view = settings.GetViews(manager).First(server =>
+                string.Equals(server.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (!view.Enabled) continue;
+            try
+            {
+                var connection = settings.GetRequest(name);
+                if (string.Equals(connection.Transport, "stdio", StringComparison.OrdinalIgnoreCase) &&
+                    !localTools.IsExecutableAllowed(connection.Command))
+                {
+                    errors[name] = $"MCP executable is not allowed: {Path.GetFileName(connection.Command)}";
+                    continue;
+                }
+                await manager.ConnectAsync(connection, cancellationToken);
+                connected++;
+            }
+            catch (Exception exception)
+            {
+                errors[name] = manager.GetServerStates().FirstOrDefault(state =>
+                    string.Equals(state.Name, name, StringComparison.OrdinalIgnoreCase))?.LastError
+                    ?? exception.GetType().Name;
+            }
+        }
+        return Results.Ok(new
+        {
+            imported.Total,
+            imported.Added,
+            imported.Updated,
+            connected,
+            errors,
+            servers = settings.GetViews(manager),
+        });
+    }
+    catch (Exception exception) when (exception is JsonException or ArgumentException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
 app.MapPost("/mcp/servers/{name}/connect", async (
     HttpRequest httpRequest,
     string name,
@@ -1319,7 +1383,7 @@ app.MapDelete("/mcp/servers/{name}", async (
     if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
     try
     {
-        await manager.DisconnectAsync(name);
+        await manager.RemoveAsync(name);
         settings.Delete(name);
         return Results.Ok(new { serverName = name, deleted = true });
     }

@@ -117,9 +117,10 @@ assert(sandboxed.includes("connect-src 'none'") && sandboxed.includes("form-acti
 
 let htmlPrompt = "";
 const htmlRuntime = {
-  async chat(messages: Array<{ role: string; content: string }>) {
+  async *streamChat(messages: Array<{ role: string; content: string }>) {
     htmlPrompt = messages.map((message) => message.content).join("\n");
-    return { content: "```html\n<!doctype html><html><body>app</body></html>\n```" };
+    yield { provider: "fake", model: "fake", delta: "```html\n<!doctype html><html>", done: false };
+    yield { provider: "fake", model: "fake", delta: "<body>app</body></html>\n```", done: true };
   },
 } as unknown as RuntimeClient;
 const generatedHtml = await generateHtmlApp(htmlRuntime, "make a calculator");

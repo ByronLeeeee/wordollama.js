@@ -52,6 +52,7 @@ const taskpaneMarkup = `${html}\n${taskpaneApp}\n${taskpaneChrome}\n${contentWor
 const settingsHtml = readFileSync(resolve(repoRoot, "officejs/apps/addin/settings.html"), "utf8");
 const settingsApp = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/settings/SettingsApp.tsx"), "utf8");
 const settingsDialogRpc = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/settings/dialog-rpc.ts"), "utf8");
+const runtimeClient = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/runtime-client.ts"), "utf8");
 const updateStatus = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/settings/update-status.ts"), "utf8");
 const settingsCss = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/settings/settings.css"), "utf8");
 const settingsI18n = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/i18n.ts"), "utf8");
@@ -109,7 +110,6 @@ for (const migratedContract of [
   'id="runtime-status-text"',
   'class="product-edition">WordOllama.JS',
   'data-tab="chat"',
-  'data-tab="issues"',
   'data-tab="review"',
   'id="agent-stop"',
   'id="agent-output"',
@@ -190,6 +190,15 @@ for (const migratedContract of [
 }
 
 assert(
+  !reviewWorkspace.includes('id="tab-issues"') &&
+    reviewWorkspace.includes('id="tab-review"') &&
+    reviewWorkspace.includes('id="review-selection"') &&
+    reviewWorkspace.includes('id="issue-list"') &&
+    reviewWorkspace.includes('id="suggestion-list" className="empty-panel" hidden'),
+  "issue scanning and suggestion review must share one review workspace",
+);
+
+assert(
   html.includes('id="taskpane-root"') &&
     main.includes('mountTaskpaneApp();') &&
     main.indexOf("mountTaskpaneApp();") < main.indexOf("localizeStaticDocument();") &&
@@ -257,7 +266,7 @@ assert(
   "an automatically empty selection must not occupy the pane with explanatory status copy",
 );
 assert(
-  taskpaneMarkup.includes('<section id="workflow-output" class="generated-output" hidden>') &&
+  taskpaneMarkup.includes('<section id="workflow-output" class="card card-border generated-output task-panel task-output-panel" hidden>') &&
     main.includes('required<HTMLElement>("#workflow-output").hidden = !resultValue'),
   "generated text controls must stay hidden until a result exists",
 );
@@ -300,6 +309,18 @@ assert(
     settingsApp.includes('t("nav.system")'),
   "the React settings dialog must separate Skills and MCP and group navigation",
 );
+assert(
+  settingsApp.includes("<SettingsSaveContext.Provider") &&
+    settingsApp.includes('className="settings-footer"') &&
+    settingsApp.includes("hasUnsavedChanges") &&
+    settingsApp.includes('t("common.saveAndClose")') &&
+    settingsApp.includes('t("common.discardChanges")') &&
+    settingsApp.includes("closeSettingsWindow()") &&
+    settingsDialogRpc.includes('method: "settings.close"') &&
+    main.includes('request.method === "settings.close"') &&
+    main.includes("dialog.close()"),
+  "settings must have one bottom save/close bar and a custom unsaved-changes close flow",
+);
 for (const settingsLayoutContract of [
   '@import "tailwindcss"',
   '@plugin "daisyui"',
@@ -312,6 +333,8 @@ for (const settingsLayoutContract of [
   "display: contents",
   "overflow-y: hidden",
   "scrollbar-width: none",
+  "@media (max-width: 760px)",
+  ":where(button, input, select, textarea, summary):focus-visible",
 ]) {
   assert(settingsCss.includes(settingsLayoutContract), `settings visual system is missing: ${settingsLayoutContract}`);
 }
@@ -561,18 +584,17 @@ for (const interactionContract of [
 }
 
 for (const settingsInteractionContract of [
-  "runtime.listProviderModels(",
+  "runtime.fetchProviderModels(",
   "runtime.saveProviderProfile(",
-  "runtime.testProvider(",
   "runtime.activateProvider(",
   "runtime.deleteProvider(",
-  "runtime.pullOllamaModel(",
   "runtime.loadOllamaModel(",
-  "runtime.deleteOllamaModel(",
   "runtime.listSkills(",
+  "runtime.readSkill(",
   "runtime.importSkill(",
   "runtime.deleteSkill(",
   "runtime.saveMcpServer(",
+  "runtime.importMcpJson(",
   "runtime.connectMcpServer(",
   "runtime.disconnectMcpServer(",
   "runtime.saveMcpPermissions(",
@@ -586,6 +608,43 @@ for (const settingsInteractionContract of [
     settingsApp.includes(settingsInteractionContract),
     `React settings is missing migrated interaction ${settingsInteractionContract}`,
   );
+}
+assert(
+  settingsApp.includes('t("skills.preview")') &&
+    settingsApp.includes("settings-skill-preview-modal") &&
+    settingsApp.includes("markdownToHtml(preview.content") &&
+    runtimeClient.includes('"/skills/read"'),
+  "installed Skills must expose a full rendered SKILL.md preview",
+);
+assert(
+  !settingsApp.includes("runtime.pullOllamaModel(") &&
+    !settingsApp.includes("runtime.deleteOllamaModel(") &&
+    !settingsApp.includes('t("models.profiles")') &&
+    !settingsApp.includes('t("models.connectionTest")') &&
+    !settingsApp.includes('t("models.sendTest")') &&
+    !settingsApp.includes("streamText(") &&
+    !settingsApp.includes('t("models.downloadModel")') &&
+    !settingsApp.includes('t("models.clearKey")') &&
+    settingsApp.includes("settings-saved-model-list") &&
+    settingsApp.includes("settings-model-editor-modal") &&
+    settingsApp.includes('t("models.addModel")') &&
+    settingsApp.includes('t("models.details")') &&
+    settingsApp.includes('t("models.switch")'),
+  "model settings must manage saved configurations through a list and editable modal without managing Ollama files",
+);
+for (const providerBase of [
+  "https://api.openai.com/v1",
+  "https://api.deepseek.com",
+  "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "https://ark.cn-beijing.volces.com/api/v3",
+  "https://open.bigmodel.cn/api/paas/v4",
+  "https://api.moonshot.cn/v1",
+  "https://api.siliconflow.cn/v1",
+  "https://api.minimaxi.chat/v1",
+  "https://api.anthropic.com/v1",
+  "https://generativelanguage.googleapis.com/v1beta",
+]) {
+  assert(settingsApp.includes(providerBase), `model settings is missing provider API base ${providerBase}`);
 }
 assert(
   updateStatus.includes("!result.configured") &&
@@ -625,4 +684,4 @@ assert(
   "Word task panes must not depend on unsupported native confirm/prompt dialogs",
 );
 
-console.log("Office.js WordOllama UI parity smoke passed (Agent, chat, issues, review, diagnostics separation). ");
+console.log("Office.js WordOllama UI parity smoke passed (Agent, unified review, and diagnostics separation).");

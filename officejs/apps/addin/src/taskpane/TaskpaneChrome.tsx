@@ -3,7 +3,7 @@ import { Settings, Sparkles } from "lucide-react";
 export function TaskpaneChrome() {
   return (
     <>
-      <header className="agent-header">
+      <header className="navbar agent-header">
         <div className="brand">
           <span className="sparkle" aria-hidden="true">
             <Sparkles size={16} strokeWidth={2} />
@@ -23,7 +23,7 @@ export function TaskpaneChrome() {
           </span>
           <button
             id="agent-stop"
-            className="danger-button"
+            className="btn btn-error btn-outline btn-xs danger-button"
             type="button"
             hidden
             data-i18n="taskpane.common.stop"
@@ -32,7 +32,7 @@ export function TaskpaneChrome() {
           </button>
           <button
             id="open-settings"
-            className="icon-button"
+            className="btn btn-ghost btn-square btn-sm icon-button"
             type="button"
             aria-label="Settings"
             title="Settings"

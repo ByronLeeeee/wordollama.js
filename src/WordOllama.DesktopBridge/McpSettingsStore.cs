@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using WordOllama.Contracts;
 using WordOllama.Core;
@@ -36,6 +37,14 @@ public sealed record McpServerView(
     DateTimeOffset? LastConnectedAt,
     long? LastCheckDurationMs);
 
+public sealed record McpImportResult(
+    int Total,
+    int Added,
+    int Updated,
+    IReadOnlyList<string> Names);
+
+public sealed record McpImportRequest(string Json);
+
 internal sealed record McpServerSettings(
     string Name,
     string Transport,
@@ -55,11 +64,24 @@ public sealed partial class McpSettingsStore
     private readonly object _gate = new();
     private List<McpServerSettings> _servers;
 
-    public McpSettingsStore(string path, IMutableSecretStore secrets)
+    public McpSettingsStore(
+        string path,
+        IMutableSecretStore secrets,
+        string? legacyPath = null)
     {
         _path = Path.GetFullPath(path);
         _secrets = secrets;
-        _servers = Load();
+        var sourcePath = !File.Exists(_path) &&
+            !string.IsNullOrWhiteSpace(legacyPath) &&
+            File.Exists(legacyPath)
+                ? Path.GetFullPath(legacyPath)
+                : _path;
+        var loaded = Load(sourcePath);
+        _servers = loaded.Servers;
+        if (loaded.Migrated || !string.Equals(sourcePath, _path, StringComparison.OrdinalIgnoreCase))
+        {
+            Save();
+        }
     }
 
     internal IReadOnlyList<McpServerSettings> GetEnabledSettings()
@@ -172,14 +194,71 @@ public sealed partial class McpSettingsStore
         }
     }
 
-    private List<McpServerSettings> Load()
+    public McpImportResult ImportJson(string json, McpManager manager)
     {
-        if (!File.Exists(_path)) return [];
+        var root = JsonNode.Parse(json)
+            ?? throw new ArgumentException("MCP JSON is empty.");
+        var imported = ParseImportedServers(root);
+        if (imported.Length == 0)
+        {
+            throw new ArgumentException("MCP JSON does not contain any valid servers.");
+        }
+
+        HashSet<string> existing;
+        lock (_gate)
+        {
+            existing = _servers.Select(server => server.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        foreach (var update in imported)
+        {
+            Upsert(update with { Trusted = false }, manager);
+            SetToolPermissions(update.Name, new Dictionary<string, bool>());
+        }
+
+        var updated = imported.Count(update => existing.Contains(update.Name));
+        return new McpImportResult(
+            imported.Length,
+            imported.Length - updated,
+            updated,
+            imported.Select(update => update.Name).ToArray());
+    }
+
+    private (List<McpServerSettings> Servers, bool Migrated) Load(string sourcePath)
+    {
+        if (!File.Exists(sourcePath)) return ([], false);
         try
         {
+            var json = File.ReadAllText(sourcePath);
+            var root = JsonNode.Parse(json)
+                ?? throw new InvalidDataException("MCP settings JSON is empty.");
+            if (!IsInternalSettings(root))
+            {
+                var imported = ParseImportedServers(root);
+                if (imported.Length == 0)
+                {
+                    throw new InvalidDataException(
+                        "MCP settings JSON does not contain any valid servers.");
+                }
+                var migrated = imported.Select(update =>
+                {
+                    var environmentKeys = UpdateSecrets(
+                        update.Name, "ENV", null, update.Environment);
+                    var headerKeys = UpdateSecrets(
+                        update.Name, "HEADER", null, update.Headers);
+                    return new McpServerSettings(
+                        update.Name, update.Transport, update.Command,
+                        update.Arguments?.ToList() ?? [], update.WorkingDirectory,
+                        environmentKeys, headerKeys, update.Enabled, Trusted: false,
+                        new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase));
+                }).ToList();
+                return (migrated, true);
+            }
+
             var loaded = JsonSerializer.Deserialize<List<McpServerSettings>>(
-                File.ReadAllText(_path), JsonOptions) ?? [];
-            return loaded.Select(server =>
+                json, JsonOptions) ?? [];
+            return (loaded.Select(server =>
             {
                 _ = Validate(new McpServerUpdate(
                     server.Name, server.Transport, server.Command, server.Arguments,
@@ -191,13 +270,32 @@ public sealed partial class McpSettingsStore
                     new Dictionary<string, bool>(
                         server.ToolPermissions ?? new Dictionary<string, bool>(),
                         StringComparer.OrdinalIgnoreCase));
-            }).ToList();
+            }).ToList(), false);
         }
         catch (JsonException exception)
         {
             throw new InvalidDataException("MCP settings JSON is invalid.", exception);
         }
     }
+
+    private static bool IsInternalSettings(JsonNode root)
+    {
+        if (root is not JsonArray array) return false;
+        if (array.Count == 0) return true;
+        return array.OfType<JsonObject>().All(server =>
+            server.ContainsKey("environmentKeys") &&
+            server.ContainsKey("headerKeys") &&
+            server.ContainsKey("toolPermissions"));
+    }
+
+    private static McpServerUpdate[] ParseImportedServers(JsonNode root) =>
+        EnumerateImportedServers(root)
+            .Select(ParseImportedServer)
+            .Where(update => update is not null)
+            .Cast<McpServerUpdate>()
+            .GroupBy(update => update.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .ToArray();
 
     private McpServerRequest ToRequest(McpServerSettings server) =>
         new(
@@ -262,7 +360,7 @@ public sealed partial class McpSettingsStore
     {
         var name = update.Name.Trim();
         if (!ServerNamePattern().IsMatch(name)) throw new ArgumentException("MCP name must contain only letters, digits, '_' or '-'.");
-        var transport = update.Transport.Trim().ToLowerInvariant();
+        var transport = NormalizeTransport(update.Transport);
         if (transport is not ("stdio" or "streamable-http" or "http" or "https" or "sse" or "legacy-sse"))
         {
             throw new ArgumentException($"Unsupported MCP transport: {update.Transport}");
@@ -276,6 +374,164 @@ public sealed partial class McpSettingsStore
             throw new ArgumentException("Remote MCP endpoints must use HTTPS; loopback HTTP is allowed.");
         }
         return update with { Name = name, Transport = transport, Command = update.Command.Trim() };
+    }
+
+    private static string NormalizeTransport(string? transport)
+    {
+        var value = (transport ?? "stdio").Trim().ToLowerInvariant();
+        return value switch
+        {
+            "streamable" or "streamable_http" => "streamable-http",
+            "legacy_sse" => "legacy-sse",
+            _ => value,
+        };
+    }
+
+    private static IEnumerable<(string? Name, JsonObject Value)> EnumerateImportedServers(JsonNode root)
+    {
+        if (root is JsonArray array)
+        {
+            foreach (var item in array.OfType<JsonObject>())
+            {
+                yield return (item["name"]?.GetValue<string>(), item);
+            }
+            yield break;
+        }
+
+        if (root is not JsonObject rootObject) yield break;
+        var collection = rootObject["mcpServers"] as JsonObject
+            ?? rootObject["servers"] as JsonObject;
+        if (collection is not null)
+        {
+            foreach (var pair in collection)
+            {
+                if (pair.Value is JsonObject server)
+                {
+                    yield return (pair.Key, server);
+                }
+            }
+            yield break;
+        }
+
+        yield return (rootObject["name"]?.GetValue<string>(), rootObject);
+    }
+
+    private static McpServerUpdate? ParseImportedServer((string? Name, JsonObject Value) entry)
+    {
+        var item = entry.Value;
+        var name = ReadString(item, "name") ?? entry.Name;
+        var command = ReadString(item, "command");
+        var endpoint = ReadString(item, "url") ?? ReadString(item, "endpoint");
+        var transportText = ReadString(item, "transport") ?? ReadString(item, "type");
+        if (string.IsNullOrWhiteSpace(transportText))
+        {
+            transportText = string.IsNullOrWhiteSpace(endpoint) ? "stdio" : "streamable-http";
+        }
+        var transport = NormalizeTransport(transportText);
+        var target = transport == "stdio" ? command : endpoint ?? command;
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(target))
+        {
+            return null;
+        }
+
+        var update = new McpServerUpdate(
+            name,
+            transport,
+            target,
+            ReadArguments(item["args"] ?? item["arguments"]),
+            ReadString(item, "cwd") ?? ReadString(item, "workingDirectory"),
+            ReadPairs(item["env"] ?? item["environment"]),
+            ReadPairs(item["headers"]),
+            ReadBoolean(item, "enabled", true),
+            Trusted: false);
+        try
+        {
+            return Validate(update);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadString(JsonObject item, string property) =>
+        item[property] is JsonValue value && value.TryGetValue<string>(out var text)
+            ? text
+            : null;
+
+    private static bool ReadBoolean(JsonObject item, string property, bool fallback) =>
+        item[property] is JsonValue value && value.TryGetValue<bool>(out var result)
+            ? result
+            : fallback;
+
+    private static IReadOnlyList<string> ReadArguments(JsonNode? node)
+    {
+        if (node is JsonArray array)
+        {
+            return array.Select(item => item?.ToString() ?? string.Empty).ToArray();
+        }
+        if (node is JsonValue value && value.TryGetValue<string>(out var text))
+        {
+            return SplitArguments(text);
+        }
+        return [];
+    }
+
+    private static IReadOnlyDictionary<string, string> ReadPairs(JsonNode? node)
+    {
+        if (node is JsonObject pairs)
+        {
+            return pairs.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value?.ToString() ?? string.Empty,
+                StringComparer.OrdinalIgnoreCase);
+        }
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (node is not JsonValue value || !value.TryGetValue<string>(out var text)) return result;
+        foreach (var line in text.Split(["\r\n", "\n"], StringSplitOptions.None))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0 || trimmed.StartsWith('#')) continue;
+            var separator = trimmed.IndexOf('=');
+            if (separator <= 0) continue;
+            result[trimmed[..separator].Trim()] = trimmed[(separator + 1)..];
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<string> SplitArguments(string value)
+    {
+        var result = new List<string>();
+        var current = new StringBuilder();
+        var quoted = false;
+        var quote = '\0';
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if ((character is '"' or '\'') && (!quoted || quote == character))
+            {
+                quoted = !quoted;
+                quote = quoted ? character : '\0';
+                continue;
+            }
+            if (character == '\\' && index + 1 < value.Length && quoted)
+            {
+                current.Append(value[++index]);
+                continue;
+            }
+            if (char.IsWhiteSpace(character) && !quoted)
+            {
+                if (current.Length > 0)
+                {
+                    result.Add(current.ToString());
+                    current.Clear();
+                }
+                continue;
+            }
+            current.Append(character);
+        }
+        if (current.Length > 0) result.Add(current.ToString());
+        return result;
     }
 
     private static McpServerSettings Clone(McpServerSettings server) =>

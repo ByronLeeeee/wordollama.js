@@ -1,5 +1,6 @@
 import i18n from "./i18n.ts";
 import type { RuntimeClient } from "./runtime-client";
+import { streamText, type TextStreamUpdate } from "./stream-text.ts";
 import {
   languageDisplayName,
   type SourceLanguageCode,
@@ -14,15 +15,16 @@ export interface TranslationRequest {
 }
 
 export async function generateTranslation(
-  runtime: Pick<RuntimeClient, "chat">,
+  runtime: Pick<RuntimeClient, "streamChat">,
   request: TranslationRequest,
   signal?: AbortSignal,
+  onUpdate?: TextStreamUpdate,
 ): Promise<string> {
   const template = request.sourceLanguage === "auto"
     ? "taskpane.translation.model.adaptivePrompt"
     : "taskpane.translation.model.explicitPrompt";
   const instructions = request.instructions?.trim();
-  const response = await runtime.chat([{
+  const result = await streamText(runtime, [{
     role: "user",
     content: i18n.t(template, {
       sourceLanguage: languageDisplayName(request.sourceLanguage),
@@ -33,9 +35,8 @@ export async function generateTranslation(
       source: request.source,
       interpolation: { escapeValue: false },
     }),
-  }], undefined, signal);
+  }], signal, onUpdate);
 
-  const result = response.content.trim();
   if (!result) {
     throw new Error(i18n.t("taskpane.translation.errors.emptyResult"));
   }

@@ -29,10 +29,11 @@ const runtime = {
       }],
     };
   },
-  async chat(messages: Array<{ content: string; imageDataUrl?: string }>) {
+  async *streamChat(messages: Array<{ content: string; imageDataUrl?: string }>) {
     capturedPrompt = messages.map((message) => message.content).join("\n");
     capturedImage = messages.find((message) => message.imageDataUrl)?.imageDataUrl ?? "";
-    return { provider: "fake", model: "vision", content: "visible facts" };
+    yield { provider: "fake", model: "vision", delta: "visible ", done: false };
+    yield { provider: "fake", model: "vision", delta: "facts", done: true };
   },
 } as unknown as RuntimeClient;
 

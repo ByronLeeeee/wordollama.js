@@ -918,9 +918,12 @@ export class OfficeJsWordAdapter {
     if (!Office.context?.requirements?.isSetSupported?.("WordApi", "1.5")) return fallback;
     return Word.run(async (context) => {
       const styles = context.document.getStyles();
-      styles.load("items/nameLocal");
+      styles.load("items/nameLocal,items/type");
       await context.sync();
-      return Array.from(new Set([...fallback, ...styles.items.map((style) => style.nameLocal)]))
+      const paragraphStyles = styles.items
+        .filter((style) => style.type === Word.StyleType.paragraph)
+        .map((style) => style.nameLocal);
+      return Array.from(new Set([...fallback, ...paragraphStyles]))
         .sort((left, right) => left.localeCompare(right));
     });
   }
