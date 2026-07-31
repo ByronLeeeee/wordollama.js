@@ -19,12 +19,10 @@ import {
   runRevisionHostMatrix,
 } from "./officejs-revision-runner";
 import {
-  buildComparePreview,
-  buildCompareReviewItems,
+  analyzeCompareChanges,
   fileToBase64,
   formatCompareSummary,
   validateCompareFiles,
-  type CompareReviewItem,
 } from "./document-compare";
 import { RuntimeClient } from "./runtime-client";
 import type {
@@ -218,15 +216,10 @@ const revisionHostRunButton = required<HTMLButtonElement>("#revision-host-run");
 const revisionHostCopyButton = required<HTMLButtonElement>("#revision-host-copy");
 const compareOriginalInput = required<HTMLInputElement>("#compare-original");
 const compareRevisedInput = required<HTMLInputElement>("#compare-revised");
-const compareIgnoreCase = required<HTMLInputElement>("#compare-ignore-case");
 const compareRunButton = required<HTMLButtonElement>("#compare-run");
-const compareCopyButton = required<HTMLButtonElement>("#compare-copy");
-const compareApplyButton = required<HTMLButtonElement>("#compare-apply");
-const compareApplyConfirm = required<HTMLInputElement>("#compare-apply-confirm");
-const compareApplyStatus = required<HTMLParagraphElement>("#compare-apply-status");
-const compareReviewList = required<HTMLDivElement>("#compare-review-list");
 const compareSummary = required<HTMLParagraphElement>("#compare-summary");
-const compareOutput = required<HTMLPreElement>("#compare-output");
+const compareAnalysisStatus = required<HTMLElement>("#compare-analysis-status");
+const compareAnalysis = required<HTMLElement>("#compare-analysis");
 
 const surfaceTitleKeys: Record<AddinSurface, string> = {
   agent: "taskpane.surfaces.agent",
@@ -276,8 +269,7 @@ if (activeSurface === "diagnostics") {
 let lastGoldenReport = "";
 let lastLongDocumentReport = "";
 let lastRevisionHostReport = "";
-let lastCompareReport = "";
-let compareReviewItems: CompareReviewItem[] = [];
+let compareAnalysisAbortController: AbortController | null = null;
 let activeSessionId: string | null = null;
 let reviewScope = "";
 let reviewScopeLabel = "";
@@ -1268,11 +1260,15 @@ required<HTMLInputElement>("#image-file").addEventListener("change", async (even
     required<HTMLElement>("#image-empty-state").hidden = true;
     required<HTMLElement>("#image-file-status").textContent =
       `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+    required<HTMLElement>("#image-file-status").classList.add("has-file");
     required<HTMLTextAreaElement>("#image-result").value = "";
     updateImageActions();
   } catch (error) {
     selectedImageDataUrl = "";
     (event.currentTarget as HTMLInputElement).value = "";
+    const status = required<HTMLElement>("#image-file-status");
+    status.textContent = i18n.t("taskpane.image.noneSelected");
+    status.classList.remove("has-file");
     showError(error);
     updateImageActions();
   }
@@ -3439,97 +3435,53 @@ required<HTMLButtonElement>("#insert-all-suggestions").addEventListener("click",
 required<HTMLButtonElement>("#comment-all-suggestions").addEventListener("click", () => void applyAllSuggestions("comment"));
 required<HTMLButtonElement>("#skip-all-suggestions").addEventListener("click", () => void applyAllSuggestions("skip"));
 
-function updateCompareApplyState(): void {
-  const selected = compareReviewItems.filter((item) => item.applicable && item.selected);
-  compareApplyConfirm.disabled = selected.length === 0;
-  compareApplyButton.disabled = selected.length === 0 || !compareApplyConfirm.checked;
-  if (!compareReviewItems.length) {
-    compareApplyStatus.textContent = "";
-  } else if (!selected.length) {
-    compareApplyStatus.textContent = i18n.t("taskpane.utility.compare.noneSelected");
-  } else {
-    compareApplyStatus.textContent =
-      i18n.t("taskpane.utility.compare.selected", { count: selected.length });
-  }
+function updateFilePickerName(
+  input: HTMLInputElement,
+  nameElement: HTMLElement,
+  emptyKey: string,
+): void {
+  const file = input.files?.[0];
+  nameElement.textContent = file
+    ? `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`
+    : i18n.t(emptyKey);
+  nameElement.classList.toggle("has-file", Boolean(file));
 }
 
-function renderCompareReviewItems(): void {
-  compareReviewList.replaceChildren();
-  if (!compareReviewItems.length) {
-    compareReviewList.className = "empty-panel";
-    compareReviewList.textContent = i18n.t("taskpane.utility.compare.noDifferences");
-    updateCompareApplyState();
+const compareOriginalName = required<HTMLElement>("#compare-original-name");
+const compareRevisedName = required<HTMLElement>("#compare-revised-name");
+compareOriginalInput.addEventListener("change", () => {
+  updateFilePickerName(
+    compareOriginalInput,
+    compareOriginalName,
+    "taskpane.utility.compare.originalEmpty",
+  );
+});
+compareRevisedInput.addEventListener("change", () => {
+  updateFilePickerName(
+    compareRevisedInput,
+    compareRevisedName,
+    "taskpane.utility.compare.revisedEmpty",
+  );
+});
+
+function renderCompareAnalysis(content: string, empty = false): void {
+  compareAnalysis.classList.toggle("empty-panel", empty);
+  if (empty) {
+    compareAnalysis.textContent = content;
     return;
   }
-  compareReviewList.className = "suggestion-list";
-  const kindLabels: Record<string, string> = {
-    added: i18n.t("taskpane.utility.compare.kinds.added"),
-    removed: i18n.t("taskpane.utility.compare.kinds.removed"),
-    modified: i18n.t("taskpane.utility.compare.kinds.modified"),
-  };
-  for (const item of compareReviewItems) {
-    const change = item.change;
-    const card = document.createElement("article");
-    card.className = "card card-border review-item";
-    const choice = document.createElement("label");
-    choice.className = "checkbox-row";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = item.selected;
-    checkbox.disabled = !item.applicable;
-    checkbox.addEventListener("change", () => {
-      item.selected = checkbox.checked;
-      updateCompareApplyState();
-    });
-    const location = change.originalParagraphIndex && change.revisedParagraphIndex
-      ? `${change.originalParagraphIndex} → ${change.revisedParagraphIndex}`
-      : String(change.originalParagraphIndex ?? change.revisedParagraphIndex ?? change.paragraphIndex);
-    choice.append(
-      checkbox,
-      document.createTextNode(
-        i18n.t("taskpane.utility.compare.changeMeta", {
-          kind: kindLabels[change.kind] ?? change.kind,
-          location,
-          blockType: change.blockType,
-        }),
-      ),
-    );
-    const original = document.createElement("blockquote");
-    original.textContent = change.original ?? i18n.t("taskpane.utility.compare.noOriginal");
-    const revised = document.createElement("blockquote");
-    revised.textContent = change.revised ?? i18n.t("taskpane.utility.compare.noRevised");
-    const transition = document.createElement("p");
-    transition.className = "review-meta";
-    const styleTransition = [change.originalStyle, change.revisedStyle].filter(Boolean).join(" → ");
-    const locationTransition = [change.originalLocation, change.revisedLocation].filter(Boolean).join(" → ");
-    transition.textContent = [styleTransition, locationTransition].filter(Boolean).join("；");
-    card.append(choice, original, revised);
-    if (transition.textContent) card.appendChild(transition);
-    if (item.limitation) {
-      const warning = document.createElement("p");
-      warning.className = "warning";
-      warning.textContent =
-        i18n.t("taskpane.utility.compare.reviewOnly", { limitation: item.limitation });
-      card.appendChild(warning);
-    }
-    compareReviewList.appendChild(card);
-  }
-  updateCompareApplyState();
+  compareAnalysis.innerHTML = markdownToHtml(content, currentMarkdownOptions());
 }
 
 compareRunButton.addEventListener("click", async () => {
   const original = compareOriginalInput.files?.[0];
   const revised = compareRevisedInput.files?.[0];
   compareRunButton.disabled = true;
-  compareCopyButton.disabled = true;
-  compareOutput.textContent = "";
-  lastCompareReport = "";
-  compareReviewItems = [];
-  compareApplyConfirm.checked = false;
-  compareApplyConfirm.disabled = true;
-  compareApplyButton.disabled = true;
-  compareApplyStatus.textContent = "";
-  renderCompareReviewItems();
+  compareAnalysisAbortController?.abort();
+  compareAnalysisAbortController = new AbortController();
+  compareSummary.textContent = "";
+  compareAnalysisStatus.textContent = i18n.t("taskpane.utility.compare.analysisReading");
+  renderCompareAnalysis(i18n.t("taskpane.utility.compare.analysisReading"), true);
   clearError();
   try {
     if (!original || !revised) {
@@ -3538,80 +3490,36 @@ compareRunButton.addEventListener("click", async () => {
     validateCompareFiles(original, revised);
     compareSummary.textContent = i18n.t("taskpane.utility.compare.sending");
     const [originalBase64, revisedBase64] = await Promise.all([fileToBase64(original), fileToBase64(revised)]);
-    const report = await runtime.compareDocuments(originalBase64, revisedBase64, compareIgnoreCase.checked);
-    lastCompareReport = JSON.stringify(report, null, 2);
-    compareReviewItems = buildCompareReviewItems(report);
+    const report = await runtime.compareDocuments(originalBase64, revisedBase64);
     compareSummary.textContent = i18n.t("taskpane.utility.compare.summary", {
       summary: formatCompareSummary(report),
-      algorithm: report.algorithm ?? i18n.t("taskpane.utility.compare.structural"),
-      approximate: report.isApproximate
-        ? i18n.t("taskpane.utility.compare.approximate")
-        : "",
     });
-    compareOutput.textContent = buildComparePreview(report);
-    compareCopyButton.disabled = false;
-    renderCompareReviewItems();
+    if (!report.changes.length) {
+      compareAnalysisStatus.textContent = i18n.t("taskpane.utility.compare.analysisReady");
+      renderCompareAnalysis(i18n.t("taskpane.utility.compare.analysisNoChanges"), true);
+      return;
+    }
+    compareAnalysisStatus.textContent = i18n.t("taskpane.utility.compare.analysisGenerating");
+    renderCompareAnalysis(i18n.t("taskpane.utility.compare.analysisGenerating"), true);
+    const analysis = await analyzeCompareChanges(
+      runtime,
+      report,
+      original.name,
+      revised.name,
+      compareAnalysisAbortController.signal,
+      (content) => renderCompareAnalysis(content),
+    );
+    compareAnalysisStatus.textContent = i18n.t("taskpane.utility.compare.analysisReady");
+    renderCompareAnalysis(analysis);
   } catch (error) {
+    if ((error as { name?: string }).name === "AbortError") return;
     compareSummary.textContent = i18n.t("taskpane.utility.compare.failed");
+    compareAnalysisStatus.textContent = "";
+    renderCompareAnalysis(i18n.t("taskpane.utility.compare.analysisFailed"), true);
     showError(error);
   } finally {
+    compareAnalysisAbortController = null;
     compareRunButton.disabled = false;
-  }
-});
-
-compareApplyConfirm.addEventListener("change", updateCompareApplyState);
-
-compareApplyButton.addEventListener("click", async () => {
-  const selected = compareReviewItems.filter((item) => item.applicable && item.selected);
-  if (!selected.length || !compareApplyConfirm.checked) return;
-  compareApplyButton.disabled = true;
-  compareApplyConfirm.disabled = true;
-  compareApplyStatus.textContent = i18n.t("taskpane.utility.compare.applying");
-  let previousTracking: string | null = null;
-  let appliedCount = 0;
-  let restoreFailed = false;
-  try {
-    previousTracking = await word.beginTrackedChanges();
-    if (previousTracking === null) {
-      throw new Error(i18n.t("taskpane.utility.compare.trackingUnsupported"));
-    }
-    await word.applyCompareChangesBatch(selected.map((item) => item.change));
-    for (const item of selected) {
-      item.selected = false;
-      item.applicable = false;
-      item.limitation = i18n.t("taskpane.utility.compare.appliedAsRevision");
-    }
-    appliedCount = selected.length;
-    compareApplyConfirm.checked = false;
-    renderCompareReviewItems();
-  } catch (error) {
-    compareApplyStatus.textContent = i18n.t("taskpane.utility.compare.notApplied");
-    showError(error);
-  } finally {
-    try {
-      await word.restoreTrackedChanges(previousTracking);
-    } catch (error) {
-      restoreFailed = true;
-      showError(error);
-      compareApplyStatus.textContent +=
-        i18n.t("taskpane.utility.compare.restoreTrackingSuffix");
-    }
-    updateCompareApplyState();
-    if (appliedCount) {
-      compareApplyStatus.textContent = restoreFailed
-        ? i18n.t("taskpane.utility.compare.appliedRestoreFailed", { count: appliedCount })
-        : i18n.t("taskpane.utility.compare.applied", { count: appliedCount });
-    }
-  }
-});
-
-compareCopyButton.addEventListener("click", async () => {
-  if (!lastCompareReport) return;
-  try {
-    await navigator.clipboard.writeText(lastCompareReport);
-    compareSummary.textContent += i18n.t("taskpane.utility.compare.jsonCopiedSuffix");
-  } catch {
-    await showCopyFallback(i18n.t("taskpane.utility.compare.copyFallbackTitle"), lastCompareReport);
   }
 });
 

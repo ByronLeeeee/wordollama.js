@@ -4,7 +4,8 @@ public sealed record ModelProviderOptions(
     string Type,
     string Endpoint,
     string ApiKey,
-    string Model);
+    string Model,
+    string ApiMode = "Auto");
 
 public static class ModelProviderFactory
 {
@@ -16,17 +17,20 @@ public static class ModelProviderFactory
                 options.Endpoint,
                 options.ApiKey,
                 options.Model,
-                "OpenAI"),
+                "OpenAI",
+                apiMode: options.ApiMode),
             "lmstudio" => new OpenAiCompatibleProvider(
                 options.Endpoint,
                 options.ApiKey,
                 options.Model,
-                "LMStudio"),
+                "LMStudio",
+                apiMode: options.ApiMode),
             "vllm" => new OpenAiCompatibleProvider(
                 options.Endpoint,
                 options.ApiKey,
                 options.Model,
-                "vLLM"),
+                "vLLM",
+                apiMode: options.ApiMode),
             "claude" or "anthropic" => new AnthropicProvider(
                 options.Endpoint,
                 options.ApiKey,

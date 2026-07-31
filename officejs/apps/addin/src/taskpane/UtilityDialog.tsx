@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { FileText, Sparkles, Upload, X } from "lucide-react";
 
 function ComparePanel() {
   const docxAccept =
@@ -6,69 +6,80 @@ function ComparePanel() {
   return (
     <div className="settings-panel" data-settings-panel="advanced">
       <section className="settings-section compare-card">
-        <h3 data-i18n="taskpane.utility.compare.title">DOCX comparison</h3>
-        <label htmlFor="compare-original" data-i18n="taskpane.utility.compare.original">
-          Original DOCX
-        </label>
-        <input
-          id="compare-original"
-          className="file-input file-input-sm file-field"
-          type="file"
-          accept={docxAccept}
-        />
-        <label htmlFor="compare-revised" data-i18n="taskpane.utility.compare.revised">
-          Revised DOCX
-        </label>
-        <input
-          id="compare-revised"
-          className="file-input file-input-sm file-field"
-          type="file"
-          accept={docxAccept}
-        />
-        <label className="checkbox-row">
-          <input id="compare-ignore-case" className="checkbox checkbox-primary checkbox-sm" type="checkbox" />
-          <span data-i18n="taskpane.utility.compare.ignoreCase">
-            Ignore English letter case
-          </span>
-        </label>
-        <div className="action-row">
+        <div className="compare-heading">
+          <div className="compare-heading-icon" aria-hidden="true">
+            <Sparkles size={16} strokeWidth={2.2} />
+          </div>
+          <div>
+            <h3 data-i18n="taskpane.utility.compare.title">AI document revision analysis</h3>
+            <p className="muted" data-i18n="taskpane.utility.compare.description">
+              Upload the original and revised DOCX files. AI will focus on what changed and why it matters.
+            </p>
+          </div>
+        </div>
+
+        <div className="file-picker-grid">
+          <div className="file-picker-card">
+            <div className="file-picker-heading">
+              <span className="file-picker-icon" aria-hidden="true"><FileText size={16} /></span>
+              <span className="file-picker-label" data-i18n="taskpane.utility.compare.original">Original DOCX</span>
+            </div>
+            <input
+              id="compare-original"
+              className="file-picker-input"
+              type="file"
+              accept={docxAccept}
+            />
+            <label htmlFor="compare-original" className="file-picker-trigger">
+              <Upload size={14} aria-hidden="true" />
+              <span data-i18n="taskpane.utility.compare.chooseFile">Choose file</span>
+            </label>
+            <span id="compare-original-name" className="file-picker-name" data-i18n="taskpane.utility.compare.originalEmpty">
+              No original file selected
+            </span>
+          </div>
+
+          <div className="file-picker-card">
+            <div className="file-picker-heading">
+              <span className="file-picker-icon" aria-hidden="true"><FileText size={16} /></span>
+              <span className="file-picker-label" data-i18n="taskpane.utility.compare.revised">Revised DOCX</span>
+            </div>
+            <input
+              id="compare-revised"
+              className="file-picker-input"
+              type="file"
+              accept={docxAccept}
+            />
+            <label htmlFor="compare-revised" className="file-picker-trigger">
+              <Upload size={14} aria-hidden="true" />
+              <span data-i18n="taskpane.utility.compare.chooseFile">Choose file</span>
+            </label>
+            <span id="compare-revised-name" className="file-picker-name" data-i18n="taskpane.utility.compare.revisedEmpty">
+              No revised file selected
+            </span>
+          </div>
+        </div>
+
+        <div className="action-row compare-actions">
           <button id="compare-run" className="btn btn-primary btn-sm" data-i18n="taskpane.utility.compare.run">
-            Compare documents
-          </button>
-          <button
-            id="compare-copy"
-            className="btn btn-sm secondary-button"
-            disabled
-            data-i18n="taskpane.utility.copyJson"
-          >
-            Copy JSON
+            Analyze revisions
           </button>
         </div>
         <p id="compare-summary" />
-        <div id="compare-review-list" className="empty-panel" />
-        <label className="checkbox-row">
-          <input id="compare-apply-confirm" className="checkbox checkbox-primary checkbox-sm" type="checkbox" disabled />
-          <span data-i18n="taskpane.utility.compare.confirmApply">
-            I confirm the open document is a copy of the original and agree to
-            apply selected items as Word revisions
-          </span>
-        </label>
-        <button
-          id="compare-apply"
-          className="btn btn-primary btn-sm"
-          type="button"
-          disabled
-          data-i18n="taskpane.utility.compare.apply"
-        >
-          Apply selected items
-        </button>
-        <p id="compare-apply-status" className="muted" />
-        <details className="collapse collapse-arrow">
-          <summary className="collapse-title" data-i18n="taskpane.utility.compare.preview">
-            Difference text preview
-          </summary>
-          <pre id="compare-output" />
-        </details>
+        <div className="compare-analysis-shell">
+          <div className="section-title-row">
+            <h3 data-i18n="taskpane.utility.compare.analysisTitle">AI analysis</h3>
+            <span id="compare-analysis-status" className="muted" />
+          </div>
+          <article
+            id="compare-analysis"
+            className="compare-analysis empty-panel"
+            aria-live="polite"
+            data-i18n="taskpane.utility.compare.analysisEmpty"
+          >
+            Select two DOCX files to begin.
+          </article>
+        </div>
       </section>
     </div>
   );

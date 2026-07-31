@@ -1,5 +1,7 @@
 import type { DocumentCompareResponse, DocumentDiff } from "./contracts";
 import i18n from "./i18n.ts";
+import type { RuntimeClient } from "./runtime-client";
+import { streamText, type TextStreamUpdate } from "./stream-text.ts";
 
 export const MAX_COMPARE_TOTAL_BYTES = 20 * 1024 * 1024;
 
@@ -46,6 +48,74 @@ export async function fileToBase64(file: File): Promise<string> {
 export function formatCompareSummary(report: DocumentCompareResponse): string {
   const summary = report.summary ?? summarizeChanges(report.changes);
   return i18n.t("taskpane.utility.compare.resultSummary", { ...summary });
+}
+
+const MAX_ANALYSIS_CONTEXT_LENGTH = 80_000;
+const MAX_ANALYSIS_CHANGE_TEXT_LENGTH = 900;
+
+/**
+ * Converts the deterministic DOCX diff into compact, model-readable context.
+ * The UI intentionally does not expose this raw diff; it is only used to give
+ * the active provider enough evidence to explain the revision.
+ */
+export function buildCompareAnalysisContext(
+  report: DocumentCompareResponse,
+  originalName: string,
+  revisedName: string,
+): string {
+  const summary = report.summary ?? summarizeChanges(report.changes);
+  const changes = report.changes.map((change, index) => {
+    const location = change.originalParagraphIndex !== null && change.originalParagraphIndex !== undefined
+      ? change.originalParagraphIndex
+      : change.revisedParagraphIndex ?? change.paragraphIndex;
+    const original = truncateAnalysisText(change.original);
+    const revised = truncateAnalysisText(change.revised);
+    return [
+      `${index + 1}. ${change.kind} · paragraph ${location} · ${change.blockType}`,
+      `Original: ${original || "(none)"}`,
+      `Revised: ${revised || "(none)"}`,
+    ].join("\n");
+  }).join("\n\n");
+
+  const context = [
+    `Original document: ${originalName}`,
+    `Revised document: ${revisedName}`,
+    `Summary: added ${summary.added}, removed ${summary.removed}, modified ${summary.modified}, unchanged ${summary.unchanged}`,
+    changes || "No structural changes were detected.",
+  ].join("\n\n");
+  return context.slice(0, MAX_ANALYSIS_CONTEXT_LENGTH);
+}
+
+export async function analyzeCompareChanges(
+  runtime: Pick<RuntimeClient, "streamChat">,
+  report: DocumentCompareResponse,
+  originalName: string,
+  revisedName: string,
+  signal?: AbortSignal,
+  onUpdate?: TextStreamUpdate,
+): Promise<string> {
+  const context = buildCompareAnalysisContext(report, originalName, revisedName);
+  const result = await streamText(runtime, [
+    {
+      role: "system",
+      content: i18n.t("taskpane.utility.compare.analysisSystem"),
+    },
+    {
+      role: "user",
+      content: i18n.t("taskpane.utility.compare.analysisPrompt", {
+        context,
+        interpolation: { escapeValue: false },
+      }),
+    },
+  ], signal, onUpdate);
+  if (!result) throw new Error(i18n.t("taskpane.utility.compare.analysisEmptyResult"));
+  return result;
+}
+
+function truncateAnalysisText(value: string | null | undefined): string {
+  const text = value?.trim() ?? "";
+  if (text.length <= MAX_ANALYSIS_CHANGE_TEXT_LENGTH) return text;
+  return `${text.slice(0, MAX_ANALYSIS_CHANGE_TEXT_LENGTH)}…`;
 }
 
 export function buildComparePreview(report: DocumentCompareResponse, limit = 100): string {

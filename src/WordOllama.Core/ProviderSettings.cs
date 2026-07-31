@@ -17,7 +17,8 @@ public sealed record ProviderProfileSettings(
     int ContextWindow = 0,
     double Temperature = 0.5,
     int MaxTokens = 4096,
-    string KeepAlive = "5m");
+    string KeepAlive = "5m",
+    string ApiMode = "Auto");
 
 public sealed record ProviderProfileView(
     string Id,
@@ -33,7 +34,8 @@ public sealed record ProviderProfileView(
     bool HasApiKey,
     double Temperature,
     int MaxTokens,
-    string KeepAlive);
+    string KeepAlive,
+    string ApiMode);
 
 public sealed record ProviderSettingsView(
     string ActiveProviderId,
@@ -54,7 +56,8 @@ public sealed record ProviderProfileUpdate(
     int ContextWindow = 0,
     double Temperature = 0.5,
     int MaxTokens = 4096,
-    string KeepAlive = "5m");
+    string KeepAlive = "5m",
+    string ApiMode = "Auto");
 
 internal sealed record ProviderSettingsDocument(
     string ActiveProviderId,
@@ -230,7 +233,12 @@ public sealed partial class ProviderSettingsStore
         var apiKey = !string.IsNullOrEmpty(update.ApiKey)
             ? update.ApiKey
             : _secrets.Get(SecretName(profile.Id)) ?? string.Empty;
-        return new ModelProviderOptions(profile.Type, profile.Endpoint, apiKey, profile.Model);
+        return new ModelProviderOptions(
+            profile.Type,
+            profile.Endpoint,
+            apiKey,
+            profile.Model,
+            profile.ApiMode);
     }
 
     private (ProviderSettingsDocument Document, bool WasMigrated) LoadOrCreate(
@@ -256,7 +264,8 @@ public sealed partial class ProviderSettingsStore
                         ContextWindow: profile.ContextWindow,
                         Temperature: profile.Temperature,
                         MaxTokens: profile.MaxTokens <= 0 ? 4096 : profile.MaxTokens,
-                        KeepAlive: string.IsNullOrWhiteSpace(profile.KeepAlive) ? "5m" : profile.KeepAlive),
+                        KeepAlive: string.IsNullOrWhiteSpace(profile.KeepAlive) ? "5m" : profile.KeepAlive,
+                        ApiMode: string.IsNullOrWhiteSpace(profile.ApiMode) ? "Auto" : profile.ApiMode),
                         allowEmptyModel: true)).ToList();
                     var wasMigrated = loaded.SchemaVersion < CurrentSchemaVersion;
                     if (wasMigrated)
@@ -282,14 +291,20 @@ public sealed partial class ProviderSettingsStore
             }
         }
         var profile = new ProviderProfileSettings(
-            "default", initial.Type, initial.Type, initial.Endpoint, initial.Model);
+            "default", initial.Type, initial.Type, initial.Endpoint, initial.Model,
+            ApiMode: initial.ApiMode);
         return (
             new ProviderSettingsDocument(profile.Id, [profile], CurrentSchemaVersion),
             false);
     }
 
     private ModelProviderOptions ToOptions(ProviderProfileSettings profile) =>
-        new(profile.Type, profile.Endpoint, _secrets.Get(SecretName(profile.Id)) ?? string.Empty, profile.Model);
+        new(
+            profile.Type,
+            profile.Endpoint,
+            _secrets.Get(SecretName(profile.Id)) ?? string.Empty,
+            profile.Model,
+            profile.ApiMode);
 
     private ProviderProfileView ToView(ProviderProfileSettings profile) =>
         new(
@@ -297,7 +312,8 @@ public sealed partial class ProviderSettingsStore
             profile.ToolCallingMode, profile.SupportsStreaming, profile.SupportsVision,
             profile.SupportsJsonOutput, profile.ContextWindow,
             !string.IsNullOrEmpty(_secrets.Get(SecretName(profile.Id))),
-            profile.Temperature, profile.MaxTokens, profile.KeepAlive);
+            profile.Temperature, profile.MaxTokens, profile.KeepAlive,
+            profile.ApiMode);
 
     private ProviderSettingsView GetViewUnsafe() =>
         new(_document.ActiveProviderId, _document.Profiles.Select(ToView).ToArray());
@@ -366,8 +382,17 @@ public sealed partial class ProviderSettingsStore
             id, update.Name.Trim(), update.Type.Trim(), endpoint.ToString().TrimEnd('/'),
             update.Model.Trim(), update.ToolCallingMode.Trim(), update.SupportsStreaming,
             update.SupportsVision, update.SupportsJsonOutput, update.ContextWindow,
-            update.Temperature, update.MaxTokens, keepAlive);
+            update.Temperature, update.MaxTokens, keepAlive,
+            NormalizeApiMode(update.ApiMode));
     }
+
+    private static string NormalizeApiMode(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "chatcompletions" or "chat-completions" or "chat_completions" => "ChatCompletions",
+            "responses" => "Responses",
+            _ => "Auto",
+        };
 
     private static string SecretName(string id) =>
         "WORDOLLAMA_PROVIDER_" + id.ToUpperInvariant() + "_API_KEY";

@@ -181,10 +181,10 @@ for (const migratedContract of [
   'id="revision-host-run"',
   'id="revision-host-copy"',
   'id="revision-host-output"',
-  'id="compare-review-list"',
-  'id="compare-apply-confirm"',
-  'id="compare-apply"',
-  'id="compare-apply-status"',
+  'id="compare-original-name"',
+  'id="compare-revised-name"',
+  'id="compare-analysis-status"',
+  'id="compare-analysis"',
 ]) {
   assert(includesMigratedContract(migratedContract), `Office.js pane is missing ${migratedContract}`);
 }
@@ -524,8 +524,8 @@ for (const interactionContract of [
   "showCopyFallback(",
   "runLongDocumentMatrix(",
   "runRevisionHostMatrix(",
-  "buildCompareReviewItems(",
-  "word.applyCompareChangesBatch(",
+  "analyzeCompareChanges(",
+  "renderCompareAnalysis(",
   "new OfficeLongDocumentHost(word)",
   "runtime.confirmAgentPlan",
   "runtime.submitPermission",

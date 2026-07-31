@@ -159,9 +159,12 @@ try
     var view = providerSettings.Upsert(new ProviderProfileUpdate(
         "cloud", "Cloud", "OpenAI", "https://api.openai.com/v1", "gpt-test", "top-secret",
         Temperature: 0.7,
-        MaxTokens: 8192));
-    Assert(view.Profiles.Count == 2 && view.Profiles.Single(profile => profile.Id == "cloud").HasApiKey,
-        "provider profile and secret presence are exposed without the secret");
+        MaxTokens: 8192,
+        ApiMode: "Responses"));
+    Assert(view.Profiles.Count == 2 &&
+           view.Profiles.Single(profile => profile.Id == "cloud").HasApiKey &&
+           view.Profiles.Single(profile => profile.Id == "cloud").ApiMode == "Responses",
+        "provider profile, protocol, and secret presence are exposed without the secret");
     Assert(!File.ReadAllText(settingsPath).Contains("top-secret", StringComparison.Ordinal),
         "provider API key is never persisted in JSON");
     providerSettings.Activate("cloud");
@@ -172,8 +175,8 @@ try
     var agentDefaults = providerSettings.ApplyDefaults(new AgentStartRequest("test"));
     Assert(agentDefaults is { Temperature: 0.7, MaxTokens: 8192 },
         "active provider generation defaults apply to Agent");
-    Assert(providerSettings.GetActiveOptions() is { Type: "OpenAI", ApiKey: "top-secret" },
-        "active provider resolves its secret from the vault");
+    Assert(providerSettings.GetActiveOptions() is { Type: "OpenAI", ApiKey: "top-secret", ApiMode: "Responses" },
+        "active provider resolves its protocol and secret from the vault");
     var reloadable = new ReloadableModelProvider(providerSettings.GetActiveOptions());
     Assert(reloadable.ProviderType == "OpenAI", "reloadable provider uses active profile");
     providerSettings.Activate("default");
@@ -272,6 +275,37 @@ finally
 {
     Directory.Delete(settingsTestRoot, recursive: true);
 }
+
+var responsesHandler = new ResponsesApiSmokeHandler();
+var responsesProvider = new OpenAiCompatibleProvider(
+    "https://api.openai.com/v1",
+    "test-key",
+    "gpt-test",
+    httpMessageHandler: responsesHandler);
+var responsesResult = await responsesProvider.ChatAsync(new ProviderChatRequest(
+    [
+        new ChatMessage("system", "You are concise."),
+        new ChatMessage("user", "Translate this."),
+    ],
+    MaxTokens: 120));
+Assert(
+    responsesHandler.LastPath == "/v1/responses" &&
+    responsesHandler.LastRequestBody?.Contains("\"instructions\":\"You are concise.\"", StringComparison.Ordinal) == true &&
+    responsesHandler.LastRequestBody.Contains("\"max_output_tokens\":120", StringComparison.Ordinal) &&
+    responsesResult.Content == "Responses reply",
+    "Responses API request mapping and response normalization");
+var streamedResponses = new List<ProviderChatChunk>();
+await foreach (var chunk in responsesProvider.ChatStreamAsync(new ProviderChatRequest(
+    [new ChatMessage("user", "Stream this.")])))
+{
+    streamedResponses.Add(chunk);
+}
+Assert(
+    responsesHandler.LastRequestBody?.Contains("\"stream\":true", StringComparison.Ordinal) == true &&
+    streamedResponses.Any(chunk => chunk.Delta == "Responses ") &&
+    streamedResponses.Any(chunk => chunk.Delta == "reply") &&
+    streamedResponses.Last().Done,
+    "Responses API SSE deltas are normalized to Bridge chunks");
 
 var skillTestRoot = Path.Combine(Path.GetTempPath(), "wordollama-skill-import-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(skillTestRoot);
@@ -640,6 +674,43 @@ sealed class FakeInternalTools : IInternalToolExecutor
     public bool IsKnownTool(string name) => name is "read_skill" or "execute_command";
     public Task<string> ExecuteAsync(string name, JsonElement arguments, CancellationToken cancellationToken = default) =>
         Task.FromResult("ok");
+}
+
+sealed class ResponsesApiSmokeHandler : HttpMessageHandler
+{
+    public string? LastPath { get; private set; }
+    public string? LastRequestBody { get; private set; }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        LastPath = request.RequestUri?.AbsolutePath;
+        LastRequestBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+        if (LastRequestBody.Contains("\"stream\":true", StringComparison.Ordinal))
+        {
+            var stream = string.Join(
+                "\n\n",
+                """data: {"type":"response.output_text.delta","delta":"Responses "}""",
+                """data: {"type":"response.output_text.delta","delta":"reply"}""",
+                """data: {"type":"response.completed","response":{"output":[]}}""",
+                "data: [DONE]",
+                string.Empty);
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(stream, Encoding.UTF8, "text/event-stream"),
+            };
+            return response;
+        }
+
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"output_text\":\"Responses reply\",\"output\":[]}",
+                Encoding.UTF8,
+                "application/json"),
+        };
+    }
 }
 
 sealed class GoogleOAuthSmokeHandler : HttpMessageHandler

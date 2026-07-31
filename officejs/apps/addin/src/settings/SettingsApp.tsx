@@ -530,6 +530,7 @@ const emptyProvider: ProviderProfileUpdate = {
   temperature: 0.5,
   maxTokens: 4096,
   keepAlive: "5m",
+  apiMode: "Auto",
 };
 
 type ProviderPreset = {
@@ -538,24 +539,25 @@ type ProviderPreset = {
   name: string;
   type: string;
   endpoint: string;
+  apiMode?: string;
 };
 
 const providerPresets: ProviderPreset[] = [
   { id: "ollama", labelKey: "models.providers.ollama", name: "Ollama", type: "Ollama", endpoint: "http://127.0.0.1:11434" },
-  { id: "openai", labelKey: "models.providers.openai", name: "OpenAI", type: "OpenAI", endpoint: "https://api.openai.com/v1" },
-  { id: "deepseek", labelKey: "models.providers.deepseek", name: "DeepSeek", type: "OpenAI", endpoint: "https://api.deepseek.com" },
-  { id: "qwen", labelKey: "models.providers.qwen", name: "Qwen", type: "OpenAI", endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
-  { id: "doubao", labelKey: "models.providers.doubao", name: "Doubao", type: "OpenAI", endpoint: "https://ark.cn-beijing.volces.com/api/v3" },
-  { id: "zhipu", labelKey: "models.providers.zhipu", name: "Zhipu GLM", type: "OpenAI", endpoint: "https://open.bigmodel.cn/api/paas/v4" },
-  { id: "kimi", labelKey: "models.providers.kimi", name: "Kimi", type: "OpenAI", endpoint: "https://api.moonshot.cn/v1" },
-  { id: "siliconflow", labelKey: "models.providers.siliconflow", name: "SiliconFlow", type: "OpenAI", endpoint: "https://api.siliconflow.cn/v1" },
-  { id: "minimax", labelKey: "models.providers.minimax", name: "MiniMax", type: "OpenAI", endpoint: "https://api.minimaxi.chat/v1" },
+  { id: "openai", labelKey: "models.providers.openai", name: "OpenAI", type: "OpenAI", endpoint: "https://api.openai.com/v1", apiMode: "Responses" },
+  { id: "deepseek", labelKey: "models.providers.deepseek", name: "DeepSeek", type: "OpenAI", endpoint: "https://api.deepseek.com", apiMode: "ChatCompletions" },
+  { id: "qwen", labelKey: "models.providers.qwen", name: "Qwen", type: "OpenAI", endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1", apiMode: "ChatCompletions" },
+  { id: "doubao", labelKey: "models.providers.doubao", name: "Doubao", type: "OpenAI", endpoint: "https://ark.cn-beijing.volces.com/api/v3", apiMode: "ChatCompletions" },
+  { id: "zhipu", labelKey: "models.providers.zhipu", name: "Zhipu GLM", type: "OpenAI", endpoint: "https://open.bigmodel.cn/api/paas/v4", apiMode: "ChatCompletions" },
+  { id: "kimi", labelKey: "models.providers.kimi", name: "Kimi", type: "OpenAI", endpoint: "https://api.moonshot.cn/v1", apiMode: "ChatCompletions" },
+  { id: "siliconflow", labelKey: "models.providers.siliconflow", name: "SiliconFlow", type: "OpenAI", endpoint: "https://api.siliconflow.cn/v1", apiMode: "ChatCompletions" },
+  { id: "minimax", labelKey: "models.providers.minimax", name: "MiniMax", type: "OpenAI", endpoint: "https://api.minimaxi.chat/v1", apiMode: "ChatCompletions" },
   { id: "claude", labelKey: "models.providers.claude", name: "Claude", type: "Claude", endpoint: "https://api.anthropic.com/v1" },
   { id: "gemini", labelKey: "models.providers.gemini", name: "Gemini", type: "Gemini", endpoint: "https://generativelanguage.googleapis.com/v1beta" },
-  { id: "lm-studio", labelKey: "models.providers.lmStudio", name: "LM Studio", type: "LMStudio", endpoint: "http://127.0.0.1:1234/v1" },
-  { id: "vllm", labelKey: "models.providers.vllm", name: "vLLM", type: "vLLM", endpoint: "http://127.0.0.1:8000/v1" },
-  { id: "llama-cpp", labelKey: "models.providers.llamaCpp", name: "llama.cpp", type: "OpenAI", endpoint: "http://127.0.0.1:8080/v1" },
-  { id: "custom", labelKey: "models.providers.custom", name: "OpenAI Compatible", type: "OpenAI", endpoint: "" },
+  { id: "lm-studio", labelKey: "models.providers.lmStudio", name: "LM Studio", type: "LMStudio", endpoint: "http://127.0.0.1:1234/v1", apiMode: "ChatCompletions" },
+  { id: "vllm", labelKey: "models.providers.vllm", name: "vLLM", type: "vLLM", endpoint: "http://127.0.0.1:8000/v1", apiMode: "ChatCompletions" },
+  { id: "llama-cpp", labelKey: "models.providers.llamaCpp", name: "llama.cpp", type: "OpenAI", endpoint: "http://127.0.0.1:8080/v1", apiMode: "ChatCompletions" },
+  { id: "custom", labelKey: "models.providers.custom", name: "OpenAI Compatible", type: "OpenAI", endpoint: "", apiMode: "Auto" },
 ];
 
 function providerToUpdate(profile: ProviderProfileView): ProviderProfileUpdate {
@@ -579,6 +581,7 @@ function createProviderUpdate(
     maxTokens: isOllama ? 4096 : 8192,
     supportsVision: isNativeOnline,
     supportsJsonOutput: preset.type !== "Claude" && !isOllama,
+    apiMode: preset.apiMode ?? (preset.type === "OpenAI" ? "ChatCompletions" : "Auto"),
   };
 }
 
@@ -863,6 +866,20 @@ function ModelsPage() {
                 <input className="input input-sm w-full" type="url" value={form.endpoint} onChange={(event) => patch("endpoint", event.currentTarget.value)} />
                 <p className="label">{t("models.endpointAutoHint")}</p>
               </fieldset>
+              {form.type === "OpenAI" || form.type === "LMStudio" || form.type === "vLLM" ? (
+                <fieldset className="fieldset">
+                  <legend className="fieldset-legend">{t("models.apiMode")}</legend>
+                  <select
+                    className="select select-sm w-full"
+                    value={form.apiMode ?? "Auto"}
+                    onChange={(event) => patch("apiMode", event.currentTarget.value)}
+                  >
+                    <option value="Auto">{t("models.apiModes.auto")}</option>
+                    <option value="Responses">{t("models.apiModes.responses")}</option>
+                    <option value="ChatCompletions">{t("models.apiModes.chatCompletions")}</option>
+                  </select>
+                </fieldset>
+              ) : null}
               {form.type !== "Ollama" ? (
                 <fieldset className="fieldset settings-model-editor-wide">
                   <legend className="fieldset-legend">{t("models.apiKey")}</legend>

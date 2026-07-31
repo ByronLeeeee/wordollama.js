@@ -295,7 +295,7 @@ textarea:not(.textarea) { resize: vertical; }
 .settings-section { padding: 15px 17px; border-bottom: 1px solid #edf0f4; }
 .settings-section > label:not(.checkbox-row) { display: block; margin: 11px 0 5px; color: #475569; font-size: 11px; font-weight: 600; }
 .settings-section select, .settings-section input[type="number"] { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d6dbe3; border-radius: 8px; background: inherit; color: inherit; }
-.diagnostic-output, #compare-output, #golden-output, #long-document-output { max-height: 260px; overflow: auto; padding: 8px; border-radius: 7px; background: #f8fafc; white-space: pre-wrap; word-break: break-word; font-size: 10px; }
+.diagnostic-output, #golden-output, #long-document-output { max-height: 260px; overflow: auto; padding: 8px; border-radius: 7px; background: #f8fafc; white-space: pre-wrap; word-break: break-word; font-size: 10px; }
 .notice { padding: 8px; border: 1px solid #bfdbfe; border-radius: 7px; background: #eff6ff; color: #1e40af; font-size: 11px; }
 .workflow-banner { margin: 10px 12px 0; padding: 10px 12px; border: 1px solid #bfdbfe; border-radius: 9px; background: #eff6ff; color: #1e3a8a; }
 .workflow-banner p { margin: 4px 0 0; font-size: 11px; }
@@ -721,6 +721,98 @@ button.translation-swap-button:hover {
 .law-result p { margin: 8px 0 0; white-space: pre-wrap; line-height: 1.7; }
 .warning { padding: 8px; border: 1px solid #fed7aa; border-radius: 7px; background: #fff7ed; color: #9a3412; font-size: 11px; }
 .file-field { margin-bottom: 8px; }
+.compare-card { display: grid; gap: 14px; }
+.compare-heading { display: flex; align-items: flex-start; gap: 10px; }
+.compare-heading h3 { margin: 0 0 4px; }
+.compare-heading p { margin: 0; line-height: 1.5; }
+.compare-heading-icon,
+.file-picker-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.compare-heading-icon { width: 32px; height: 32px; }
+.file-picker-grid { display: grid; gap: 10px; }
+.file-picker-card {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.file-picker-heading { display: flex; min-width: 0; align-items: center; gap: 9px; }
+.file-picker-label { display: block; min-width: 0; color: var(--ink); font-size: 12px; font-weight: 700; }
+.file-picker-hint { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.file-picker-input {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.file-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+  transition: background-color 140ms ease, border-color 140ms ease, transform 80ms ease;
+}
+.file-picker-trigger:hover { border-color: var(--accent-hover); background: var(--accent-hover); }
+.file-picker-trigger:active { transform: translateY(1px); }
+.file-picker-input:focus-visible + .file-picker-trigger { outline: 2px solid rgb(24 90 189 / 35%); outline-offset: 2px; }
+.file-picker-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+.file-picker-name.has-file { color: var(--ink); font-weight: 600; }
+.compare-actions { margin: 0; }
+.compare-analysis-shell { display: grid; gap: 8px; }
+.compare-analysis-shell .section-title-row { margin: 0; }
+.compare-analysis-shell .section-title-row h3 { margin: 0; }
+.compare-analysis {
+  display: block;
+  min-height: 210px;
+  max-height: 460px;
+  margin: 0;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.65;
+}
+.compare-analysis.empty-panel { display: grid; place-items: center; color: var(--muted); text-align: center; }
+.compare-analysis h1,
+.compare-analysis h2,
+.compare-analysis h3 { margin: 0 0 8px; color: var(--ink); font-size: 13px; line-height: 1.35; }
+.compare-analysis p { margin: 0 0 9px; }
+.compare-analysis ul,
+.compare-analysis ol { margin: 0 0 10px; padding-left: 19px; }
+.compare-analysis li { margin: 3px 0; }
+.compare-analysis strong { color: var(--accent-hover); }
 .checkbox-row { display: flex; align-items: center; gap: 7px; }
 .checkbox-row input { width: auto; }
 .developer-section summary { cursor: pointer; font-size: 13px; font-weight: 600; }
@@ -840,7 +932,6 @@ button.danger-button {
 #custom-prompt-run,
 #custom-prompt-apply,
 #compare-run,
-#compare-apply,
 #save-general-settings,
 #save-agent-settings,
 #save-diagnostic-settings,
@@ -873,7 +964,6 @@ button.danger-button {
 #custom-prompt-run:hover,
 #custom-prompt-apply:hover,
 #compare-run:hover,
-#compare-apply:hover,
 #save-general-settings:hover,
 #save-agent-settings:hover,
 #save-diagnostic-settings:hover,
@@ -1364,7 +1454,6 @@ progress::-webkit-progress-value {
 :root[data-theme="dark"] #custom-prompt-run,
 :root[data-theme="dark"] #custom-prompt-apply,
 :root[data-theme="dark"] #compare-run,
-:root[data-theme="dark"] #compare-apply,
 :root[data-theme="dark"] #save-general-settings,
 :root[data-theme="dark"] #save-agent-settings,
 :root[data-theme="dark"] #save-diagnostic-settings,
@@ -1406,6 +1495,20 @@ progress::-webkit-progress-value {
 :root[data-theme="dark"] .agent-image-preview {
   border-color: var(--border);
   background: var(--surface);
+}
+
+:root[data-theme="dark"] .file-picker-card,
+:root[data-theme="dark"] .compare-analysis {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+:root[data-theme="dark"] .file-picker-label,
+:root[data-theme="dark"] .file-picker-name.has-file,
+:root[data-theme="dark"] .compare-analysis h1,
+:root[data-theme="dark"] .compare-analysis h2,
+:root[data-theme="dark"] .compare-analysis h3 {
+  color: var(--ink);
 }
 
 :root[data-theme="dark"] .table-preview th,

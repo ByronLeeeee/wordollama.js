@@ -1,4 +1,4 @@
-import { Code2, Image as ImageIcon } from "lucide-react";
+import { Code2, ImagePlus, Upload } from "lucide-react";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
 function HtmlAppWorkflow() {
@@ -137,18 +137,31 @@ function ImageWorkflow() {
     <section id="image-workflow-workspace" className="text-workflow-workspace task-workspace" hidden>
       <WorkspaceHeader
         closeId="close-image-workflow"
-        title={<span className="task-title"><ImageIcon size={18} aria-hidden="true" /><h2 data-i18n="taskpane.image.title">Image understanding</h2></span>}
+        title={<span className="task-title"><ImagePlus size={18} aria-hidden="true" /><h2 data-i18n="taskpane.image.title">Image understanding</h2></span>}
       />
       <div className="form-group task-upload-control">
-        <label htmlFor="image-file" data-i18n="taskpane.image.select">
-          Select image
-        </label>
-        <input
-          id="image-file"
-          className="file-input file-input-sm file-field"
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-        />
+        <div className="file-picker-card image-file-picker">
+          <div className="file-picker-heading">
+            <span className="file-picker-icon" aria-hidden="true"><ImagePlus size={16} /></span>
+            <div>
+              <span className="file-picker-label" data-i18n="taskpane.image.select">Select image</span>
+              <span className="file-picker-hint" data-i18n="taskpane.image.selectHint">PNG, JPEG, WebP or GIF · up to 8 MB</span>
+            </div>
+          </div>
+          <input
+            id="image-file"
+            className="file-picker-input"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+          />
+          <label htmlFor="image-file" className="file-picker-trigger">
+            <Upload size={14} aria-hidden="true" />
+            <span data-i18n="taskpane.image.chooseFile">Choose image</span>
+          </label>
+          <span id="image-file-status" className="file-picker-name" data-i18n="taskpane.image.noneSelected">
+            No image selected
+          </span>
+        </div>
       </div>
       <div id="image-preview-card" className="image-preview-card empty-panel">
         <span id="image-empty-state" data-i18n="taskpane.image.preview">

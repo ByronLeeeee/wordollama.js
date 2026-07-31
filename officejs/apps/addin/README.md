@@ -12,6 +12,8 @@
 
 当前 Bridge 已支持健康检查、配对、会话校验、Office.js 工具目录注册、统一 Provider chat/models、带计划确认/权限确认/checkpoint 的 Agent NDJSON 事件会话和受策略保护的本地命令/grep/Skill 接口。Office.js 侧已覆盖原 VSTO 的 35 个 Word 文档工具及 `ask_human` 交互工具；现有 VSTO 实现保持不变，继续作为回退基线。Bridge 连接地址必须是 HTTPS，只有本机开发地址允许 HTTP。
 
+OpenAI-compatible Provider 通过配置的 `ApiMode` 统一支持 `Responses`、`Chat Completions` 和自动选择：原生 `api.openai.com` 在 `Auto` 下使用 `/v1/responses`，第三方兼容端点保持 `/chat/completions`；两种响应及 SSE 流都会归一化为 Bridge 的聊天/流式协议。API Key 只写入 Desktop Bridge 使用的系统密钥库，不写入 Provider JSON 或 Office.js 存储。
+
 一次配对可供同源的多个独立任务窗格复用：页面只缓存 8 小时 session token 及其到期/协议元数据，不保存配对码；新窗格启动时会重新向 Bridge 注册自身的 Office 工具。过期、无效或收到 401 的 token 会立即从缓存移除。
 
 界面以原 `AgentTaskPaneUI` 和现有 VSTO 独立工作台为产品基准。Manifest 按原版窗口边界为 Agent、自由创作、按需修改、图片、表格、HTML、Markdown、编辑、翻译、文档比较、文档审阅、法律通用、模拟法庭、法律检索、自定义提示词、设置和诊断配置独立 `TaskpaneId`。前端共用一个 bundle，但 `surface`/`workflow` 路由只显示当前职责，避免把所有能力堆进 Agent 面板。现已覆盖 Agent 消息与确认流程、写作、翻译、法律检索、模拟法庭、图片、表格、HTML、Markdown、自定义提示词、模型/服务设置和诊断；金样本只位于独立诊断窗格。仍须按 `docs/OFFICE_JS_UI_PARITY_MATRIX.zh-CN.md` 完成真实 Windows/Mac Word 多窗格并存、视觉与宿主验收，不得仅凭 manifest 或无宿主测试通过就宣称与 VSTO 等价。
@@ -22,7 +24,7 @@
 
 Vite 8 开发客户端的 `__BUNDLED_DEV__` 与 `__SERVER_FORWARD_CONSOLE__` 内部标志必须由 `vite.config.ts` 显式注入。Office Dialog 使用全新的 WebView 全局环境，缺少这两个标志时 `/@vite/client` 会在 React 启动前抛错并显示空白窗；设置入口保留了宿主级加载占位与启动错误边界，防止此类问题再次静默失败。
 
-Bridge 还提供 `/documents/compare` 结构/词级 DOCX 对比；任务窗格的“跨平台 DOCX 比较”可选择原文和修订稿、查看摘要和前 100 项差异并复制完整 JSON。两个文件合计限制 20 MB，只发送到已配对的本机 Bridge；复杂 OOXML 修订仍标记为近似结果。
+Bridge 还提供 `/documents/compare` 结构/词级 DOCX 对比；任务窗格的“AI 文档修订分析”会读取原文和修订稿的结构化变化，再交给当前模型总结修改内容、风险与建议，不再在界面展示原始 JSON、逐项勾选或直接写入 Word 修订。两个文件合计限制 20 MB，只发送到已配对的本机 Bridge；复杂 OOXML 修订仍标记为近似结果。
 
 ## 与现有 COM/VSTO 版共存
 

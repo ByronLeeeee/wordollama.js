@@ -140,6 +140,7 @@ export interface ProviderProfileView {
   temperature: number;
   maxTokens: number;
   keepAlive: string;
+  apiMode: string;
 }
 
 export interface ProviderSettingsView {
