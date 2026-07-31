@@ -21,11 +21,9 @@ pwsh ./tools/unified-smoke-test.ps1 `
   -SkipManifestValidation
 ```
 
-最近完成的桌面宿主提交：
-
-```text
-97efd94 feat(desktop): host add-in from bridge
-```
+当前接续重点：设置 UI 已统一为居中单列布局，小窗口使用折叠导航；模型管理、
+MCP、Skills 和 Markdown 设置已完成新 UI。基础设置已拆分为结构化“记忆”和
+“输出偏向”，但自动记忆执行链路尚未完成，见下方 P0。
 
 ## 已完成
 
@@ -41,6 +39,32 @@ pwsh ./tools/unified-smoke-test.ps1 `
 - [x] macOS PKG 将 manifest 安装到 Word 容器 `wef` 目录。
 - [x] Windows Startup 与 macOS LaunchAgent 当前用户登录自启。
 - [x] 完整统一回归和 Windows 发布包生命周期回归。
+- [x] 设置窗口统一保存/关闭、未保存关闭确认和小窗口折叠导航。
+- [x] 设置页统一为居中单列布局，移除 AI 模式和生成内容语言。
+- [x] 模型配置保存为可切换列表，支持详情、修改、删除和 Provider 默认地址。
+- [x] Skills Markdown 全文预览、MCP JSON 导入和 Word Markdown 样式读取/新建。
+- [x] Bridge 结构化保存记忆条目和输出偏向，支持旧 `writingProfile` 数据迁移。
+
+## P0：记忆与输出偏向
+
+- [x] 将“用户画像”改为“记忆”，将语气、篇幅、结构、术语、改写幅度和引用
+  习惯归入独立“输出偏向”。
+- [x] 记忆设置 UI 支持逐条新增、行内修改、单条删除、全选、删除所选和全部删除。
+- [x] Bridge 提供结构化记忆的新增、修改和批量删除 API；当前使用本地 JSON，
+  保留稳定 ID 和时间戳，不使用 Markdown 作为主存储。
+- [x] 前端兼容尚未升级的旧 Bridge 返回格式，避免设置页白屏。
+- [ ] 完成“自动记忆”执行链路。目前开关和持久化字段已经存在，但任务结束后
+  尚未触发额外模型调用。
+- [ ] 明确自动记忆隐私策略后再接通模型调用：
+  - 推荐默认仅允许 Ollama、LM Studio、vLLM、llama.cpp 等回环地址本地模型。
+  - 如允许在线 Provider，必须在 UI 中明确说明任务信息会再次发送给当前供应商。
+  - 只允许记住用户自身信息、长期偏好、近期任务脉络和持续关注点。
+  - 禁止保存文档正文、第三方个人信息、密钥、令牌、财务/医疗信息和一次性指令。
+- [ ] 为自动记忆增加严格 JSON 输出解析、去重、纠错更新、失败静默和调用次数测试。
+- [ ] 将记忆和输出偏向接入翻译、润色、审阅、Agent 等全部提示词，并验证不会
+  泄漏到不相关任务。
+- [ ] 数据达到需要全文检索、向量召回或大量任务历史时，再将结构化 JSON 无损
+  迁移到 SQLite；当前小规模记录不引入数据库原生依赖。
 
 ## P0：安装后直接可用
 
@@ -127,6 +151,16 @@ pwsh ./tools/bridge-package-smoke-test.ps1 `
 git diff --check
 git status
 ```
+
+## 本次交接验证状态
+
+- `npm run build`：通过。
+- Office.js UI parity 与 settings i18n smoke：通过。
+- Desktop Bridge Debug 构建：0 警告、0 错误。
+- 统一 Release 冒烟已通过前端构建、36 工具注册、宿主能力矩阵、Golden、
+  长文档、修订、Provider 设置、结构化记忆存储、MCP/Ollama 设置及更新安全测试。
+- 统一脚本最后的独立 Bridge live API 阶段仍返回一次 HTTP 405，需要换设备后优先
+  定位具体请求路径；当前开发 Bridge 已重新启动且 `/health` 返回 `ready: true`。
 
 涉及签名、证书、Credential Manager、Keychain、注册表、LaunchAgent 或真实 Word 的
 修改，必须在相应目标操作系统上再次实测，不能只凭跨平台编译结果标记完成。

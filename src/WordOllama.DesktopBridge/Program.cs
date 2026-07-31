@@ -925,6 +925,62 @@ app.MapPut("/settings/review", (
     }
 });
 
+app.MapPost("/settings/memories", (
+    HttpRequest httpRequest,
+    MemoryUpdate request,
+    BridgeSessionStore sessions,
+    ReviewSettingsStore settings) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers["Origin"].FirstOrDefault();
+    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
+    try
+    {
+        return Results.Ok(settings.AddMemory(request));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapPut("/settings/memories/{id}", (
+    string id,
+    HttpRequest httpRequest,
+    MemoryUpdate request,
+    BridgeSessionStore sessions,
+    ReviewSettingsStore settings) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers["Origin"].FirstOrDefault();
+    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
+    try
+    {
+        return Results.Ok(settings.UpdateMemory(id, request));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
+app.MapPost("/settings/memories/delete", (
+    HttpRequest httpRequest,
+    MemoryDeleteRequest request,
+    BridgeSessionStore sessions,
+    ReviewSettingsStore settings) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers["Origin"].FirstOrDefault();
+    return sessions.TryGet(token, origin, out _)
+        ? Results.Ok(settings.DeleteMemories(request.Ids))
+        : Results.Unauthorized();
+});
+
 app.MapGet("/settings/ollama-server", (
     HttpRequest httpRequest,
     BridgeSessionStore sessions,

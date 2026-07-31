@@ -361,11 +361,35 @@ export class RuntimeClient {
     return this.settingsRequest<ReviewSettingsView>("/settings/review");
   }
 
-  async saveReviewSettings(writingProfile: string): Promise<ReviewSettingsView> {
+  async saveReviewSettings(outputPreference: string, autoMemory: boolean): Promise<ReviewSettingsView> {
     return this.settingsRequest<ReviewSettingsView>("/settings/review", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ writingProfile }),
+      body: JSON.stringify({ outputPreference, autoMemory }),
+    });
+  }
+
+  async addMemory(content: string): Promise<ReviewSettingsView> {
+    return this.settingsRequest<ReviewSettingsView>("/settings/memories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  async updateMemory(id: string, content: string): Promise<ReviewSettingsView> {
+    return this.settingsRequest<ReviewSettingsView>(`/settings/memories/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  async deleteMemories(ids: string[]): Promise<ReviewSettingsView> {
+    return this.settingsRequest<ReviewSettingsView>("/settings/memories/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
     });
   }
 

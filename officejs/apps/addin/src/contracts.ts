@@ -95,7 +95,17 @@ export interface OllamaModelProgress {
 }
 
 export interface ReviewSettingsView {
+  memories: MemoryItemView[];
+  outputPreference: string;
+  autoMemory: boolean;
   writingProfile: string;
+}
+
+export interface MemoryItemView {
+  id: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface OllamaServerSettingsView {

@@ -367,7 +367,7 @@ async function activateBridgeSession(): Promise<ToolCatalogResponse> {
     } catch (error) {
       bridgeCatalog = null;
       bridgePaired = false;
-      setRuntimeStatus("unavailable", "attention");
+      setRuntimeStatus("disconnected", "attention");
       throw error;
     } finally {
       bridgeActivation = null;
@@ -401,7 +401,7 @@ window.addEventListener("storage", (event) => {
 type RuntimeStatusState = "connecting" | "connected" | "attention";
 
 function setRuntimeStatus(
-  key: "connecting" | "pairRequired" | "providerRequired" | "unavailable",
+  key: "connecting" | "disconnected" | "providerRequired",
   state: RuntimeStatusState,
 ): void {
   const text = i18n.t(`taskpane.runtime.${key}`);
@@ -416,7 +416,7 @@ async function refreshRuntimeStatus(): Promise<void> {
     try {
       await activateBridgeSession();
     } catch {
-      setRuntimeStatus("unavailable", "attention");
+      setRuntimeStatus("disconnected", "attention");
     }
     return;
   }
@@ -435,7 +435,7 @@ async function refreshRuntimeStatus(): Promise<void> {
     });
   } catch {
     setRuntimeStatus(
-      runtime.hasPairing() ? "unavailable" : "pairRequired",
+      "disconnected",
       "attention",
     );
   }
@@ -737,13 +737,6 @@ async function openTextWorkflow(definition: TextWorkflowDefinition): Promise<voi
   }
 }
 
-function outputLanguageLabel(value: string): string {
-  return value === "zh" ? i18n.t("taskpane.language.zh")
-    : value === "en" ? i18n.t("taskpane.language.en")
-      : value === "source" ? i18n.t("taskpane.language.source")
-        : i18n.t("taskpane.language.auto");
-}
-
 async function assertTextWorkflowSelectionUnchanged(): Promise<void> {
   if (textWorkflowScope !== "selection") {
     throw new Error(i18n.t("taskpane.errors.selectionRequired"));
@@ -782,7 +775,6 @@ required<HTMLButtonElement>("#workflow-generate").addEventListener("click", asyn
   beginStreamingText(result);
   updateTextWorkflowActions();
   try {
-    const settings = readLocalSettings("wordollama-general-settings", { language: "auto" });
     let writingProfile = "";
     try { writingProfile = localStorage.getItem("wordollama-writing-profile") ?? ""; } catch { /* Ignore host storage policy. */ }
     const finalResult = await generateTextWorkflow(
@@ -795,7 +787,7 @@ required<HTMLButtonElement>("#workflow-generate").addEventListener("click", asyn
           ? i18n.t("taskpane.scope.document")
           : "",
       required<HTMLTextAreaElement>("#workflow-instruction").value.trim(),
-      outputLanguageLabel(settings.language),
+      i18n.t("taskpane.language.auto"),
       writingProfile,
       textWorkflowAbortController.signal,
       (content) => {
@@ -1757,10 +1749,9 @@ function removeLocalSettings(key: string): void {
 }
 
 const generalSettings = readLocalSettings("wordollama-general-settings", {
-  aiMode: "ollama", language: "auto", outputMode: "Auto", darkTheme: false,
+  outputMode: "Auto", darkTheme: false,
   suppressPlan: false, suppressDiff: false,
 });
-runtime.setOutputLanguage(generalSettings.language);
 if (generalSettings.darkTheme) document.documentElement.dataset.theme = "dark";
 
 const diagnosticSettings = readLocalSettings("wordollama-diagnostic-settings", { enabled: false });
@@ -2298,11 +2289,7 @@ async function runAgent(requirement: string): Promise<void> {
     const currentGeneralSettings = readLocalSettings("wordollama-general-settings", {
       suppressPlan: false,
       suppressDiff: false,
-      language: "auto",
     });
-    const languageMode = ["zh", "en", "source"].includes(currentGeneralSettings.language)
-      ? currentGeneralSettings.language as "zh" | "en" | "source"
-      : "auto";
     const executionMode = ["ViewOnly", "ProposeChanges", "TrackedChanges"].includes(currentAgentSettings.executionMode)
       ? currentAgentSettings.executionMode as "ViewOnly" | "ProposeChanges" | "TrackedChanges"
       : "TrackedChanges";
@@ -2320,7 +2307,7 @@ async function runAgent(requirement: string): Promise<void> {
         : Math.max(1, Math.min(1000, Number(currentAgentSettings.maxIterations) || 20)),
       executionMode,
       allowExternalTools: currentAgentSettings.allowExternalTools,
-      languageMode,
+      languageMode: "auto",
       uiLocale: i18n.resolvedLanguage === "zh-CN" ? "zh-CN" : "en-US",
     });
     activeSessionId = session.sessionId;
@@ -2335,7 +2322,9 @@ async function runAgent(requirement: string): Promise<void> {
     setAgentRunning(true, i18n.t("taskpane.agent.running"));
     await consumeAgentSession(session.sessionId, requirement, imageDataUrl, executionMode);
   } catch (error) {
-    appendMessage(error instanceof Error ? error.message : String(error), "error-message");
+    const message = error instanceof Error ? error.message : String(error);
+    appendDiagnostic("agent", message);
+    appendMessage(i18n.t("taskpane.errors.requestFailed"), "error-message");
     throw error;
   } finally {
     try { await word.restoreTrackedChanges(previousTrackingMode); }
@@ -2387,7 +2376,9 @@ required<HTMLButtonElement>("#resume-agent-session").addEventListener("click", a
       recovery.executionMode,
     );
   } catch (error) {
-    appendMessage(error instanceof Error ? error.message : String(error), "error-message");
+    const message = error instanceof Error ? error.message : String(error);
+    appendDiagnostic("agent", message);
+    appendMessage(i18n.t("taskpane.errors.requestFailed"), "error-message");
     showError(error);
   } finally {
     try { await word.restoreTrackedChanges(previousTrackingMode); } catch (error) { showError(error); }
@@ -3203,8 +3194,8 @@ async function loadReviewSettings(): Promise<void> {
   try {
     let settings = await runtime.getReviewSettings();
     const legacy = localStorage.getItem("wordollama-writing-profile")?.trim() ?? "";
-    if (!settings.writingProfile && legacy) {
-      settings = await runtime.saveReviewSettings(legacy);
+    if (!settings.outputPreference && !settings.memories.length && legacy) {
+      settings = await runtime.saveReviewSettings(legacy, settings.autoMemory);
       localStorage.removeItem("wordollama-writing-profile");
     }
     reviewWritingProfile = settings.writingProfile;

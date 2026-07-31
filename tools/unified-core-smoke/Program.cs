@@ -246,12 +246,27 @@ try
     Assert(secretStore.Get("WORDOLLAMA_PROVIDER_CLOUD_API_KEY") is null,
         "deleting a profile deletes its secret");
     var reviewSettings = new ReviewSettingsStore(Path.Combine(settingsTestRoot, "review.json"));
-    reviewSettings.Save(new ReviewSettingsUpdate(" concise legal style "));
-    Assert(reviewSettings.Get().WritingProfile == "concise legal style",
-        "writing profile is persisted by the Bridge");
+    reviewSettings.Save(new ReviewSettingsUpdate(" concise legal style ", AutoMemory: true));
+    var memoryView = reviewSettings.AddMemory(new MemoryUpdate("User works on legal documents."));
+    var memoryId = memoryView.Memories.Single().Id;
+    reviewSettings.UpdateMemory(memoryId, new MemoryUpdate("User frequently reviews legal documents."));
+    Assert(
+        reviewSettings.Get().OutputPreference == "concise legal style" &&
+        reviewSettings.Get().AutoMemory &&
+        reviewSettings.Get().Memories.Single().Content ==
+            "User frequently reviews legal documents.",
+        "structured memories and output preferences are persisted by the Bridge");
     var reloadedReviewSettings = new ReviewSettingsStore(Path.Combine(settingsTestRoot, "review.json"));
-    Assert(reloadedReviewSettings.Get().WritingProfile == "concise legal style",
-        "writing profile reloads across Bridge restarts");
+    Assert(
+        reloadedReviewSettings.Get().WritingProfile.Contains(
+            "User frequently reviews legal documents.",
+            StringComparison.Ordinal) &&
+        reloadedReviewSettings.Get().WritingProfile.Contains(
+            "concise legal style",
+            StringComparison.Ordinal),
+        "memories and output preferences reload across Bridge restarts");
+    reviewSettings.DeleteMemories([memoryId]);
+    Assert(reviewSettings.Get().Memories.Count == 0, "memory deletion persists");
 }
 finally
 {

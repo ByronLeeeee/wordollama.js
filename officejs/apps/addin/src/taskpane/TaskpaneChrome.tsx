@@ -57,7 +57,7 @@ export function TaskpaneChrome() {
           className="runtime-strip-text"
           data-i18n="taskpane.runtime.connecting"
         >
-          Connecting to Desktop Bridge…
+          Connecting to local service…
         </span>
       </div>
 

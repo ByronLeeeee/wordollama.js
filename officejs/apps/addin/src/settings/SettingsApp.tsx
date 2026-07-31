@@ -1,4 +1,5 @@
 import {
+  Fragment,
   createContext,
   useCallback,
   useContext,
@@ -12,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import {
   Bot,
   Boxes,
+  ChevronDown,
   CircleCheck,
   Eye,
   FileCode2,
@@ -35,9 +37,11 @@ import type {
   McpServerUpdate,
   McpServerView,
   McpToolDefinition,
+  MemoryItemView,
   OllamaServerSettingsUpdate,
   ProviderProfileUpdate,
   ProviderProfileView,
+  ReviewSettingsView,
   SkillSummary,
   UpdateCheckResult,
 } from "../contracts";
@@ -133,7 +137,8 @@ function parsePairs(value: string): Record<string, string> {
 }
 
 function toStatus(error: unknown, fallback: string): StatusState {
-  return { text: error instanceof Error && error.message ? error.message : fallback, error: true };
+  console.error(error);
+  return { text: fallback, error: true };
 }
 
 function PageHeading({ title }: { title: string }) {
@@ -193,19 +198,52 @@ function SwitchRow({ label, title, checked, onChange }: {
   );
 }
 
+function normalizeReviewSettings(
+  value: Partial<ReviewSettingsView> | null | undefined,
+): ReviewSettingsView {
+  return {
+    memories: Array.isArray(value?.memories) ? value.memories : [],
+    outputPreference: typeof value?.outputPreference === "string"
+      ? value.outputPreference
+      : typeof value?.writingProfile === "string"
+        ? value.writingProfile
+        : "",
+    autoMemory: value?.autoMemory === true,
+    writingProfile: typeof value?.writingProfile === "string" ? value.writingProfile : "",
+  };
+}
+
 function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void }) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<StatusState>(null);
   const [preference, setPreference] = useState<UiLocalePreference>(readUiLocalePreference());
   const [settings, setSettings] = useState(() => readStored("wordollama-general-settings", {
-    aiMode: "ollama",
-    language: "auto",
     outputMode: "Auto",
     darkTheme: false,
     suppressPlan: false,
     suppressDiff: false,
   }));
-  const saved = useRef({ preference, settings });
+  const [reviewSettings, setReviewSettings] = useState({
+    memories: [] as MemoryItemView[],
+    outputPreference: "",
+    autoMemory: false,
+    writingProfile: "",
+  });
+  const [newMemory, setNewMemory] = useState("");
+  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
+  const [editingMemory, setEditingMemory] = useState("");
+  const [selectedMemories, setSelectedMemories] = useState<Set<string>>(() => new Set());
+  const saved = useRef({ preference, settings, reviewSettings });
+
+  useEffect(() => {
+    void runtime.getReviewSettings()
+      .then((value) => {
+        const normalized = normalizeReviewSettings(value);
+        saved.current = { ...saved.current, reviewSettings: normalized };
+        setReviewSettings(normalized);
+      })
+      .catch((error) => setStatus(toStatus(error, t("common.notConnected"))));
+  }, [t]);
 
   const update = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
     setSettings((current) => ({ ...current, [key]: value }));
@@ -213,17 +251,76 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
   };
 
   const save = async () => {
-    writeStored("wordollama-general-settings", settings);
+    let persistedReviewSettings = reviewSettings;
+    if (
+      reviewSettings.outputPreference !== saved.current.reviewSettings.outputPreference ||
+      reviewSettings.autoMemory !== saved.current.reviewSettings.autoMemory
+    ) {
+      persistedReviewSettings = normalizeReviewSettings(await runtime.saveReviewSettings(
+          reviewSettings.outputPreference,
+          reviewSettings.autoMemory,
+        ));
+    }
+    writeStored("wordollama-general-settings", {
+      outputMode: settings.outputMode,
+      darkTheme: settings.darkTheme,
+      suppressPlan: settings.suppressPlan,
+      suppressDiff: settings.suppressDiff,
+    });
     await setUiLocalePreference(preference);
-    runtime.setOutputLanguage(settings.language);
-    saved.current = { preference, settings };
+    setReviewSettings(persistedReviewSettings);
+    saved.current = { preference, settings, reviewSettings: persistedReviewSettings };
     setStatus({ text: t("common.saved") });
   };
   useSettingsSection(
     "general",
-    preference !== saved.current.preference || !settingsEqual(settings, saved.current.settings),
+    preference !== saved.current.preference ||
+      !settingsEqual(settings, saved.current.settings) ||
+      reviewSettings.outputPreference !== saved.current.reviewSettings.outputPreference ||
+      reviewSettings.autoMemory !== saved.current.reviewSettings.autoMemory,
     save,
   );
+
+  const applyMemoryView = (value: typeof reviewSettings) => {
+    const normalized = normalizeReviewSettings(value);
+    setReviewSettings((current) => ({ ...current, memories: normalized.memories }));
+    saved.current = {
+      ...saved.current,
+      reviewSettings: { ...saved.current.reviewSettings, memories: normalized.memories },
+    };
+    setSelectedMemories((current) =>
+      new Set([...current].filter((id) => normalized.memories.some((item) => item.id === id))));
+  };
+
+  const addMemory = async () => {
+    if (!newMemory.trim()) return;
+    try {
+      applyMemoryView(await runtime.addMemory(newMemory));
+      setNewMemory("");
+    } catch (error) {
+      setStatus(toStatus(error, t("common.saveFailed")));
+    }
+  };
+
+  const saveMemory = async () => {
+    if (!editingMemoryId || !editingMemory.trim()) return;
+    try {
+      applyMemoryView(await runtime.updateMemory(editingMemoryId, editingMemory));
+      setEditingMemoryId(null);
+      setEditingMemory("");
+    } catch (error) {
+      setStatus(toStatus(error, t("common.saveFailed")));
+    }
+  };
+
+  const deleteMemories = async (ids: string[]) => {
+    if (!ids.length) return;
+    try {
+      applyMemoryView(await runtime.deleteMemories(ids));
+    } catch (error) {
+      setStatus(toStatus(error, t("common.saveFailed")));
+    }
+  };
 
   return (
     <div className="settings-page">
@@ -254,30 +351,134 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
             </div>
           </div>
         </Card>
-        <Card title={t("general.ai")}>
-          <div className="settings-form-grid">
-            <label htmlFor="ai-mode">{t("general.aiMode")}</label>
-            <select
-              id="ai-mode"
-              className="select select-sm"
-              value={settings.aiMode}
-              onChange={(event) => update("aiMode", event.currentTarget.value)}
-            >
-              <option value="ollama">{t("general.localMode")}</option>
-              <option value="online">{t("general.onlineMode")}</option>
-            </select>
-            <label htmlFor="output-language">{t("general.outputLanguage")}</label>
-            <select
-              id="output-language"
-              className="select select-sm"
-              value={settings.language}
-              onChange={(event) => update("language", event.currentTarget.value)}
-            >
-              <option value="auto">{t("general.languageAuto")}</option>
-              <option value="zh">{t("general.languageChinese")}</option>
-              <option value="en">{t("general.languageEnglish")}</option>
-              <option value="source">{t("general.languageSource")}</option>
-            </select>
+        <Card title={t("general.contentPreferences")}>
+          <div className="settings-section-stack">
+            <section className="settings-preference-section">
+              <div className="settings-preference-heading">
+                <div>
+                  <h3>{t("general.memory")}</h3>
+                  <p>{t("general.memoryHint")}</p>
+                </div>
+                <SwitchRow
+                  label={t("general.autoMemory")}
+                  checked={reviewSettings.autoMemory}
+                  onChange={(value) => setReviewSettings((current) => ({ ...current, autoMemory: value }))}
+                />
+              </div>
+              <div className="settings-memory-toolbar">
+                <label className="settings-memory-select-all">
+                  <input
+                    className="checkbox checkbox-sm"
+                    type="checkbox"
+                    checked={reviewSettings.memories.length > 0 && selectedMemories.size === reviewSettings.memories.length}
+                    onChange={(event) => setSelectedMemories(event.currentTarget.checked
+                      ? new Set(reviewSettings.memories.map((item) => item.id))
+                      : new Set())}
+                  />
+                  <span>{t("common.selectAll")}</span>
+                </label>
+                <button
+                  className="btn btn-ghost btn-sm text-error"
+                  type="button"
+                  disabled={!selectedMemories.size}
+                  onClick={() => void deleteMemories([...selectedMemories])}
+                >
+                  <Trash2 size={14} />
+                  {t("general.deleteSelected")}
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm text-error"
+                  type="button"
+                  disabled={!reviewSettings.memories.length}
+                  onClick={() => void deleteMemories(reviewSettings.memories.map((item) => item.id))}
+                >
+                  {t("general.deleteAll")}
+                </button>
+              </div>
+              <div className="settings-memory-list">
+                {reviewSettings.memories.length ? reviewSettings.memories.map((memory) => (
+                  <div className="settings-memory-row" key={memory.id}>
+                    <input
+                      className="checkbox checkbox-sm"
+                      type="checkbox"
+                      aria-label={t("general.selectMemory", { memory: memory.content })}
+                      checked={selectedMemories.has(memory.id)}
+                      onChange={(event) => setSelectedMemories((current) => {
+                        const next = new Set(current);
+                        if (event.currentTarget.checked) next.add(memory.id);
+                        else next.delete(memory.id);
+                        return next;
+                      })}
+                    />
+                    {editingMemoryId === memory.id ? (
+                      <input
+                        className="input input-sm"
+                        value={editingMemory}
+                        onChange={(event) => setEditingMemory(event.currentTarget.value)}
+                      />
+                    ) : <span>{memory.content}</span>}
+                    <div className="settings-memory-actions">
+                      {editingMemoryId === memory.id ? (
+                        <>
+                          <button className="btn btn-primary btn-sm" type="button" onClick={() => void saveMemory()}>{t("common.save")}</button>
+                          <button className="btn btn-sm" type="button" onClick={() => setEditingMemoryId(null)}>{t("common.cancel")}</button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="btn btn-ghost btn-sm btn-square"
+                            type="button"
+                            aria-label={t("common.edit")}
+                            onClick={() => {
+                              setEditingMemoryId(memory.id);
+                              setEditingMemory(memory.content);
+                            }}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm btn-square text-error"
+                            type="button"
+                            aria-label={t("common.delete")}
+                            onClick={() => void deleteMemories([memory.id])}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )) : <div className="settings-list-empty">{t("general.emptyMemories")}</div>}
+              </div>
+              <div className="settings-memory-add">
+                <input
+                  className="input input-sm"
+                  value={newMemory}
+                  onChange={(event) => setNewMemory(event.currentTarget.value)}
+                  placeholder={t("general.newMemoryPlaceholder")}
+                />
+                <button className="btn btn-primary btn-sm" type="button" disabled={!newMemory.trim()} onClick={() => void addMemory()}>
+                  <Plus size={14} />
+                  {t("common.add")}
+                </button>
+              </div>
+            </section>
+            <section className="settings-preference-section">
+              <h3>{t("general.outputPreference")}</h3>
+              <p>{t("general.outputPreferenceHint")}</p>
+              <textarea
+                id="output-preference"
+                className="textarea"
+                rows={5}
+                value={reviewSettings.outputPreference}
+                onChange={(event) => setReviewSettings((current) => ({
+                  ...current,
+                  outputPreference: event.currentTarget.value,
+                }))}
+                placeholder={t("general.outputPreferencePlaceholder")}
+              />
+            </section>
+            <div className="settings-form-grid">
             <label htmlFor="output-mode">{t("general.outputMode")}</label>
             <select
               id="output-mode"
@@ -292,9 +493,10 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
               <option value="Comment">{t("general.comment")}</option>
               <option value="ReviewPane">{t("general.reviewPane")}</option>
             </select>
+            </div>
           </div>
         </Card>
-        <Card title={t("general.behavior")} wide>
+        <Card title={t("general.behavior")}>
           <div className="settings-switch-list">
             <SwitchRow
               label={t("general.suppressPlan")}
@@ -829,11 +1031,12 @@ function SkillsPage() {
       const content = await runtime.readSkill(skill.name);
       setPreview({ skill, content, loading: false });
     } catch (error) {
+      console.error(error);
       setPreview({
         skill,
         content: "",
         loading: false,
-        error: error instanceof Error ? error.message : t("skills.previewFailed"),
+        error: t("skills.previewFailed"),
       });
     }
   };
@@ -1111,7 +1314,12 @@ function McpPage() {
             <div className="modal-action settings-mcp-editor-actions">
               <button className="btn btn-primary btn-sm" type="button" disabled={!form.name.trim() || !form.command.trim()} onClick={() => void runtime.saveMcpServer(payload()).then(async (result) => { setTools(result.tools); await load(); setEditorOpen(false); setStatus({ text: t("common.saved") }); }).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("mcp.saveConnect")}</button>
               <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.connectMcpServer(form.name).then((result) => { setTools(result.tools); void load(); }).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("common.connect")}</button>
-              <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.checkMcpHealth(form.name).then((health) => setStatus({ text: `${health.connected ? "✓" : "×"} · ${health.toolCount}` })).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("mcp.health")}</button>
+              <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.checkMcpHealth(form.name).then((health) => setStatus({
+                text: health.connected
+                  ? t("mcp.healthConnected", { count: health.toolCount })
+                  : t("mcp.healthDisconnected"),
+                error: !health.connected,
+              })).catch((error) => setStatus(toStatus(error, t("mcp.healthDisconnected"))))}>{t("mcp.health")}</button>
               <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.disconnectMcpServer(form.name).then(load).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("common.disconnect")}</button>
               <button className="btn btn-ghost btn-sm text-error" type="button" disabled={!servers.some((server) => server.name === form.name)} onClick={() => void runtime.deleteMcpServer(form.name).then(() => { setEditorOpen(false); setForm(emptyMcp); return load(); }).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("common.delete")}</button>
             </div>
@@ -1179,33 +1387,17 @@ function AgentPage() {
     model: "",
     intervalSeconds: 30,
   }));
-  const [writingProfile, setWritingProfile] = useState("");
-  const saved = useRef({ agent, review, writingProfile });
-  useEffect(() => {
-    void runtime.getReviewSettings()
-      .then((value) => {
-        saved.current = { ...saved.current, writingProfile: value.writingProfile };
-        setWritingProfile(value.writingProfile);
-      })
-      .catch((error) => setStatus(toStatus(error, t("common.notConnected"))));
-  }, [t]);
+  const saved = useRef({ agent, review });
   const save = async () => {
-    let persistedWritingProfile = writingProfile;
-    if (writingProfile !== saved.current.writingProfile) {
-      const value = await runtime.saveReviewSettings(writingProfile);
-      persistedWritingProfile = value.writingProfile;
-    }
     writeStored("wordollama-agent-settings", agent);
     writeStored("wordollama-linter-settings", review);
-    setWritingProfile(persistedWritingProfile);
-    saved.current = { agent, review, writingProfile: persistedWritingProfile };
+    saved.current = { agent, review };
     setStatus({ text: t("common.saved") });
   };
   useSettingsSection(
     "agent",
     !settingsEqual(agent, saved.current.agent) ||
-      !settingsEqual(review, saved.current.review) ||
-      writingProfile !== saved.current.writingProfile,
+      !settingsEqual(review, saved.current.review),
     save,
   );
   return (
@@ -1238,15 +1430,6 @@ function AgentPage() {
             <label>{t("agent.reviewInterval")}</label>
             <input className="input input-sm" type="number" min={3} value={review.intervalSeconds} onChange={(event) => setReview({ ...review, intervalSeconds: Number(event.currentTarget.value) })} />
           </div>
-        </Card>
-        <Card title={t("taskpane.review.writingProfile")} wide>
-          <textarea
-            className="textarea"
-            rows={5}
-            value={writingProfile}
-            onChange={(event) => setWritingProfile(event.currentTarget.value)}
-            placeholder={t("taskpane.review.writingProfilePlaceholder")}
-          />
         </Card>
       </div>
       <Status value={status} />
@@ -1360,6 +1543,7 @@ function MarkdownPage() {
 function AdvancedPage() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<StatusState>(null);
+  const [bridgeState, setBridgeState] = useState<"checking" | "connected" | "disconnected">("checking");
   const [ollama, setOllama] = useState<OllamaServerSettingsUpdate>({
     modelsPath: "", host: "127.0.0.1:11434", keepAlive: "5m",
     contextLength: 0, maxLoadedModels: 0, numParallel: 0, maxQueue: 0,
@@ -1382,16 +1566,35 @@ function AdvancedPage() {
     setOllama(value);
     setStatus({ text: t("common.saved") });
   };
+  const checkBridge = async () => {
+    setBridgeState("checking");
+    try {
+      if (!runtime.hasPairing()) await runtime.autoPair();
+      const health = await runtime.health();
+      setBridgeState(health.ready ? "connected" : "disconnected");
+    } catch (error) {
+      console.error(error);
+      setBridgeState("disconnected");
+    }
+  };
   useSettingsSection("advanced", !settingsEqual(ollama, saved.current), save);
-  useEffect(() => { void loadOllama(); }, []);
+  useEffect(() => {
+    void loadOllama();
+    void checkBridge();
+  }, []);
   return (
     <div className="settings-page">
       <PageHeading title={t("advanced.title")} />
       <div className="settings-grid">
-        <Card title={t("advanced.bridge")}>
-          <p className="text-sm opacity-70">{t("advanced.automaticPairing")}</p>
+        <Card title={t("advanced.localService")}>
+          <div className={`alert ${bridgeState === "connected" ? "alert-success" : bridgeState === "disconnected" ? "alert-warning" : "alert-info"}`}>
+            <span>
+              <strong>{t(`advanced.connection.${bridgeState}`)}</strong>
+              <small className="block opacity-70">{t(`advanced.connection.${bridgeState}Hint`)}</small>
+            </span>
+          </div>
           <div className="settings-actions">
-            <button className="btn btn-primary btn-sm" onClick={() => void runtime.health().then((health) => setStatus({ text: `${health.bridgeVersion} · ${health.protocolVersion} · ${health.ready ? "✓" : "×"}` })).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("advanced.checkBridge")}</button>
+            <button className="btn btn-primary btn-sm" type="button" disabled={bridgeState === "checking"} onClick={() => void checkBridge()}>{t("advanced.reconnect")}</button>
           </div>
         </Card>
         <Card title={t("advanced.ollama")}>
@@ -1407,10 +1610,10 @@ function AdvancedPage() {
               ["contextLength", "contextLength"], ["maxLoadedModels", "maxLoaded"],
               ["numParallel", "parallel"], ["maxQueue", "maxQueue"],
             ] as const).map(([key, label]) => (
-              <>
-                <label key={`${key}-label`}>{t(`advanced.${label}`)}</label>
-                <input key={key} className="input input-sm" type="number" value={ollama[key]} onChange={(event) => patch(key, Number(event.currentTarget.value))} />
-              </>
+              <Fragment key={key}>
+                <label>{t(`advanced.${label}`)}</label>
+                <input className="input input-sm" type="number" value={ollama[key]} onChange={(event) => patch(key, Number(event.currentTarget.value))} />
+              </Fragment>
             ))}
           </div>
           <div className="settings-actions">
@@ -1555,6 +1758,8 @@ export function SettingsApp() {
   const [saving, setSaving] = useState(false);
   const [footerStatus, setFooterStatus] = useState<StatusState>(null);
   const [closeConfirmationOpen, setCloseConfirmationOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const contentRef = useRef<HTMLElement>(null);
 
   const register = useCallback((id: string, save: () => Promise<void>) => {
     const current = registrations.current.get(id);
@@ -1611,6 +1816,8 @@ export function SettingsApp() {
       return next;
     });
     setPage(nextPage);
+    setMobileNavOpen(false);
+    if (contentRef.current) contentRef.current.scrollTop = 0;
   };
 
   const requestClose = () => {
@@ -1635,6 +1842,15 @@ export function SettingsApp() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileNavOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileNavOpen]);
+
   const groups: Array<{ label: string; items: Array<{ id: PageId; icon: typeof House }> }> = [
     { label: t("nav.preferences"), items: [
       { id: "general", icon: House }, { id: "models", icon: Bot },
@@ -1648,6 +1864,8 @@ export function SettingsApp() {
       { id: "updates", icon: RefreshCw }, { id: "about", icon: Info },
     ] },
   ];
+  const currentNavItem = groups.flatMap((group) => group.items).find((item) => item.id === page);
+  const CurrentNavIcon = currentNavItem?.icon ?? House;
 
   return (
     <SettingsSaveContext.Provider value={saveContext}>
@@ -1661,30 +1879,52 @@ export function SettingsApp() {
             </div>
           </div>
         </header>
-        <aside className="settings-sidebar" aria-label={t("app.settings")}>
-          {groups.map((group) => (
-            <div key={group.label}>
-              <p className="settings-nav-group">{group.label}</p>
-              <div className="grid gap-1">
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      className={`btn btn-ghost btn-sm${page === item.id ? " settings-nav-active" : ""}`}
-                      type="button"
-                      onClick={() => navigateTo(item.id)}
-                    >
-                      <Icon size={15} />
-                      {t(`nav.${item.id}`)}
-                    </button>
-                  );
-                })}
+        <aside className={`settings-sidebar${mobileNavOpen ? " mobile-open" : ""}`} aria-label={t("app.settings")}>
+          <button
+            className="btn btn-primary settings-mobile-nav-trigger"
+            type="button"
+            aria-expanded={mobileNavOpen}
+            aria-label={mobileNavOpen ? t("nav.closeMenu") : t("nav.openMenu")}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            <span className="settings-mobile-nav-current">
+              <CurrentNavIcon size={17} />
+              {t(`nav.${page}`)}
+            </span>
+            <ChevronDown className="settings-mobile-nav-chevron" size={17} />
+          </button>
+          <div className="settings-nav-menu">
+            {groups.map((group) => (
+              <div key={group.label}>
+                <p className="settings-nav-group">{group.label}</p>
+                <div className="grid gap-1">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        className={`btn btn-ghost btn-sm${page === item.id ? " settings-nav-active" : ""}`}
+                        type="button"
+                        onClick={() => navigateTo(item.id)}
+                      >
+                        <Icon size={15} />
+                        {t(`nav.${item.id}`)}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+          <button
+            className="settings-mobile-nav-backdrop"
+            type="button"
+            tabIndex={mobileNavOpen ? 0 : -1}
+            aria-label={t("nav.closeMenu")}
+            onClick={() => setMobileNavOpen(false)}
+          />
         </aside>
-        <main className="settings-content">
+        <main ref={contentRef} className="settings-content">
           {visitedPages.has("general") ? <section hidden={page !== "general"}><GeneralPage onThemeChange={setDarkTheme} /></section> : null}
           {visitedPages.has("models") ? <section hidden={page !== "models"}><ModelsPage /></section> : null}
           {visitedPages.has("agent") ? <section hidden={page !== "agent"}><AgentPage /></section> : null}

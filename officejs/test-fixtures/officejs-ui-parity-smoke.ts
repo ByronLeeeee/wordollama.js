@@ -326,18 +326,34 @@ for (const settingsLayoutContract of [
   '@plugin "daisyui"',
   'name: "wordollama"',
   "--depth: 0",
-  "grid-template-columns: minmax(260px, .75fr) minmax(480px, 1.45fr)",
+  "width: min(820px, 100%)",
+  "grid-template-columns: minmax(0, 1fr)",
   "background: var(--color-primary)",
   "color: var(--color-primary-content)",
-  ".settings-sidebar > div > .grid",
-  "display: contents",
-  "overflow-y: hidden",
-  "scrollbar-width: none",
+  ".settings-mobile-nav-trigger",
+  ".settings-sidebar.mobile-open .settings-nav-menu",
+  "max-height: min(62vh, 460px)",
+  ".settings-mobile-nav-backdrop",
   "@media (max-width: 760px)",
   ":where(button, input, select, textarea, summary):focus-visible",
 ]) {
   assert(settingsCss.includes(settingsLayoutContract), `settings visual system is missing: ${settingsLayoutContract}`);
 }
+assert(
+  settingsApp.includes("mobileNavOpen") &&
+    settingsApp.includes("setMobileNavOpen(false)") &&
+    settingsApp.includes('aria-expanded={mobileNavOpen}'),
+  "small settings windows must use a complete collapsible navigation menu",
+);
+assert(
+  !settingsApp.includes('id="ai-mode"') &&
+    !settingsApp.includes('id="output-language"') &&
+    settingsApp.includes('id="output-preference"') &&
+    settingsApp.includes("settings-memory-list") &&
+    settingsApp.includes("selectedMemories") &&
+    settingsApp.indexOf('id="output-preference"') < settingsApp.indexOf("function AgentPage()"),
+  "general settings must own structured memories and output preferences without legacy AI controls",
+);
 assert(
   [...css.matchAll(/box-shadow:\s*([^;]+);/gu)].every((match) =>
     /^none(?:\s*!important)?$/u.test(match[1]?.trim() ?? "")
@@ -365,7 +381,8 @@ assert(
 );
 assert(
   settingsApp.includes("runtime.autoPair()") &&
-    settingsApp.includes('t("advanced.automaticPairing")') &&
+    settingsApp.includes('t(`advanced.connection.${bridgeState}`)') &&
+    settingsApp.includes("if (!runtime.hasPairing()) await runtime.autoPair()") &&
     main.includes("if (!runtime.hasPairing()) await runtime.autoPair()") &&
     main.includes("runtime.registerOfficeTools(tools.list())"),
   "the trusted local add-in must automatically pair with Desktop Bridge and register Word tools",
