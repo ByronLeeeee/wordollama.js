@@ -1,4 +1,5 @@
-import { ClipboardPaste, FileText, Plus, RotateCcw, Save, Table2, WandSparkles } from "lucide-react";
+import { ClipboardPaste, Plus, RotateCcw, Save } from "lucide-react";
+import { FeatureIcon } from "./FeatureIcon";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
 function TextWorkflow() {
@@ -8,7 +9,7 @@ function TextWorkflow() {
         closeId="close-text-workflow"
         title={
           <span className="task-title">
-            <WandSparkles size={18} aria-hidden="true" />
+            <FeatureIcon id="text-workflow-feature-icon" name="polish" />
             <h2 id="text-workflow-title" data-i18n="taskpane.text.title">
               Text workflow
             </h2>
@@ -174,7 +175,7 @@ function TableWorkflow() {
     <section id="table-workflow-workspace" className="text-workflow-workspace task-workspace" hidden>
       <WorkspaceHeader
         closeId="close-table-workflow"
-        title={<span className="task-title"><Table2 size={18} aria-hidden="true" /><h2 data-i18n="taskpane.table.title">Text to table</h2></span>}
+        title={<span className="task-title"><FeatureIcon name="table" /><h2 data-i18n="taskpane.table.title">Text to table</h2></span>}
       />
       <div className="card card-border form-group task-panel">
         <div className="task-panel-heading">
@@ -291,7 +292,7 @@ function MarkdownWorkflow() {
     <section id="markdown-workflow-workspace" className="text-workflow-workspace task-workspace" hidden>
       <WorkspaceHeader
         closeId="close-markdown-workflow"
-        title={<span className="task-title"><FileText size={18} aria-hidden="true" /><h2 data-i18n="taskpane.markdown.title">Markdown conversion</h2></span>}
+        title={<span className="task-title"><FeatureIcon name="markdown" /><h2 data-i18n="taskpane.markdown.title">Markdown conversion</h2></span>}
       />
       <div className="card card-border form-group task-panel">
         <div className="task-panel-heading">

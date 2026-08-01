@@ -283,6 +283,19 @@ surfaceTitle.textContent = i18n.t(
   (requestedWorkflow && workflowSurfaceTitleKeys[requestedWorkflow]) ||
     surfaceTitleKeys[activeSurface],
 );
+const surfaceFeatureIcon = required<HTMLElement>("#surface-feature-icon");
+const surfaceFeatureName = requestedWorkflow && workflowSurfaceTitleKeys[requestedWorkflow]
+  ? requestedWorkflow === "diagnostics" ? "settings" : requestedWorkflow
+  : activeSurface === "legal" ? "risk"
+    : activeSurface === "create" ? "writing"
+      : activeSurface === "edit" ? "modify"
+        : activeSurface === "compare" ? "compare"
+          : activeSurface === "review" ? "review"
+            : activeSurface === "settings" || activeSurface === "diagnostics" ? "settings" : "agent";
+const surfaceFeatureUrl = `url("/assets/ribbon/${surfaceFeatureName}.svg")`;
+surfaceFeatureIcon.dataset.featureIcon = surfaceFeatureName;
+surfaceFeatureIcon.style.maskImage = surfaceFeatureUrl;
+surfaceFeatureIcon.style.webkitMaskImage = surfaceFeatureUrl;
 if (activeSurface === "diagnostics") {
   dialogTitle.textContent = i18n.t("taskpane.surfaces.diagnostics");
 } else if (activeSurface === "compare") {
@@ -841,6 +854,11 @@ async function openTextWorkflow(definition: TextWorkflowDefinition): Promise<voi
   textWorkflowPreferences = loadTextWorkflowPreferences(localStorage);
   textWorkflowAbortController?.abort();
   required<HTMLElement>("#text-workflow-title").textContent = definition.title;
+  const featureIcon = required<HTMLElement>("#text-workflow-feature-icon");
+  const featureIconUrl = `url("/assets/ribbon/${definition.key}.svg")`;
+  featureIcon.dataset.featureIcon = definition.key;
+  featureIcon.style.maskImage = featureIconUrl;
+  featureIcon.style.webkitMaskImage = featureIconUrl;
   required<HTMLTextAreaElement>("#workflow-instruction").value = definition.defaultInstruction;
   required<HTMLTextAreaElement>("#workflow-result").value = "";
   const preference = workflowPreference(textWorkflowPreferences, definition.key);

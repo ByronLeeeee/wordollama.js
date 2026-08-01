@@ -1,4 +1,5 @@
-import { FileText, Sparkles, Upload, X } from "lucide-react";
+import { FileText, Upload, X } from "lucide-react";
+import { FeatureIcon } from "./FeatureIcon";
 
 function ComparePanel() {
   const docxAccept =
@@ -8,7 +9,7 @@ function ComparePanel() {
       <section className="settings-section compare-card">
         <div className="compare-heading">
           <div className="compare-heading-icon" aria-hidden="true">
-            <Sparkles size={16} strokeWidth={2.2} />
+            <FeatureIcon name="compare" size={16} />
           </div>
           <div>
             <h3 data-i18n="taskpane.utility.compare.title">AI document revision analysis</h3>

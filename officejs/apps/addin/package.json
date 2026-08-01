@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc --noEmit",
     "bundle": "vite build",
+    "icons:generate": "node scripts/generate-icons.mjs",
     "test:mock": "node --experimental-strip-types ../../test-fixtures/officejs-registry-smoke.ts",
     "test:matrix": "node --experimental-strip-types ../../test-fixtures/officejs-host-matrix.ts",
     "test:golden": "node --experimental-strip-types ../../test-fixtures/officejs-golden-runner-smoke.ts",
@@ -15,6 +16,7 @@
     "test:settings-i18n": "node --experimental-strip-types ../../test-fixtures/officejs-settings-i18n-smoke.ts",
     "test:review": "node --experimental-strip-types ../../test-fixtures/review-workspace-smoke.ts",
     "test:ribbon": "node --experimental-strip-types ../../test-fixtures/officejs-ribbon-smoke.ts",
+    "test:icons": "node --experimental-strip-types ../../test-fixtures/feature-icon-smoke.ts",
     "test:workflow": "node --experimental-strip-types ../../test-fixtures/text-workflow-smoke.ts",
     "test:streaming": "node --experimental-strip-types ../../test-fixtures/text-streaming-contract-smoke.ts",
     "test:translation": "node --experimental-strip-types ../../test-fixtures/translation-workflow-smoke.ts",
@@ -37,6 +39,7 @@
     "validate": "office-addin-manifest validate manifest.xml"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.3.3",
     "@types/office-js": "^1.0.601",
     "@types/react": "^19.2.17",

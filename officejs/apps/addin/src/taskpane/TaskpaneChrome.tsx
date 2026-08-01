@@ -1,4 +1,5 @@
-import { Settings, Sparkles } from "lucide-react";
+import { Settings } from "lucide-react";
+import { FeatureIcon } from "./FeatureIcon";
 
 export function TaskpaneChrome() {
   return (
@@ -6,7 +7,7 @@ export function TaskpaneChrome() {
       <header className="navbar agent-header">
         <div className="brand">
           <span className="sparkle" aria-hidden="true">
-            <Sparkles size={16} strokeWidth={2} />
+            <FeatureIcon id="surface-feature-icon" name="agent" size={16} />
           </span>
           <div className="brand-copy">
             <span className="product-edition">WordOllama.JS</span>

@@ -1,4 +1,5 @@
-import { ArrowUp, ImagePlus, Sparkles, Target } from "lucide-react";
+import { ArrowUp, ImagePlus, Target } from "lucide-react";
+import { FeatureIcon } from "./FeatureIcon";
 
 export function AgentWorkspace() {
   return (
@@ -60,7 +61,7 @@ export function AgentWorkspace() {
         <div id="agent-output" className="chat-thread" aria-live="polite">
           <div id="empty-chat-state" className="empty-state">
             <span className="empty-icon" aria-hidden="true">
-              <Sparkles size={22} strokeWidth={1.8} />
+              <FeatureIcon name="agent" size={22} />
             </span>
             <h2>WordOllama.JS Agent</h2>
             <p className="muted" data-i18n="taskpane.agent.emptyHint">

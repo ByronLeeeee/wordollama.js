@@ -1,4 +1,5 @@
-import { Code2, ImagePlus, Upload } from "lucide-react";
+import { ImagePlus, Upload } from "lucide-react";
+import { FeatureIcon } from "./FeatureIcon";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
 function HtmlAppWorkflow() {
@@ -6,7 +7,7 @@ function HtmlAppWorkflow() {
     <section id="html-workflow-workspace" className="text-workflow-workspace task-workspace" hidden>
       <WorkspaceHeader
         closeId="close-html-workflow"
-        title={<span className="task-title"><Code2 size={18} aria-hidden="true" /><h2 data-i18n="taskpane.html.title">HTML app</h2></span>}
+        title={<span className="task-title"><FeatureIcon name="html" /><h2 data-i18n="taskpane.html.title">HTML app</h2></span>}
       />
       <div className="card card-border form-group task-panel">
         <label htmlFor="html-app-prompt" data-i18n="taskpane.html.requirements">
@@ -137,7 +138,7 @@ function ImageWorkflow() {
     <section id="image-workflow-workspace" className="text-workflow-workspace task-workspace" hidden>
       <WorkspaceHeader
         closeId="close-image-workflow"
-        title={<span className="task-title"><ImagePlus size={18} aria-hidden="true" /><h2 data-i18n="taskpane.image.title">Image understanding</h2></span>}
+        title={<span className="task-title"><FeatureIcon name="image" /><h2 data-i18n="taskpane.image.title">Image understanding</h2></span>}
       />
       <div className="form-group task-upload-control">
         <div className="file-picker-card image-file-picker">

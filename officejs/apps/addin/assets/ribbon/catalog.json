@@ -1,0 +1,192 @@
+[
+  {
+    "name": "writing",
+    "resource": "Writing",
+    "svg": "assets/ribbon/writing.svg"
+  },
+  {
+    "name": "image",
+    "resource": "Image",
+    "svg": "assets/ribbon/image.svg"
+  },
+  {
+    "name": "table",
+    "resource": "Table",
+    "svg": "assets/ribbon/table.svg"
+  },
+  {
+    "name": "html",
+    "resource": "Html",
+    "svg": "assets/ribbon/html.svg"
+  },
+  {
+    "name": "markdown",
+    "resource": "Markdown",
+    "svg": "assets/ribbon/markdown.svg"
+  },
+  {
+    "name": "agent",
+    "resource": "Agent",
+    "svg": "assets/ribbon/agent.svg"
+  },
+  {
+    "name": "custom-prompts",
+    "resource": "CustomPrompts",
+    "svg": "assets/ribbon/custom-prompts.svg"
+  },
+  {
+    "name": "polish",
+    "resource": "Polish",
+    "svg": "assets/ribbon/polish.svg"
+  },
+  {
+    "name": "expand",
+    "resource": "Expand",
+    "svg": "assets/ribbon/expand.svg"
+  },
+  {
+    "name": "simplify",
+    "resource": "Simplify",
+    "svg": "assets/ribbon/simplify.svg"
+  },
+  {
+    "name": "modify",
+    "resource": "Modify",
+    "svg": "assets/ribbon/modify.svg"
+  },
+  {
+    "name": "continue",
+    "resource": "Continue",
+    "svg": "assets/ribbon/continue.svg"
+  },
+  {
+    "name": "summarize",
+    "resource": "Summarize",
+    "svg": "assets/ribbon/summarize.svg"
+  },
+  {
+    "name": "fix",
+    "resource": "Fix",
+    "svg": "assets/ribbon/fix.svg"
+  },
+  {
+    "name": "translate",
+    "resource": "Translate",
+    "svg": "assets/ribbon/translate.svg"
+  },
+  {
+    "name": "risk",
+    "resource": "Risk",
+    "svg": "assets/ribbon/risk.svg"
+  },
+  {
+    "name": "fairness",
+    "resource": "Fairness",
+    "svg": "assets/ribbon/fairness.svg"
+  },
+  {
+    "name": "moot-court",
+    "resource": "MootCourt",
+    "svg": "assets/ribbon/moot-court.svg"
+  },
+  {
+    "name": "contract-compare",
+    "resource": "ContractCompare",
+    "svg": "assets/ribbon/contract-compare.svg"
+  },
+  {
+    "name": "compare",
+    "resource": "Compare",
+    "svg": "assets/ribbon/compare.svg"
+  },
+  {
+    "name": "law-search",
+    "resource": "LawSearch",
+    "svg": "assets/ribbon/law-search.svg"
+  },
+  {
+    "name": "review",
+    "resource": "Review",
+    "svg": "assets/ribbon/review.svg"
+  },
+  {
+    "name": "settings",
+    "resource": "Settings",
+    "svg": "assets/ribbon/settings.svg"
+  },
+  {
+    "name": "create-group",
+    "resource": "CreateGroup",
+    "svg": "assets/ribbon/create-group.svg"
+  },
+  {
+    "name": "edit-group",
+    "resource": "EditGroup",
+    "svg": "assets/ribbon/edit-group.svg"
+  },
+  {
+    "name": "edit-more-group",
+    "resource": "EditMoreGroup",
+    "svg": "assets/ribbon/edit-more-group.svg"
+  },
+  {
+    "name": "translate-group",
+    "resource": "TranslateGroup",
+    "svg": "assets/ribbon/translate-group.svg"
+  },
+  {
+    "name": "legal-group",
+    "resource": "LegalGroup",
+    "svg": "assets/ribbon/legal-group.svg"
+  },
+  {
+    "name": "settings-group",
+    "resource": "SettingsGroup",
+    "svg": "assets/ribbon/settings-group.svg"
+  },
+  {
+    "name": "settings-general",
+    "resource": "NavGeneral",
+    "svg": "assets/ribbon/settings-general.svg"
+  },
+  {
+    "name": "settings-models",
+    "resource": "NavModels",
+    "svg": "assets/ribbon/settings-models.svg"
+  },
+  {
+    "name": "settings-agent",
+    "resource": "NavAgent",
+    "svg": "assets/ribbon/settings-agent.svg"
+  },
+  {
+    "name": "settings-markdown",
+    "resource": "NavMarkdown",
+    "svg": "assets/ribbon/settings-markdown.svg"
+  },
+  {
+    "name": "settings-skills",
+    "resource": "NavSkills",
+    "svg": "assets/ribbon/settings-skills.svg"
+  },
+  {
+    "name": "settings-mcp",
+    "resource": "NavMcp",
+    "svg": "assets/ribbon/settings-mcp.svg"
+  },
+  {
+    "name": "settings-advanced",
+    "resource": "NavAdvanced",
+    "svg": "assets/ribbon/settings-advanced.svg"
+  },
+  {
+    "name": "settings-updates",
+    "resource": "NavUpdates",
+    "svg": "assets/ribbon/settings-updates.svg"
+  },
+  {
+    "name": "settings-about",
+    "resource": "NavAbout",
+    "svg": "assets/ribbon/settings-about.svg"
+  }
+]

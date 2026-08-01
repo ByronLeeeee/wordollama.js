@@ -1,12 +1,12 @@
 import {
   ArrowDownUp,
   ClipboardCopy,
-  Languages,
   Plus,
   RotateCcw,
   Trash2,
 } from "lucide-react";
 import { WorkspaceHeader } from "./WorkspaceHeader";
+import { FeatureIcon } from "./FeatureIcon";
 
 export function TranslationWorkspace() {
   return (
@@ -15,7 +15,7 @@ export function TranslationWorkspace() {
         closeId="close-translation-workspace"
         title={
           <span className="translation-title">
-            <Languages size={18} aria-hidden="true" />
+            <FeatureIcon name="translate" />
             <h2 data-i18n="taskpane.translation.title">Translate</h2>
           </span>
         }

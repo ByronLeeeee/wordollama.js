@@ -58,6 +58,7 @@ import {
   closeSettingsWindow,
   listWordStyles,
 } from "./dialog-rpc";
+import { FeatureIcon, type FeatureIconName } from "../taskpane/FeatureIcon";
 import { classifyUpdateResult } from "./update-status";
 
 type PageId =
@@ -2026,21 +2027,21 @@ export function SettingsApp() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [mobileNavOpen]);
 
-  const groups: Array<{ label: string; items: Array<{ id: PageId; icon: typeof House }> }> = [
+  const groups: Array<{ label: string; items: Array<{ id: PageId; icon: FeatureIconName }> }> = [
     { label: t("nav.preferences"), items: [
-      { id: "general", icon: House }, { id: "models", icon: Bot },
-      { id: "agent", icon: Sparkles }, { id: "markdown", icon: FileCode2 },
+      { id: "general", icon: "settings-general" }, { id: "models", icon: "settings-models" },
+      { id: "agent", icon: "settings-agent" }, { id: "markdown", icon: "settings-markdown" },
     ] },
     { label: t("nav.extensions"), items: [
-      { id: "skills", icon: Boxes }, { id: "mcp", icon: Network },
-      { id: "advanced", icon: SlidersHorizontal },
+      { id: "skills", icon: "settings-skills" }, { id: "mcp", icon: "settings-mcp" },
+      { id: "advanced", icon: "settings-advanced" },
     ] },
     { label: t("nav.system"), items: [
-      { id: "updates", icon: RefreshCw }, { id: "about", icon: Info },
+      { id: "updates", icon: "settings-updates" }, { id: "about", icon: "settings-about" },
     ] },
   ];
   const currentNavItem = groups.flatMap((group) => group.items).find((item) => item.id === page);
-  const CurrentNavIcon = currentNavItem?.icon ?? House;
+  const currentNavIcon = currentNavItem?.icon ?? "settings-general";
 
   return (
     <SettingsSaveContext.Provider value={saveContext}>
@@ -2063,7 +2064,7 @@ export function SettingsApp() {
             onClick={() => setMobileNavOpen((open) => !open)}
           >
             <span className="settings-mobile-nav-current">
-              <CurrentNavIcon size={17} />
+              <FeatureIcon name={currentNavIcon} size={17} />
               {t(`nav.${page}`)}
             </span>
             <ChevronDown className="settings-mobile-nav-chevron" size={17} />
@@ -2074,7 +2075,6 @@ export function SettingsApp() {
                 <p className="settings-nav-group">{group.label}</p>
                 <div className="grid gap-1">
                   {group.items.map((item) => {
-                    const Icon = item.icon;
                     return (
                       <button
                         key={item.id}
@@ -2082,7 +2082,7 @@ export function SettingsApp() {
                         type="button"
                         onClick={() => navigateTo(item.id)}
                       >
-                        <Icon size={15} />
+                        <FeatureIcon name={item.icon} size={15} />
                         {t(`nav.${item.id}`)}
                       </button>
                     );

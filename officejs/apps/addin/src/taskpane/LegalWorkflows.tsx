@@ -1,4 +1,5 @@
-import { ArrowLeft, Gavel, Plus, Search, Settings2, WandSparkles } from "lucide-react";
+import { ArrowLeft, Plus, Search, Settings2, WandSparkles } from "lucide-react";
+import { FeatureIcon } from "./FeatureIcon";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
 function LawWorkflow() {
@@ -6,7 +7,7 @@ function LawWorkflow() {
     <section id="law-workflow-workspace" className="text-workflow-workspace task-workspace" hidden>
       <WorkspaceHeader
         closeId="close-law-workflow"
-        title={<span className="task-title"><Search size={18} aria-hidden="true" /><h2 data-i18n="taskpane.law.title">Legal search</h2></span>}
+        title={<span className="task-title"><FeatureIcon name="law-search" /><h2 data-i18n="taskpane.law.title">Legal search</h2></span>}
       />
       <div className="card card-border task-panel task-search-panel">
       <div className="form-group">
@@ -85,7 +86,7 @@ function MootCourtWorkflow() {
     <section id="moot-workflow-workspace" className="text-workflow-workspace task-workspace" hidden>
       <WorkspaceHeader
         closeId="close-moot-workflow"
-        title={<span className="task-title"><Gavel size={18} aria-hidden="true" /><h2 data-i18n="taskpane.moot.title">Moot court investigation</h2></span>}
+        title={<span className="task-title"><FeatureIcon name="moot-court" /><h2 data-i18n="taskpane.moot.title">Moot court investigation</h2></span>}
       />
       <div className="form-group">
         <label htmlFor="moot-pleading-type" data-i18n="taskpane.moot.documentType">
@@ -183,7 +184,7 @@ function CustomPromptWorkflow() {
     <section id="custom-prompt-workspace" className="text-workflow-workspace task-workspace" hidden>
       <WorkspaceHeader
         closeId="close-custom-prompt"
-        title={<span className="task-title"><WandSparkles size={18} aria-hidden="true" /><h2 data-i18n="taskpane.prompts.title">My commands</h2></span>}
+        title={<span className="task-title"><FeatureIcon name="custom-prompts" /><h2 data-i18n="taskpane.prompts.title">My commands</h2></span>}
       />
 
       <div id="custom-prompt-launcher" className="prompt-launcher">
