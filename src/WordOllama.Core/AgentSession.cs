@@ -110,7 +110,8 @@ public sealed class AgentSession
                     : _executionMode == "ProposeChanges"
                         ? "The session is ProposeChanges: describe proposed edits but do not change the document."
                         : "The session is TrackedChanges: document writes are permitted and the host records revisions.") +
-                LanguageInstruction(_languageMode)));
+                LanguageInstruction(_languageMode) +
+                WritingProfileInstruction(request.WritingProfile)));
             _messages.Add(new ChatMessage(
                 "user",
                 request.UserRequirement,
@@ -126,6 +127,13 @@ public sealed class AgentSession
             "source" => "source",
             _ => "auto",
         };
+
+    private static string WritingProfileInstruction(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : "\nApply the following user memories and output preferences only when relevant. " +
+              "The explicit task, document facts, legal accuracy, and required output schema take precedence.\n" +
+              value.Trim();
 
     private static string LanguageInstruction(string mode) =>
         mode switch

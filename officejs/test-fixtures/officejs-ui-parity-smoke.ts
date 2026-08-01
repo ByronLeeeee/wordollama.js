@@ -321,7 +321,6 @@ for (const independentPane of [
   "WordOllama.JS.ContractComparePane",
   "WordOllama.JS.LawSearchPane",
   "WordOllama.JS.CustomPromptPane",
-  "WordOllama.JS.DiagnosticsPane",
 ]) {
   assert(manifest.includes(`<TaskpaneId>${independentPane}</TaskpaneId>`), `manifest is missing independent pane ${independentPane}`);
 }
@@ -451,7 +450,6 @@ for (const focusedRoute of [
   "surface=edit&amp;workflow=polish",
   "surface=review&amp;workflow=review",
   "surface=legal&amp;workflow=law-search",
-  "surface=diagnostics&amp;workflow=diagnostics",
 ]) {
   assert(manifest.includes(focusedRoute), `manifest is missing focused route ${focusedRoute}`);
 }
@@ -510,6 +508,11 @@ assert(!/body\s*\{[^}]*min-width:\s*320px/.test(css), "the real Word task pane m
 assert(
   /body\s*\{[^}]*font-size:\s*12px[^}]*line-height:\s*1\.5/.test(css),
   "task-pane DaisyUI controls must inherit the compact 12px Word UI type scale",
+);
+assert(
+  !manifest.includes("WordOllama.JS.DiagnosticsPane") &&
+    !manifest.includes('id="Diagnostics.Url"'),
+  "diagnostics must stay out of the release Ribbon and remain available through advanced settings",
 );
 assert(
   css.includes(".agent-shell .btn {") &&

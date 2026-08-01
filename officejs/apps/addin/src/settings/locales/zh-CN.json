@@ -67,6 +67,9 @@
     "memory": "记忆",
     "memoryHint": "您希望 AI 记得哪些？",
     "autoMemory": "自动记忆",
+    "memoryModel": "记忆模型",
+    "memoryModelHint": "留空时使用当前激活模型；删除所选模型后会自动回退。",
+    "memoryModelActive": "跟随当前激活模型",
     "emptyMemories": "还没有记忆",
     "newMemoryPlaceholder": "输入一条希望 AI 记住的内容",
     "deleteSelected": "删除所选",
@@ -81,6 +84,8 @@
     "save": "保存偏好"
   },
   "models": {
+    "ollamaExternalHint": "没有检测到可用的 Ollama 服务。WordOllama.JS 不会安装或配置 Ollama，请先从官方网站安装并启动，然后重新读取模型。",
+    "openOllamaDownload": "打开 Ollama 下载页",
     "title": "模型",
     "savedModels": "已保存模型",
     "modelCount": "{{count}} 个模型",

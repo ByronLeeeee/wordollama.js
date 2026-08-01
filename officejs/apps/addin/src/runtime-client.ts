@@ -17,8 +17,6 @@ import {
   type ProviderModelsResponse,
   type ProviderRuntimeResponse,
   type OllamaModelProgress,
-  type OllamaServerSettingsUpdate,
-  type OllamaServerSettingsView,
   type ReviewSettingsView,
   type ProviderProfileUpdate,
   type ProviderSettingsView,
@@ -376,11 +374,15 @@ export class RuntimeClient {
     return this.settingsRequest<ReviewSettingsView>("/settings/review");
   }
 
-  async saveReviewSettings(outputPreference: string, autoMemory: boolean): Promise<ReviewSettingsView> {
+  async saveReviewSettings(
+    outputPreference: string,
+    autoMemory: boolean,
+    memoryProviderProfileId = "",
+  ): Promise<ReviewSettingsView> {
     return this.settingsRequest<ReviewSettingsView>("/settings/review", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ outputPreference, autoMemory }),
+      body: JSON.stringify({ outputPreference, autoMemory, memoryProviderProfileId }),
     });
   }
 
@@ -643,20 +645,6 @@ export class RuntimeClient {
 
   async getProviderSettings(): Promise<ProviderSettingsView> {
     return this.settingsRequest("/settings/providers");
-  }
-
-  async getOllamaServerSettings(): Promise<OllamaServerSettingsView> {
-    return this.settingsRequest("/settings/ollama-server");
-  }
-
-  async saveOllamaServerSettings(
-    settings: OllamaServerSettingsUpdate,
-  ): Promise<OllamaServerSettingsView> {
-    return this.settingsRequest("/settings/ollama-server", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings),
-    });
   }
 
   async saveProviderProfile(profile: ProviderProfileUpdate): Promise<ProviderSettingsView> {

@@ -45,11 +45,10 @@ const routedWorkflows = [
   "polish", "expand", "simplify", "continue", "summarize", "fix", "compare",
   "translate", "risk", "fairness",
   "moot-court", "contract-compare", "law-search", "review", "custom-prompts",
-  "diagnostics",
 ];
 for (const workflow of routedWorkflows) {
   assert(manifest.includes(`&amp;workflow=${workflow}`), `manifest route missing ${workflow}`);
-  if (!["agent", "compare", "contract-compare", "review", "settings", "diagnostics"].includes(workflow)) {
+  if (!["agent", "compare", "contract-compare", "review", "settings"].includes(workflow)) {
     assert(main.includes(`"${workflow}"`) || main.includes(`${workflow}:`), `task pane route missing ${workflow}`);
   }
 }
@@ -86,7 +85,6 @@ for (const [resource, taskpane] of [
   ["LawSearch.Url", "LawSearchPane"],
   ["Review.Url", "ReviewPane"],
   ["CustomPrompts.Url", "CustomPromptPane"],
-  ["Diagnostics.Url", "DiagnosticsPane"],
 ] as const) {
   const actionPattern =
     `<TaskpaneId>WordOllama.JS.${taskpane}</TaskpaneId><SourceLocationresid="${resource}"/>`;
@@ -125,6 +123,11 @@ for (const control of ["Modify", "Polish", "Expand", "Simplify", "Continue", "Su
   );
 }
 assert(!manifest.includes('id="WordOllama.JS.EditMenu"'), "editing commands must not be hidden in a menu");
+assert(
+  !manifest.includes('id="WordOllama.JS.Diagnostics"') &&
+    !manifest.includes('id="Diagnostics.Url"'),
+  "release Ribbon must not expose diagnostics",
+);
 assert(!manifest.includes("WordOllama.JS.EditPane"), "editing workflows must not share one Word task pane");
 assert(
   !manifest.includes('id="WordOllama.JS.CreateMore"') &&
@@ -177,7 +180,7 @@ const chineseOverrides = Array.from(
   (match) => match[1],
 );
 assert(
-  chineseOverrides.length === 34 &&
+  chineseOverrides.length === 33 &&
     chineseOverrides.every((value) => /[\u3400-\u9fff]/u.test(value)),
   "all localized Ribbon labels and descriptions must provide zh-CN overrides",
 );

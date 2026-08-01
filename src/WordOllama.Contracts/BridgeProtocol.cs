@@ -120,7 +120,8 @@ public sealed record AgentStartRequest(
     int? ContextWindow = null,
     string? KeepAlive = null,
     string LanguageMode = "auto",
-    string UiLocale = "en-US");
+    string UiLocale = "en-US",
+    string WritingProfile = "");
 
 public sealed record AgentStartResponse(string SessionId, string Status);
 

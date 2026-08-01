@@ -98,6 +98,7 @@ export interface ReviewSettingsView {
   memories: MemoryItemView[];
   outputPreference: string;
   autoMemory: boolean;
+  memoryProviderProfileId: string;
   writingProfile: string;
 }
 
@@ -107,23 +108,6 @@ export interface MemoryItemView {
   createdAt: string;
   updatedAt: string;
 }
-
-export interface OllamaServerSettingsView {
-  platform: string;
-  modelsPath: string;
-  host: string;
-  keepAlive: string;
-  contextLength: number;
-  maxLoadedModels: number;
-  numParallel: number;
-  maxQueue: number;
-  restartRequired: boolean;
-}
-
-export type OllamaServerSettingsUpdate = Omit<
-  OllamaServerSettingsView,
-  "platform" | "restartRequired"
->;
 
 export interface ProviderProfileView {
   id: string;

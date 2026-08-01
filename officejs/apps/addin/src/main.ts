@@ -983,7 +983,11 @@ required<HTMLButtonElement>("#workflow-generate").addEventListener("click", asyn
   updateTextWorkflowActions();
   try {
     let writingProfile = "";
-    try { writingProfile = localStorage.getItem("wordollama-writing-profile") ?? ""; } catch { /* Ignore host storage policy. */ }
+    try {
+      writingProfile = (await runtime.getReviewSettings()).writingProfile;
+    } catch {
+      // A preference lookup failure must not block the requested editing task.
+    }
     const finalResult = await generateTextWorkflow(
       runtime,
       activeTextWorkflow,
@@ -3591,7 +3595,11 @@ async function loadReviewSettings(): Promise<void> {
     let settings = await runtime.getReviewSettings();
     const legacy = localStorage.getItem("wordollama-writing-profile")?.trim() ?? "";
     if (!settings.outputPreference && !settings.memories.length && legacy) {
-      settings = await runtime.saveReviewSettings(legacy, settings.autoMemory);
+      settings = await runtime.saveReviewSettings(
+        legacy,
+        settings.autoMemory,
+        settings.memoryProviderProfileId,
+      );
       localStorage.removeItem("wordollama-writing-profile");
     }
     reviewWritingProfile = settings.writingProfile;

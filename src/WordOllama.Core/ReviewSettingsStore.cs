@@ -11,7 +11,8 @@ public sealed record MemoryItem(
 public sealed record ReviewSettingsView(
     IReadOnlyList<MemoryItem> Memories,
     string OutputPreference,
-    bool AutoMemory)
+    bool AutoMemory,
+    string MemoryProviderProfileId = "")
 {
     public string WritingProfile =>
         string.Join(
@@ -27,9 +28,13 @@ public sealed record ReviewSettingsView(
             }.Where(value => !string.IsNullOrWhiteSpace(value)));
 }
 
-public sealed record ReviewSettingsUpdate(string OutputPreference, bool AutoMemory);
+public sealed record ReviewSettingsUpdate(
+    string OutputPreference,
+    bool AutoMemory,
+    string MemoryProviderProfileId = "");
 public sealed record MemoryUpdate(string Content);
 public sealed record MemoryDeleteRequest(IReadOnlyList<string> Ids);
+public sealed record MemoryChange(string Action, string? Id = null, string? Content = null);
 
 public sealed class ReviewSettingsStore
 {
@@ -51,12 +56,17 @@ public sealed class ReviewSettingsStore
     public ReviewSettingsView Save(ReviewSettingsUpdate update)
     {
         var outputPreference = Normalize(update.OutputPreference, 20_000, "Output preference");
+        var memoryProviderProfileId = Normalize(
+            update.MemoryProviderProfileId,
+            64,
+            "Memory provider profile id");
         lock (_gate)
         {
             _settings = _settings with
             {
                 OutputPreference = outputPreference,
                 AutoMemory = update.AutoMemory,
+                MemoryProviderProfileId = memoryProviderProfileId,
             };
             Persist();
             return _settings;
@@ -83,6 +93,54 @@ public sealed class ReviewSettingsStore
                     now,
                     now)],
             };
+            Persist();
+            return _settings;
+        }
+    }
+
+    public ReviewSettingsView ApplyMemoryChanges(IEnumerable<MemoryChange> changes)
+    {
+        lock (_gate)
+        {
+            var memories = _settings.Memories.ToList();
+            foreach (var change in changes.Take(20))
+            {
+                var action = change.Action?.Trim().ToLowerInvariant();
+                var content = Normalize(change.Content, 2_000, "Memory");
+                if (action == "add")
+                {
+                    if (content.Length == 0 || memories.Any(item =>
+                            string.Equals(item.Content, content, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
+                    var now = DateTimeOffset.UtcNow;
+                    memories.Add(new MemoryItem(Guid.NewGuid().ToString("N"), content, now, now));
+                    continue;
+                }
+
+                var index = memories.FindIndex(item =>
+                    string.Equals(item.Id, change.Id, StringComparison.Ordinal));
+                if (index < 0) continue;
+                if (action == "delete")
+                {
+                    memories.RemoveAt(index);
+                }
+                else if (action == "update" && content.Length > 0 && !memories
+                             .Where((_, itemIndex) => itemIndex != index)
+                             .Any(item => string.Equals(
+                                 item.Content,
+                                 content,
+                                 StringComparison.OrdinalIgnoreCase)))
+                {
+                    memories[index] = memories[index] with
+                    {
+                        Content = content,
+                        UpdatedAt = DateTimeOffset.UtcNow,
+                    };
+                }
+            }
+            _settings = _settings with { Memories = memories.Take(500).ToArray() };
             Persist();
             return _settings;
         }
@@ -162,13 +220,17 @@ public sealed class ReviewSettingsStore
                            storedMemories.ValueKind == JsonValueKind.Array
                 ? storedMemories.Deserialize<MemoryItem[]>(JsonOptions) ?? []
                 : [];
+            var memoryProviderProfileId = root.TryGetProperty("memoryProviderProfileId", out var memoryProvider)
+                ? memoryProvider.GetString() ?? string.Empty
+                : string.Empty;
             return new ReviewSettingsView(
                 memories
                     .Where(item => !string.IsNullOrWhiteSpace(item.Content))
                     .Take(500)
                     .ToArray(),
                 Normalize(outputPreference, 20_000, "Output preference"),
-                autoMemory);
+                autoMemory,
+                Normalize(memoryProviderProfileId, 64, "Memory provider profile id"));
         }
         catch (JsonException exception)
         {
@@ -176,7 +238,7 @@ public sealed class ReviewSettingsStore
         }
     }
 
-    private static ReviewSettingsView Empty() => new([], string.Empty, false);
+    private static ReviewSettingsView Empty() => new([], string.Empty, false, string.Empty);
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {

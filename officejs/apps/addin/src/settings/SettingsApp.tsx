@@ -249,6 +249,9 @@ function normalizeReviewSettings(
         ? value.writingProfile
         : "",
     autoMemory: value?.autoMemory === true,
+    memoryProviderProfileId: typeof value?.memoryProviderProfileId === "string"
+      ? value.memoryProviderProfileId
+      : "",
     writingProfile: typeof value?.writingProfile === "string" ? value.writingProfile : "",
   };
 }
@@ -267,8 +270,10 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
     memories: [] as MemoryItemView[],
     outputPreference: "",
     autoMemory: false,
+    memoryProviderProfileId: "",
     writingProfile: "",
   });
+  const [memoryModels, setMemoryModels] = useState<ProviderProfileView[]>([]);
   const [newMemory, setNewMemory] = useState("");
   const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
   const [editingMemory, setEditingMemory] = useState("");
@@ -276,13 +281,23 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
   const saved = useRef({ preference, settings, reviewSettings });
 
   useEffect(() => {
-    void runtime.getReviewSettings()
-      .then((value) => {
-        const normalized = normalizeReviewSettings(value);
+    void Promise.all([runtime.getReviewSettings(), runtime.getProviderSettings()])
+      .then(([value, providers]) => {
+        const loaded = normalizeReviewSettings(value);
+        const normalized = {
+          ...loaded,
+          memoryProviderProfileId: providers.profiles.some(
+            (profile) => profile.id === loaded.memoryProviderProfileId,
+          ) ? loaded.memoryProviderProfileId : "",
+        };
+        setMemoryModels(providers.profiles);
         saved.current = { ...saved.current, reviewSettings: normalized };
         setReviewSettings(normalized);
       })
-      .catch((error) => setStatus(toStatus(error, "common.notConnected")));
+      .catch((error) => {
+        setMemoryModels([]);
+        setStatus(toStatus(error, "common.notConnected"));
+      });
   }, []);
 
   const update = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
@@ -305,11 +320,13 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
     let persistedReviewSettings = reviewSettings;
     if (
       reviewSettings.outputPreference !== saved.current.reviewSettings.outputPreference ||
-      reviewSettings.autoMemory !== saved.current.reviewSettings.autoMemory
+      reviewSettings.autoMemory !== saved.current.reviewSettings.autoMemory ||
+      reviewSettings.memoryProviderProfileId !== saved.current.reviewSettings.memoryProviderProfileId
     ) {
       persistedReviewSettings = normalizeReviewSettings(await runtime.saveReviewSettings(
           reviewSettings.outputPreference,
           reviewSettings.autoMemory,
+          reviewSettings.memoryProviderProfileId,
         ));
     }
     writeStored("wordollama-general-settings", {
@@ -326,7 +343,8 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
     "general",
     !settingsEqual(settings, saved.current.settings) ||
       reviewSettings.outputPreference !== saved.current.reviewSettings.outputPreference ||
-      reviewSettings.autoMemory !== saved.current.reviewSettings.autoMemory,
+      reviewSettings.autoMemory !== saved.current.reviewSettings.autoMemory ||
+      reviewSettings.memoryProviderProfileId !== saved.current.reviewSettings.memoryProviderProfileId,
     save,
   );
 
@@ -425,6 +443,30 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
                   />
                 </label>
               </div>
+              {reviewSettings.autoMemory ? (
+                <label className="settings-control-row settings-memory-model" htmlFor="memory-model">
+                  <span className="settings-switch-copy">
+                    <span>{t("general.memoryModel")}</span>
+                    <small>{t("general.memoryModelHint")}</small>
+                  </span>
+                  <select
+                    id="memory-model"
+                    className="select select-sm"
+                    value={reviewSettings.memoryProviderProfileId}
+                    onChange={(event) => setReviewSettings((current) => ({
+                      ...current,
+                      memoryProviderProfileId: event.currentTarget.value,
+                    }))}
+                  >
+                    <option value="">{t("general.memoryModelActive")}</option>
+                    {memoryModels.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.model} · {profile.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               {reviewSettings.memories.length ? (
                 <div className="settings-memory-toolbar">
                   <label className="settings-memory-select-all">
@@ -704,6 +746,7 @@ function ModelsPage() {
   const [oauth, setOauth] = useState({ clientId: "", clientSecret: "", quotaProject: "" });
   const [status, setStatus] = useState<StatusState>(null);
   const [connectionStatus, setConnectionStatus] = useState<StatusState>(null);
+  const [ollamaUnavailable, setOllamaUnavailable] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProviderProfileView | null>(null);
 
   const load = async () => {
@@ -731,6 +774,7 @@ function ModelsPage() {
     setConnectionStatus(translatedStatus("models.fetchingModels"));
     try {
       const result = await runtime.fetchProviderModels(form);
+      setOllamaUnavailable(false);
       setModels(result.models);
       setConnectionStatus(translatedStatus(
         result.models.length ? "models.connectionSucceeded" : "models.emptyModels",
@@ -738,6 +782,7 @@ function ModelsPage() {
         result.models.length === 0,
       ));
     } catch (error) {
+      setOllamaUnavailable(form.type.trim().toLowerCase() === "ollama");
       setConnectionStatus(toStatus(error, "models.fetchModelsFailed"));
     }
   };
@@ -1068,6 +1113,19 @@ function ModelsPage() {
             ) : null}
 
             <Status value={connectionStatus} />
+            {ollamaUnavailable ? (
+              <div className="alert alert-warning settings-ollama-guide">
+                <span>{t("models.ollamaExternalHint")}</span>
+                <a
+                  className="btn btn-sm"
+                  href="https://ollama.com/download"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t("models.openOllamaDownload")}
+                </a>
+              </div>
+            ) : null}
             <div className="modal-action">
               <button className="btn btn-sm" type="button" onClick={() => setEditorOpen(false)}>{t("common.cancel")}</button>
               <button className="btn btn-primary btn-sm" type="button" disabled={!canSave} onClick={() => void saveProvider()}>{t("common.save")}</button>

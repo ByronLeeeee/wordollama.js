@@ -17,7 +17,6 @@ $smokeRoot = if ([string]::IsNullOrWhiteSpace($BuildRoot)) {
     [IO.Path]::GetFullPath($BuildRoot)
 }
 $origin = "https://localhost:3000"
-$pairingCode = "wordollama-live-api-smoke"
 $node = (Get-Command node.exe -ErrorAction Stop).Source
 $dotnet = (Get-Command dotnet -ErrorAction Stop).Source
 $bridgeProcess = $null
@@ -88,9 +87,9 @@ function Wait-BridgeReady {
 
 function New-BridgeSession {
     param([Parameter(Mandatory = $true)][string]$BaseUrl)
-    $response = Invoke-RestMethod -Method Post -Uri "$BaseUrl/pair" `
+    $response = Invoke-RestMethod -Method Post -Uri "$BaseUrl/pair/automatic" `
         -Headers @{ Origin = $origin } -ContentType "application/json" `
-        -Body (@{ pairingCode = $pairingCode; origin = $origin } | ConvertTo-Json)
+        -Body (@{ origin = $origin } | ConvertTo-Json)
     if ($response.protocolVersion -ne "1.0" -or
         [string]::IsNullOrWhiteSpace([string]$response.sessionToken)) {
         throw "Live Bridge pairing did not return a protocol 1.0 session."
@@ -129,7 +128,6 @@ function Start-IsolatedBridge {
     $environment = @{
         "ASPNETCORE_ENVIRONMENT" = "Development"
         "Bridge__Urls" = "http://127.0.0.1:$Port"
-        "Bridge__PairingCode" = $pairingCode
         "Bridge__AllowedOrigins__0" = $origin
         "Bridge__ProviderSettingsPath" = (Join-Path $smokeRoot "provider-settings.json")
         "Bridge__McpSettingsPath" = (Join-Path $smokeRoot "mcp-settings.json")

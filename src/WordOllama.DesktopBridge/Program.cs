@@ -50,7 +50,6 @@ var usesDefaultPersistentPath = new[]
     "Bridge:McpSettingsPath",
     "Bridge:ReviewSettingsPath",
     "Bridge:AgentRecoveryPath",
-    "Bridge:OllamaServerSettingsPath",
     "Bridge:LocalTools:SkillsRoot",
 }.Any(key => string.IsNullOrWhiteSpace(builder.Configuration[key]));
 if (builder.Configuration.GetValue("Bridge:MigrateLegacyUserData", true) &&
@@ -150,10 +149,6 @@ var reviewSettings = new ReviewSettingsStore(reviewSettingsPath);
 var agentRecoveryPath = builder.Configuration["Bridge:AgentRecoveryPath"]
     ?? Path.Combine(settingsRoot, "agent-recovery.bin");
 var agentRecoveryStore = new EncryptedAgentRecoveryStore(agentRecoveryPath, secretStore);
-var ollamaServerSettingsPath = builder.Configuration["Bridge:OllamaServerSettingsPath"]
-    ?? Path.Combine(settingsRoot, "ollama-server-settings.json");
-var ollamaServerSettings = new OllamaServerSettingsStore(ollamaServerSettingsPath);
-ollamaServerSettings.ReapplyForCurrentLoginSession();
 var bridgeVersion = typeof(Program).Assembly
     .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
     .InformationalVersion.Split('+', 2)[0]
@@ -250,7 +245,6 @@ builder.Services.AddSingleton<IModelProvider>(reloadableProvider);
 builder.Services.AddSingleton(mcpSettings);
 builder.Services.AddSingleton(reviewSettings);
 builder.Services.AddSingleton<IAgentRecoveryStore>(agentRecoveryStore);
-builder.Services.AddSingleton(ollamaServerSettings);
 builder.Services.AddSingleton<GoogleOAuthService>();
 builder.Services.AddSingleton(updateService);
 builder.Services.AddSingleton<IUpdateInstallerPlatform, SystemUpdateInstallerPlatform>();
@@ -324,26 +318,29 @@ app.MapGet("/health", (IAgentRuntime runtime, IModelProvider provider) =>
         Ready: true,
         ["bridge", .. runtime.Capabilities, provider.ProviderType, "provider-settings", "local-process", "local-secrets", "legal-articles", .. agentRecoveryCapabilities])));
 
-app.MapPost("/pair", (PairRequest request, BridgeSessionStore sessions) =>
+if (app.Environment.IsDevelopment())
 {
-    if (string.IsNullOrWhiteSpace(request.PairingCode) ||
-        !sessions.IsPairingCodeValid(request.PairingCode))
+    app.MapPost("/pair", (PairRequest request, BridgeSessionStore sessions) =>
     {
-        return Results.Unauthorized();
-    }
+        if (string.IsNullOrWhiteSpace(request.PairingCode) ||
+            !sessions.IsPairingCodeValid(request.PairingCode))
+        {
+            return Results.Unauthorized();
+        }
 
-    if (!sessions.IsOriginAllowed(request.Origin))
-    {
-        return Results.BadRequest(new { error = "origin_not_allowed" });
-    }
+        if (!sessions.IsOriginAllowed(request.Origin))
+        {
+            return Results.BadRequest(new { error = "origin_not_allowed" });
+        }
 
-    var session = sessions.Create(request.Origin);
-    return Results.Ok(new PairResponse(
-        BridgeProtocol.CurrentVersion,
-        session.Token,
-        session.ExpiresAt,
-        ["agent", "providers", "provider-settings", "mcp", "skills", "local-tools", .. agentRecoveryCapabilities]));
-});
+        var session = sessions.Create(request.Origin);
+        return Results.Ok(new PairResponse(
+            BridgeProtocol.CurrentVersion,
+            session.Token,
+            session.ExpiresAt,
+            ["agent", "providers", "provider-settings", "mcp", "skills", "local-tools", .. agentRecoveryCapabilities]));
+    });
+}
 
 app.MapPost("/pair/automatic", (
     AutomaticPairRequest request,
@@ -1011,45 +1008,6 @@ app.MapPost("/settings/memories/delete", (
         : Results.Unauthorized();
 });
 
-app.MapGet("/settings/ollama-server", (
-    HttpRequest httpRequest,
-    BridgeSessionStore sessions,
-    OllamaServerSettingsStore settings) =>
-{
-    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
-    var origin = httpRequest.Headers["Origin"].FirstOrDefault();
-    return sessions.TryGet(token, origin, out _)
-        ? Results.Ok(settings.Get())
-        : Results.Unauthorized();
-});
-
-app.MapPut("/settings/ollama-server", (
-    HttpRequest httpRequest,
-    OllamaServerSettingsUpdate request,
-    BridgeSessionStore sessions,
-    OllamaServerSettingsStore settings) =>
-{
-    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
-    var origin = httpRequest.Headers["Origin"].FirstOrDefault();
-    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
-    try
-    {
-        return Results.Ok(settings.SaveAndApply(request));
-    }
-    catch (ArgumentException exception)
-    {
-        return Results.BadRequest(new { error = exception.Message });
-    }
-    catch (PlatformNotSupportedException exception)
-    {
-        return Results.Problem(exception.Message, statusCode: StatusCodes.Status501NotImplemented);
-    }
-    catch (InvalidOperationException exception)
-    {
-        return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway);
-    }
-});
-
 app.MapPost("/local/execute-command", async (
     HttpRequest httpRequest,
     ExecuteCommandRequest request,
@@ -1603,7 +1561,11 @@ app.MapPost("/agent/sessions", (
         .Concat(internalTools.SelectMany(tool => tool.GetToolDescriptors()))
         .ToArray();
     var session = agentSessions.Create(
-        providerSettings.ApplyDefaults(request with { Tools = tools }),
+        providerSettings.ApplyDefaults(request with
+        {
+            Tools = tools,
+            WritingProfile = reviewSettings.Get().WritingProfile,
+        }),
         origin!);
     return Results.Ok(new AgentStartResponse(session.Id, session.Status));
 });
@@ -1813,7 +1775,7 @@ public sealed class BridgeSessionStore
     private readonly Dictionary<string, IReadOnlyList<OfficeToolDescriptor>> _officeTools = new(StringComparer.Ordinal);
     private readonly object _gate = new();
 
-    public BridgeSessionStore(IConfiguration configuration)
+    public BridgeSessionStore(IConfiguration configuration, IWebHostEnvironment environment)
     {
         _pairingCode = configuration["Bridge:PairingCode"]
             ?? CreatePairingCode();
@@ -1821,7 +1783,10 @@ public sealed class BridgeSessionStore
             .Get<string[]>()
             ?? ["https://localhost:3000", "https://localhost:5173"];
 
-        Console.WriteLine($"WordOllama Bridge pairing code: {_pairingCode}");
+        if (environment.IsDevelopment())
+        {
+            Console.WriteLine($"WordOllama Bridge development pairing code: {_pairingCode}");
+        }
     }
 
     public bool IsPairingCodeValid(string code) =>

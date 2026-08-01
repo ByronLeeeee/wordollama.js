@@ -269,4 +269,6 @@ pwsh ./packaging/create-update-index.ps1 `
 
 默认 HTTP 仅用于本地开发/测试；发布配置必须通过 Kestrel 证书配置切换到 HTTPS，并限制允许的 Add-in origin。
 
-Ollama 服务级设置由已配对的任务窗格显式触发：Windows 写入当前用户环境变量，macOS 通过 `launchctl` 写入登录会话，并由 Bridge 保存后在后续启动时重放。用户保存后必须完全退出并重启 Ollama。安装器不会自动迁移或删除模型目录；`OLLAMA_HOST` 使用非回环地址会扩大网络暴露面，而 Ollama 本身没有访问认证。
+Ollama 是完全独立的外部依赖。安装器与 Bridge 不安装、不更新、不配置 Ollama，
+也不迁移或删除模型目录；设置页只检测服务、读取模型并在不可用时提供官方安装指引。
+监听地址、模型目录和运行参数由用户在 Ollama 中自行维护。

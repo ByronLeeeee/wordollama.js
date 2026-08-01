@@ -113,7 +113,6 @@
               <Group id="WordOllama.JS.SettingsGroup">
                 <Label resid="SettingsGroup.Label" /><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon>
                 <Control xsi:type="Button" id="WordOllama.JS.Settings"><Label resid="Settings.Label" /><Supertip><Title resid="Settings.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ExecuteFunction"><FunctionName>openSettingsDialog</FunctionName></Action></Control>
-                <Control xsi:type="Button" id="WordOllama.JS.Diagnostics"><Label resid="Diagnostics.Label" /><Supertip><Title resid="Diagnostics.Label" /><Description resid="Workflow.Tooltip" /></Supertip><Icon><bt:Image size="16" resid="Icon.16" /><bt:Image size="32" resid="Icon.32" /><bt:Image size="80" resid="Icon.80" /></Icon><Action xsi:type="ShowTaskpane"><TaskpaneId>WordOllama.JS.DiagnosticsPane</TaskpaneId><SourceLocation resid="Diagnostics.Url" /></Action></Control>
               </Group>
               <Label resid="Tab.Label" />
             </CustomTab>
@@ -163,7 +162,6 @@
         <bt:Url id="Review.Url" DefaultValue="https://localhost:3000/index.html?surface=review&amp;workflow=review" />
         <bt:Url id="CustomPrompts.Url" DefaultValue="https://localhost:3000/index.html?surface=create&amp;workflow=custom-prompts" />
         <bt:Url id="Settings.Url" DefaultValue="https://localhost:3000/settings.html" />
-        <bt:Url id="Diagnostics.Url" DefaultValue="https://localhost:3000/index.html?surface=diagnostics&amp;workflow=diagnostics" />
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="Tab.Label" DefaultValue="WordOllama.JS" />
@@ -198,7 +196,6 @@
         <bt:String id="SettingsGroup.Label" DefaultValue="Settings"><bt:Override Locale="zh-CN" Value="设置" /></bt:String>
         <bt:String id="CustomPrompts.Label" DefaultValue="My Commands"><bt:Override Locale="zh-CN" Value="我的指令" /></bt:String>
         <bt:String id="Settings.Label" DefaultValue="Settings"><bt:Override Locale="zh-CN" Value="设置" /></bt:String>
-        <bt:String id="Diagnostics.Label" DefaultValue="Diagnostics"><bt:Override Locale="zh-CN" Value="诊断" /></bt:String>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="residDescription" DefaultValue="WordOllama.JS unified add-in for Word on Windows and Mac"><bt:Override Locale="zh-CN" Value="适用于 Windows 和 Mac Word 的 WordOllama.JS 统一加载项" /></bt:String>

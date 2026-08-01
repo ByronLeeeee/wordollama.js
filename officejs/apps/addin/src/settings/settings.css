@@ -1293,6 +1293,14 @@ body {
   gap: 8px;
 }
 
+.settings-memory-model {
+  margin-block: 0.75rem;
+}
+
+.settings-memory-model > .select {
+  width: min(22rem, 48%);
+}
+
 .settings-memory-toolbar {
   min-height: 32px;
   flex-wrap: wrap;
@@ -1408,6 +1416,15 @@ body {
   .settings-memory-add {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .settings-memory-model {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-memory-model > .select {
+    width: 100%;
   }
 
   .settings-mcp-server-row {

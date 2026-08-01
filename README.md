@@ -31,10 +31,12 @@ Office manifest 与当前用户登录自启。完成一次本地 HTTPS 信任配
 - Windows 需要 WebView2；macOS 使用系统提供的 Office WebView。
 - 使用 Ollama 时需另外安装并启动 Ollama。
 
-正式打包还需要目标平台的签名环境：
+正式打包还需要目标平台的签名环境。首期采用用户明确确认后安装到当前用户信任库的
+自签名证书；该方案不会获得 SmartScreen 或 Apple 公证的公共信誉：
 
-- Windows：代码签名证书、Windows SDK `signtool.exe` 和 RFC 3161 时间戳服务。
-- macOS：Developer ID Application、Developer ID Installer 和 Apple 公证凭据。
+- Windows：Windows SDK `signtool.exe`；安装器负责产品专用证书的创建、固定和清理。
+- macOS：本地自签名和显式 Keychain 信任；若未来需要无警告公共分发，仍需
+  Developer ID Application、Developer ID Installer 和 Apple 公证凭据。
 
 ## 首次准备
 
@@ -74,13 +76,9 @@ Word 容器的 `wef` 目录。它不会注册 COM/VSTO ProgId。
 dotnet run --project ./src/WordOllama.DesktopBridge/WordOllama.DesktopBridge.csproj
 ```
 
-开发 Bridge 默认监听 `http://127.0.0.1:37421`。终端会输出：
-
-```text
-WordOllama Bridge pairing code: xxxxxx
-```
-
-首次打开加载项时，在设置中输入这个配对码。
+开发 Bridge 默认监听 `http://127.0.0.1:37421`。受信任的开发前端会自动建立会话，
+不需要在 Word 中复制配对码。手动配对接口只在 Development 环境保留给诊断回归，
+不会出现在正式 Ribbon。
 
 ### 3. 启动 React 前端
 

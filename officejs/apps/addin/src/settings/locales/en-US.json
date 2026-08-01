@@ -67,6 +67,9 @@
     "memory": "Memory",
     "memoryHint": "What would you like AI to remember?",
     "autoMemory": "Automatic memory",
+    "memoryModel": "Memory model",
+    "memoryModelHint": "Leave empty to use the active model; deleted selections fall back automatically.",
+    "memoryModelActive": "Follow the active model",
     "emptyMemories": "No memories yet",
     "newMemoryPlaceholder": "Enter something you want AI to remember",
     "deleteSelected": "Delete selected",
@@ -81,6 +84,8 @@
     "save": "Save preferences"
   },
   "models": {
+    "ollamaExternalHint": "No usable Ollama service was detected. WordOllama.JS does not install or configure Ollama; install and start it from the official site, then fetch models again.",
+    "openOllamaDownload": "Open Ollama downloads",
     "title": "Models",
     "savedModels": "Saved models",
     "modelCount": "{{count}} models",

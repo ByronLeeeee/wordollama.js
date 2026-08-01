@@ -13,9 +13,9 @@
 
 ## 当前状态
 
-第一阶段已完成通信和文档操作骨架。Office.js 适配器目前覆盖原 `WordOllama/lib/Tools` 中的 35 个 Word 工具（文本/段落、批注书签、格式、法律审阅、分页页眉、图片、表格和目录），另提供 `ask_human`；任务窗格配对后会通过 `/capabilities` 将工具名称、schema 和写入属性注册到 Bridge。
+第一阶段已完成通信和文档操作骨架。Office.js 适配器目前覆盖原 `WordOllama/lib/Tools` 中的 35 个 Word 工具（文本/段落、批注书签、格式、法律审阅、分页页眉、图片、表格和目录），另提供 `ask_human`；任务窗格建立自动会话后会通过 `/capabilities` 将工具名称、schema 和写入属性注册到 Bridge。
 
-Bridge 配对会话有效期为 8 小时，并强制绑定受信任的 Add-in Origin。前端只缓存 session token、协议版本和到期时间，不保存配对码；同源的 Agent、翻译、审阅等独立任务窗格可复用一次配对。缓存过期、损坏、协议不兼容或服务端返回 401 时会自动清除，Bridge 离线等临时网络错误不会误删仍有效的会话。
+Bridge 自动会话有效期为 8 小时，并强制绑定受信任的 Add-in Origin。前端只缓存 session token、协议版本和到期时间；同源的 Agent、翻译、审阅等独立任务窗格可复用会话。缓存过期、损坏、协议不兼容或服务端返回 401 时会自动清除，Bridge 离线等临时网络错误不会误删仍有效的会话。手动配对端点只在 Development 环境存在，正式 Ribbon 不提供配对或调试入口。
 
 第二阶段已将 Ollama、OpenAI 兼容端点、Claude 和 Gemini 接入 .NET 8 Core，统一提供 `/providers/chat`、`/providers/chat/stream` 和 `/providers/models`；`/providers/ollama/*` 仍保留为兼容别名。流式接口使用 NDJSON：Bridge 将 Ollama NDJSON、OpenAI/Claude/Gemini SSE 归一化为同一事件；不支持原生流的兼容端点自动降级为单块完成事件。任务窗格可在配对后直接测试本地模型。
 
@@ -53,7 +53,7 @@ Bridge 不会把 API Key 写入 Office.js 状态或 Skill 文件；`WordOllama.P
 
 为避免与仍可并存的 COM `WordOllama` 相互覆盖，统一版的配置、恢复点、更新缓存和 Skills 现在都位于独立的 `WordOllama.JS` 用户目录，系统密钥也使用 `WordOllama.JS/<name>` 命名空间。首次启动会以有界、拒绝链接的复制方式导入旧 Bridge 的已知 JSON/恢复文件和旧 Skills；源文件不移动、不删除，迁移标记写入后不再反复同步，因此 JS 版后续新增、修改或删除 Skill 不会影响 COM 版。已有旧 Bridge 密钥只在新命名空间缺失时读取并复制，新写入和卸载均只触及 JS 命名空间。
 
-原版 Ollama 高级设置也已进入统一设置页。Bridge 在 Windows 写入当前用户环境变量，在 macOS 使用 `launchctl setenv/unsetenv` 并重放持久化配置，覆盖模型目录、监听地址、默认 keep-alive/上下文、最大加载模型数、并行数与队列。修改后必须完全退出并重启 Ollama。为避免破坏或长时间搬移数十 GB 的模型，统一版只修改目标目录，不自动移动旧目录内容；向非回环地址开放监听前会要求再次确认。
+Ollama 完全作为外部依赖：WordOllama.JS 只读取其模型列表和调用接口，不安装、更新、配置或删除 Ollama 及其模型。检测不到服务时，模型页会显示本地化说明、官方下载链接和重新读取入口；服务目录、监听地址、keep-alive、上下文和并行数均由用户在 Ollama 中自行管理。
 
 Gemini Provider 保留 OAuth 登录能力，但不会复制 VSTO 版把短期 access token 当 API Key 的旧实现。统一版由 Bridge 打开系统浏览器，以随机 `127.0.0.1` 回环端口接收回调，校验 state 并使用 PKCE S256；access/refresh token 与客户端 secret 编码后只写入平台密钥库，Provider 在 access token 到期时用 refresh token 自动刷新。Google Cloud Project ID 可作为 `x-goog-user-project` 配额项目发送。
 
@@ -65,6 +65,6 @@ Gemini Provider 保留 OAuth 登录能力，但不会复制 VSTO 版把短期 ac
 
 Ribbon 不再把所有命令复用到一个拥挤容器，也不再把 Office.js 命令混进“开始”页或现有 COM 页签。Manifest 建立独立的 `WordOllama.JS` 自定义页签，并通过稳定的 `TaskpaneId` 打开 Agent、编辑、翻译、比较、审阅、法律工具和“我的指令”等工作区。用户自定义提示词统一收拢到“我的指令”：右侧快捷面板提供搜索、收藏、最近使用和管理，点击列表项后直接读取当前选区并流式执行；旧版 C1–C4 快捷槽会自动迁移为收藏。前端仍使用同一个 TypeScript bundle，通过 `surface` 与 `workflow` 路由显示对应工作区，Windows/Mac 保持统一实现。不同 `TaskpaneId` 的真实 Windows/Mac 并存行为仍须在发布宿主中逐项验收。
 
-基础设置不再只是浏览器偏好：模型页管理可切换的 Provider/模型配置，基础页保存记忆和输出偏向，默认文档操作会按选区稳定性安全选择插入、修订、替换、批注或交给独立审阅窗格。Agent 完成 Word 写操作后可按偏好提示审阅；支持 `WordApiDesktop 1.4` 的 Windows/Mac Word 可在“文档审阅”窗格读取、定位、逐项接受/拒绝或批量处理真实 Word 修订，旧宿主会明确降级。
+基础设置不再只是浏览器偏好：模型页管理可切换的 Provider/模型配置，基础页保存结构化记忆和输出偏向；自动记忆可单独选择模型，被删除的配置会回退到当前激活模型。输出偏向会注入 Agent 和自然语言编辑工作流。默认文档操作会按选区稳定性安全选择插入、修订、替换、批注或交给独立审阅窗格。Agent 完成 Word 写操作后可按偏好提示审阅；支持 `WordApiDesktop 1.4` 的 Windows/Mac Word 可在“文档审阅”窗格读取、定位、逐项接受/拒绝或批量处理真实 Word 修订，旧宿主会明确降级。
 
 设置使用独立 `settings.html` React 应用（React 19、TypeScript 7、Vite 8、Tailwind CSS 4、daisyUI 5、i18next），Skills 与 MCP 分页呈现。界面默认跟随 Office 显示语言，当前提供 `en-US` 与 `zh-CN`，并由 `test:settings-i18n` 强制校验资源键、翻译引用和“实现源码不得写死中文”。发布包必须包含 `settings.html`。
