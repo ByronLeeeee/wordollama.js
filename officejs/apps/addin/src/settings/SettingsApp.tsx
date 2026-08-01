@@ -1315,6 +1315,11 @@ const emptyMcp: McpServerUpdate = {
   arguments: [],
   enabled: true,
   trusted: false,
+  webSearchEnabled: false,
+  searchToolName: "",
+  allowedDomains: [],
+  searchMaxCalls: 5,
+  searchMaxResultCharacters: 30000,
 };
 
 function McpPage() {
@@ -1351,6 +1356,11 @@ function McpPage() {
       workingDirectory: server.workingDirectory,
       enabled: server.enabled,
       trusted: server.trusted,
+      webSearchEnabled: server.webSearchEnabled,
+      searchToolName: server.searchToolName,
+      allowedDomains: server.allowedDomains,
+      searchMaxCalls: server.searchMaxCalls,
+      searchMaxResultCharacters: server.searchMaxResultCharacters,
     });
     setArgsText(server.arguments.join("\n"));
     setEnvironmentText(server.environmentKeys.map((key) => `${key}=`).join("\n"));
@@ -1484,7 +1494,35 @@ function McpPage() {
             <div className="settings-switch-list mt-3">
               <SwitchRow label={t("mcp.autoConnect")} checked={form.enabled} onChange={(value) => setForm((current) => ({ ...current, enabled: value }))} />
               <SwitchRow label={t("mcp.trustAll")} checked={form.trusted} onChange={(value) => setForm((current) => ({ ...current, trusted: value }))} />
+              <SwitchRow label={t("mcp.webSearch")} title={t("mcp.webSearchHint")} checked={form.webSearchEnabled} onChange={(value) => setForm((current) => ({ ...current, webSearchEnabled: value }))} />
             </div>
+            {form.webSearchEnabled ? (
+              <div className="settings-model-editor-grid settings-model-editor-section">
+                <fieldset className="fieldset">
+                  <legend className="fieldset-legend">{t("mcp.searchTool")}</legend>
+                  <select className="select select-sm w-full" value={form.searchToolName ?? ""} onChange={(event) => {
+                    const searchToolName = event.currentTarget.value;
+                    setForm((current) => ({ ...current, searchToolName }));
+                    if (searchToolName) setPermissions((current) => ({ ...current, [searchToolName]: true }));
+                  }}>
+                    <option value="">{t("mcp.chooseSearchTool")}</option>
+                    {tools.map((tool) => <option key={tool.name} value={tool.name}>{tool.name}</option>)}
+                  </select>
+                </fieldset>
+                <fieldset className="fieldset settings-model-editor-wide">
+                  <legend className="fieldset-legend">{t("mcp.allowedDomains")}</legend>
+                  <textarea className="textarea textarea-sm w-full" rows={2} value={form.allowedDomains.join("\n")} onChange={(event) => setForm((current) => ({ ...current, allowedDomains: parseLines(event.currentTarget.value) }))} placeholder={t("mcp.allowedDomainsHint")} />
+                </fieldset>
+                <fieldset className="fieldset">
+                  <legend className="fieldset-legend">{t("mcp.searchMaxCalls")}</legend>
+                  <input className="input input-sm w-full" type="number" min={1} max={50} value={form.searchMaxCalls} onChange={(event) => setForm((current) => ({ ...current, searchMaxCalls: Number(event.currentTarget.value) }))} />
+                </fieldset>
+                <fieldset className="fieldset">
+                  <legend className="fieldset-legend">{t("mcp.searchMaxSize")}</legend>
+                  <input className="input input-sm w-full" type="number" min={1000} max={100000} step={1000} value={form.searchMaxResultCharacters} onChange={(event) => setForm((current) => ({ ...current, searchMaxResultCharacters: Number(event.currentTarget.value) }))} />
+                </fieldset>
+              </div>
+            ) : null}
             {tools.length ? (
               <details className="collapse collapse-arrow settings-model-editor-section">
                 <summary className="collapse-title">{t("mcp.permissions")} · {tools.length}</summary>
@@ -1497,7 +1535,21 @@ function McpPage() {
               </details>
             ) : null}
             <div className="modal-action settings-mcp-editor-actions">
-              <button className="btn btn-primary btn-sm" type="button" disabled={!form.name.trim() || !form.command.trim()} onClick={() => void runtime.saveMcpServer(payload()).then(async (result) => { setTools(result.tools); await load(); setEditorOpen(false); setStatus(translatedStatus("common.saved")); }).catch((error) => setStatus(toStatus(error, "common.notConnected")))}>{t("mcp.saveConnect")}</button>
+              <button className="btn btn-primary btn-sm" type="button" disabled={!form.name.trim() || !form.command.trim() || (form.webSearchEnabled && !form.searchToolName)} onClick={() => void (async () => {
+                try {
+                  const result = await runtime.saveMcpServer(payload());
+                  const nextPermissions = form.webSearchEnabled && form.searchToolName
+                    ? { ...permissions, [form.searchToolName]: true }
+                    : permissions;
+                  if (Object.keys(nextPermissions).length) await runtime.saveMcpPermissions(form.name, nextPermissions);
+                  setTools(result.tools);
+                  await load();
+                  setEditorOpen(false);
+                  setStatus(translatedStatus("common.saved"));
+                } catch (error) {
+                  setStatus(toStatus(error, "common.notConnected"));
+                }
+              })()}>{t("mcp.saveConnect")}</button>
               <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.connectMcpServer(form.name).then((result) => { setTools(result.tools); void load(); }).catch((error) => setStatus(toStatus(error, "common.notConnected")))}>{t("common.connect")}</button>
               <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.checkMcpHealth(form.name).then((health) => setStatus(translatedStatus(
                 health.connected ? "mcp.healthConnected" : "mcp.healthDisconnected",
@@ -1570,6 +1622,7 @@ function AgentPage() {
       allowLocalTools: false,
       allowNetworkTools: false,
       allowMcpTools: false,
+      permissionMode: "request" as "request" | "auto" | "full",
       // Legacy aliases are read once so settings from older builds keep working.
       iterations: undefined as number | undefined,
       mode: undefined as string | undefined,
@@ -1583,6 +1636,9 @@ function AgentPage() {
       allowLocalTools: stored.allowLocalTools || legacyExternal,
       allowNetworkTools: stored.allowNetworkTools || legacyExternal,
       allowMcpTools: stored.allowMcpTools || legacyExternal,
+      permissionMode: stored.permissionMode === "auto" || stored.permissionMode === "full"
+        ? stored.permissionMode
+        : "request" as const,
     };
   });
   const [review, setReview] = useState(() => {
@@ -1664,6 +1720,15 @@ function AgentPage() {
                 </option>
               ))}
             </select>
+            <label>{t("agent.permissionMode")}</label>
+            <select className="select select-sm" value={agent.permissionMode} onChange={(event) => setAgent({ ...agent, permissionMode: event.currentTarget.value as "request" | "auto" | "full" })}>
+              <option value="request">{t("agent.permissionRequest")}</option>
+              <option value="auto">{t("agent.permissionAuto")}</option>
+              <option value="full">{t("agent.permissionFull")}</option>
+            </select>
+            <p className={`settings-row-wide settings-help${agent.permissionMode === "full" ? " text-error" : ""}`}>
+              {t(`agent.permissionHints.${agent.permissionMode}`)}
+            </p>
             <p className="settings-row-wide settings-help">{t("agent.reviewModelHint")}</p>
             <label>{t("agent.reviewInterval")}</label>
             <input className="input input-sm" type="number" min={3} value={review.intervalSeconds} onChange={(event) => setReview({ ...review, intervalSeconds: Number(event.currentTarget.value) })} />

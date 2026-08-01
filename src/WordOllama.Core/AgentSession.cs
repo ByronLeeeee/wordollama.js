@@ -38,6 +38,7 @@ public sealed class AgentSession
     private readonly string? _keepAlive;
     private readonly string _languageMode;
     private readonly string _uiLocale;
+    private readonly string _permissionMode;
     private int _iterations;
     private bool _completed;
     private AgentCheckpoint? _checkpoint;
@@ -77,6 +78,7 @@ public sealed class AgentSession
         _keepAlive = request.KeepAlive;
         _languageMode = NormalizeLanguageMode(request.LanguageMode);
         _uiLocale = UiText.NormalizeLocale(request.UiLocale);
+        _permissionMode = NormalizePermissionMode(request.PermissionMode);
         var internalToolNames = _internalTools
             .SelectMany(tool => tool.GetToolDescriptors())
             .Select(tool => tool.Name)
@@ -342,35 +344,8 @@ public sealed class AgentSession
 
                         try
                         {
-                            if (internalTool.RequiresConfirmation(call.Name))
-                            {
-                                var permission = new TaskCompletionSource<bool>(
-                                    TaskCreationOptions.RunContinuationsAsynchronously);
-                                lock (_gate)
-                                {
-                                    _pendingPermissions[call.Id] = permission;
-                                }
-                                Publish(new RuntimeEvent(
-                                    "permission_request",
-                                    Message: call.Name,
-                                    Data: JsonSerializer.SerializeToElement(new
-                                    {
-                                        callId = call.Id,
-                                        name = call.Name,
-                                        execution = "bridge",
-                                        @params = call.Arguments,
-                                    })));
-                                var approved = await permission.Task.WaitAsync(_cancellation.Token);
-                                lock (_gate)
-                                {
-                                    _pendingPermissions.Remove(call.Id);
-                                }
-                                if (!approved)
-                                {
-                                    throw new InvalidOperationException(
-                                        Localize("AgentHighRiskRejected"));
-                                }
-                            }
+                            if (ShouldRequirePermission(call.Name, internalTool.RequiresConfirmation(call.Name)))
+                                await RequirePermissionAsync(call, "bridge");
                             var localResult = await internalTool.ExecuteAsync(
                                 call.Name,
                                 call.Arguments,
@@ -415,6 +390,8 @@ public sealed class AgentSession
 
                     var pending = new TaskCompletionSource<ToolResult>(
                         TaskCreationOptions.RunContinuationsAsynchronously);
+                    if (declaredTool?.IsWriteOperation == true && _permissionMode != "full")
+                        await RequirePermissionAsync(call, "officejs");
                     lock (_gate)
                     {
                         _pending[call.Id] = pending;
@@ -493,13 +470,57 @@ public sealed class AgentSession
             return _allowMcpTools;
         }
 
-        if (string.Equals(name, "http_request", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(name, "search_web", StringComparison.OrdinalIgnoreCase))
+        {
+            return _allowMcpTools && _allowNetworkTools;
+        }
+
+        if (string.Equals(name, "fetch_url", StringComparison.OrdinalIgnoreCase))
         {
             return _allowNetworkTools;
         }
 
         return _allowLocalTools;
     }
+
+    private bool ShouldRequirePermission(string name, bool toolDefault)
+    {
+        if (_permissionMode == "full") return false;
+        if (_permissionMode == "auto")
+        {
+            return !name.StartsWith("workspace_", StringComparison.OrdinalIgnoreCase) &&
+                   !string.Equals(name, "list_workspace_files", StringComparison.OrdinalIgnoreCase) &&
+                   !string.Equals(name, "read_workspace_file", StringComparison.OrdinalIgnoreCase) &&
+                   !string.Equals(name, "write_workspace_file", StringComparison.OrdinalIgnoreCase);
+        }
+        return toolDefault || string.Equals(name, "write_workspace_file", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task RequirePermissionAsync(ProviderToolCall call, string execution)
+    {
+        var permission = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_gate) _pendingPermissions[call.Id] = permission;
+        Publish(new RuntimeEvent(
+            "permission_request",
+            Message: call.Name,
+            Data: JsonSerializer.SerializeToElement(new
+            {
+                callId = call.Id,
+                name = call.Name,
+                execution,
+                @params = call.Arguments,
+            })));
+        var approved = await permission.Task.WaitAsync(_cancellation.Token);
+        lock (_gate) _pendingPermissions.Remove(call.Id);
+        if (!approved) throw new InvalidOperationException(Localize("AgentHighRiskRejected"));
+    }
+
+    private static string NormalizePermissionMode(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "auto" => "auto",
+        "full" => "full",
+        _ => "request",
+    };
 
     private static string NormalizeExecutionMode(string? value) =>
         value?.Trim().ToLowerInvariant() switch

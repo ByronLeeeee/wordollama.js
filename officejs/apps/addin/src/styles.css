@@ -2102,3 +2102,8 @@ progress::-webkit-progress-value {
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-size: contain;
 }
+.agent-status-bar[data-permission-mode="full"] {
+  color: var(--color-error-content);
+  background: var(--color-error);
+  border-color: color-mix(in oklab, var(--color-error) 70%, black);
+}

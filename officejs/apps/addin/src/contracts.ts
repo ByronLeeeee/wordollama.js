@@ -167,6 +167,11 @@ export interface McpServerView {
   lastError?: string;
   lastConnectedAt?: string;
   lastCheckDurationMs?: number;
+  webSearchEnabled: boolean;
+  searchToolName?: string;
+  allowedDomains: string[];
+  searchMaxCalls: number;
+  searchMaxResultCharacters: number;
 }
 
 export interface McpServerHealth {
@@ -188,6 +193,11 @@ export interface McpServerUpdate {
   headers?: Record<string, string>;
   enabled: boolean;
   trusted: boolean;
+  webSearchEnabled: boolean;
+  searchToolName?: string;
+  allowedDomains: string[];
+  searchMaxCalls: number;
+  searchMaxResultCharacters: number;
 }
 
 export interface McpImportResult {
@@ -251,6 +261,7 @@ export interface AgentStartOptions {
   allowLocalTools: boolean;
   allowNetworkTools: boolean;
   allowMcpTools: boolean;
+  permissionMode: "request" | "auto" | "full";
   languageMode: "auto" | "zh" | "en" | "source";
   uiLocale: "en-US" | "zh-CN";
 }

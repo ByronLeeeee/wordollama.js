@@ -18,7 +18,12 @@ public sealed record McpServerUpdate(
     IReadOnlyDictionary<string, string>? Environment = null,
     IReadOnlyDictionary<string, string>? Headers = null,
     bool Enabled = true,
-    bool Trusted = false);
+    bool Trusted = false,
+    bool WebSearchEnabled = false,
+    string? SearchToolName = null,
+    IReadOnlyList<string>? AllowedDomains = null,
+    int SearchMaxCalls = 5,
+    int SearchMaxResultCharacters = 30000);
 
 public sealed record McpServerView(
     string Name,
@@ -35,7 +40,12 @@ public sealed record McpServerView(
     int ToolCount,
     string? LastError,
     DateTimeOffset? LastConnectedAt,
-    long? LastCheckDurationMs);
+    long? LastCheckDurationMs,
+    bool WebSearchEnabled,
+    string? SearchToolName,
+    IReadOnlyList<string> AllowedDomains,
+    int SearchMaxCalls,
+    int SearchMaxResultCharacters);
 
 public sealed record McpImportResult(
     int Total,
@@ -55,7 +65,12 @@ internal sealed record McpServerSettings(
     List<string> HeaderKeys,
     bool Enabled,
     bool Trusted,
-    Dictionary<string, bool> ToolPermissions);
+    Dictionary<string, bool> ToolPermissions,
+    bool WebSearchEnabled = false,
+    string? SearchToolName = null,
+    List<string>? AllowedDomains = null,
+    int SearchMaxCalls = 5,
+    int SearchMaxResultCharacters = 30000);
 
 public sealed partial class McpSettingsStore
 {
@@ -144,7 +159,10 @@ public sealed partial class McpSettingsStore
                 validated.Name, validated.Transport, validated.Command,
                 validated.Arguments?.ToList() ?? [], validated.WorkingDirectory,
                 environmentKeys, headerKeys, validated.Enabled, validated.Trusted,
-                existing?.ToolPermissions ?? new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase));
+                existing?.ToolPermissions ?? new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase),
+                validated.WebSearchEnabled, validated.SearchToolName,
+                validated.AllowedDomains?.ToList() ?? [],
+                validated.SearchMaxCalls, validated.SearchMaxResultCharacters);
             var index = _servers.FindIndex(server =>
                 string.Equals(server.Name, settings.Name, StringComparison.OrdinalIgnoreCase));
             if (index >= 0) _servers[index] = settings;
@@ -191,6 +209,15 @@ public sealed partial class McpSettingsStore
             foreach (var key in server.HeaderKeys) _secrets.Delete(SecretName(name, "HEADER", key));
             _servers.Remove(server);
             Save();
+        }
+    }
+
+    internal McpServerSettings? GetWebSearchSettings()
+    {
+        lock (_gate)
+        {
+            var server = _servers.FirstOrDefault(candidate => candidate.Enabled && candidate.WebSearchEnabled);
+            return server is null ? null : Clone(server);
         }
     }
 
@@ -251,7 +278,9 @@ public sealed partial class McpSettingsStore
                         update.Name, update.Transport, update.Command,
                         update.Arguments?.ToList() ?? [], update.WorkingDirectory,
                         environmentKeys, headerKeys, update.Enabled, Trusted: false,
-                        new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase));
+                        new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase),
+                        update.WebSearchEnabled, update.SearchToolName,
+                        update.AllowedDomains?.ToList() ?? [], update.SearchMaxCalls, update.SearchMaxResultCharacters);
                 }).ToList();
                 return (migrated, true);
             }
@@ -269,7 +298,9 @@ public sealed partial class McpSettingsStore
                     server.Enabled, server.Trusted,
                     new Dictionary<string, bool>(
                         server.ToolPermissions ?? new Dictionary<string, bool>(),
-                        StringComparer.OrdinalIgnoreCase));
+                        StringComparer.OrdinalIgnoreCase),
+                    server.WebSearchEnabled, server.SearchToolName, server.AllowedDomains ?? [],
+                    server.SearchMaxCalls, server.SearchMaxResultCharacters);
             }).ToList(), false);
         }
         catch (JsonException exception)
@@ -373,7 +404,24 @@ public sealed partial class McpSettingsStore
         {
             throw new ArgumentException("Remote MCP endpoints must use HTTPS; loopback HTTP is allowed.");
         }
-        return update with { Name = name, Transport = transport, Command = update.Command.Trim() };
+        var domains = (update.AllowedDomains ?? [])
+            .Select(domain => domain.Trim().TrimStart('.').ToLowerInvariant())
+            .Where(domain => domain.Length > 0 && Uri.CheckHostName(domain) != UriHostNameType.Unknown)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(50)
+            .ToArray();
+        if (update.WebSearchEnabled && string.IsNullOrWhiteSpace(update.SearchToolName))
+            throw new ArgumentException("A web-search MCP must select a search tool.");
+        return update with
+        {
+            Name = name,
+            Transport = transport,
+            Command = update.Command.Trim(),
+            SearchToolName = update.SearchToolName?.Trim(),
+            AllowedDomains = domains,
+            SearchMaxCalls = Math.Clamp(update.SearchMaxCalls, 1, 50),
+            SearchMaxResultCharacters = Math.Clamp(update.SearchMaxResultCharacters, 1000, 100000),
+        };
     }
 
     private static string NormalizeTransport(string? transport)
@@ -541,6 +589,7 @@ public sealed partial class McpSettingsStore
             EnvironmentKeys = [.. server.EnvironmentKeys],
             HeaderKeys = [.. server.HeaderKeys],
             ToolPermissions = new Dictionary<string, bool>(server.ToolPermissions, StringComparer.OrdinalIgnoreCase),
+            AllowedDomains = [.. server.AllowedDomains ?? []],
         };
 
     private static McpServerView ToView(McpServerSettings server, McpServerState? state) =>
@@ -552,7 +601,12 @@ public sealed partial class McpSettingsStore
             state?.ToolCount ?? 0,
             state?.LastError,
             state?.LastConnectedAt,
-            state?.LastCheckDurationMs);
+            state?.LastCheckDurationMs,
+            server.WebSearchEnabled,
+            server.SearchToolName,
+            server.AllowedDomains ?? [],
+            server.SearchMaxCalls,
+            server.SearchMaxResultCharacters);
 
     private void Save()
     {

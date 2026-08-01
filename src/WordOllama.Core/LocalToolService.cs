@@ -39,8 +39,8 @@ public sealed class LocalToolService : IInternalToolExecutor
     public string SkillsRoot => Path.GetFullPath(_policy.SkillsRoot);
 
     public bool IsKnownTool(string name) =>
-        name is "execute_command" or "run_python_script" or "grep" or "read_skill" or "http_request" &&
-        (name != "http_request" || _policy.AllowHttpRequests);
+        name is "execute_command" or "run_python_script" or "grep" or "read_skill" or "fetch_url" &&
+        (name != "fetch_url" || _policy.AllowHttpRequests);
 
     public IReadOnlyList<OfficeToolDescriptor> GetToolDescriptors()
     {
@@ -111,21 +111,18 @@ public sealed class LocalToolService : IInternalToolExecutor
         if (_policy.AllowHttpRequests)
         {
             descriptors.Add(new OfficeToolDescriptor(
-                "http_request",
-                "Make an explicitly enabled HTTPS request without a shell.",
+                "fetch_url",
+                "Fetch readable text from an explicitly enabled public HTTPS URL. Redirects, DNS, MIME, size and timeout are restricted; credentials and private networks are blocked.",
                 false,
                 JsonSerializer.SerializeToElement(new
                 {
                     type = "object",
                     properties = new
                     {
-                        method = new { type = "string", @enum = new[] { "GET", "POST", "PUT", "DELETE" } },
                         url = new { type = "string" },
-                        headers = new { type = "object" },
-                        body = new { type = "string" },
                         timeout_seconds = new { type = "integer" },
                     },
-                    required = new[] { "method", "url" },
+                    required = new[] { "url" },
                 })));
         }
         return descriptors;
@@ -155,9 +152,9 @@ public sealed class LocalToolService : IInternalToolExecutor
                 JsonSerializer.Deserialize<ReadSkillRequest>(arguments.GetRawText(), options)
                     ?? throw new ArgumentException("Invalid read_skill arguments."),
                 cancellationToken),
-            "http_request" when _policy.AllowHttpRequests => JsonSerializer.Serialize(await HttpRequestAsync(
-                JsonSerializer.Deserialize<HttpRequestToolRequest>(arguments.GetRawText(), options)
-                    ?? throw new ArgumentException("Invalid http_request arguments."),
+            "fetch_url" when _policy.AllowHttpRequests => JsonSerializer.Serialize(await SafeWebFetcher.FetchAsync(
+                JsonSerializer.Deserialize<FetchUrlToolRequest>(arguments.GetRawText(), options)
+                    ?? throw new ArgumentException("Invalid fetch_url arguments."),
                 cancellationToken)),
             _ => throw new ArgumentException($"Unknown local tool: {name}"),
         };
@@ -507,43 +504,6 @@ public sealed class LocalToolService : IInternalToolExecutor
                 // Read-only environments can still use explicitly installed skills.
             }
         }
-    }
-
-    private static async Task<LocalToolResponse> HttpRequestAsync(
-        HttpRequestToolRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) ||
-            uri.Scheme != Uri.UriSchemeHttps)
-        {
-            throw new LocalToolPolicyException("http_request only permits absolute HTTPS URLs.");
-        }
-
-        using var client = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(Math.Clamp(request.TimeoutSeconds, 1, 120)),
-        };
-        using var message = new HttpRequestMessage(new HttpMethod(request.Method.ToUpperInvariant()), uri);
-        if (request.Headers is not null)
-        {
-            foreach (var header in request.Headers)
-            {
-                if (!message.Headers.TryAddWithoutValidation(header.Key, header.Value))
-                {
-                    throw new LocalToolPolicyException($"Invalid HTTP header: {header.Key}");
-                }
-            }
-        }
-        if (request.Body is not null)
-        {
-            message.Content = new StringContent(request.Body);
-        }
-        using var response = await client.SendAsync(message, cancellationToken);
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        return new LocalToolResponse(
-            (int)response.StatusCode,
-            content.Length > 100_000 ? content[..100_000] : content,
-            string.Empty);
     }
 
     private string ResolveSkillDirectory(string skillName)

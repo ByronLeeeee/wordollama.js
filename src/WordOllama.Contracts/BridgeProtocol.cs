@@ -125,7 +125,8 @@ public sealed record AgentStartRequest(
     string LanguageMode = "auto",
     string UiLocale = "en-US",
     string WritingProfile = "",
-    string Goal = "");
+    string Goal = "",
+    string PermissionMode = "request");
 
 public sealed record AgentStartResponse(string SessionId, string Status);
 
@@ -185,6 +186,17 @@ public sealed record HttpRequestToolRequest(
     IReadOnlyDictionary<string, string>? Headers = null,
     string? Body = null,
     int TimeoutSeconds = 30);
+
+public sealed record FetchUrlToolRequest(string Url, int TimeoutSeconds = 20);
+
+public sealed record FetchUrlToolResponse(
+    string SourceUrl,
+    int StatusCode,
+    string MimeType,
+    string Title,
+    string Text,
+    int BytesRead,
+    DateTimeOffset FetchedAt);
 
 public sealed record GrepRequest(
     string Root,

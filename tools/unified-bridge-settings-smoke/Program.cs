@@ -204,6 +204,34 @@ try
     settings.SetToolPermissions("legal", new Dictionary<string, bool> { ["search"] = true, ["delete"] = false });
     Assert(settings.IsToolAllowed("legal", "search") && !settings.IsToolAllowed("legal", "delete"),
         "per-tool MCP permissions");
+    var searchView = settings.Upsert(new McpServerUpdate(
+        "legal",
+        "streamable-http",
+        "https://mcp.example.test/rpc",
+        Headers: new Dictionary<string, string> { ["Authorization"] = "" },
+        Enabled: true,
+        Trusted: false,
+        WebSearchEnabled: true,
+        SearchToolName: "search",
+        AllowedDomains: ["Example.COM", "docs.example.com", "example.com"],
+        SearchMaxCalls: 500,
+        SearchMaxResultCharacters: 500), manager);
+    Assert(searchView.WebSearchEnabled && searchView.SearchToolName == "search" &&
+           searchView.AllowedDomains.SequenceEqual(["example.com", "docs.example.com"]) &&
+           searchView.SearchMaxCalls == 50 && searchView.SearchMaxResultCharacters == 1000,
+        "Search MCP settings normalize domains and clamp limits");
+    var missingSearchToolRejected = false;
+    try
+    {
+        settings.Upsert(new McpServerUpdate(
+            "invalid-search", "streamable-http", "https://mcp.example.test/rpc",
+            WebSearchEnabled: true), manager);
+    }
+    catch (ArgumentException)
+    {
+        missingSearchToolRejected = true;
+    }
+    Assert(missingSearchToolRejected, "Search MCP requires an explicitly selected tool");
     settings.Upsert(new McpServerUpdate(
         "trusted",
         "sse",

@@ -2260,6 +2260,7 @@ function setAgentRunning(running: boolean, status = i18n.t("taskpane.common.read
   agentStopButton.hidden = !running;
   agentStatusBar.hidden = !running;
   agentStatusText.textContent = status;
+  if (!running) delete agentStatusBar.dataset.permissionMode;
 }
 
 function requestDecision(message: string, approveLabel: string, rejectLabel: string): Promise<boolean> {
@@ -2700,6 +2701,7 @@ async function runAgent(requirement: string): Promise<void> {
       allowLocalTools: false,
       allowNetworkTools: false,
       allowMcpTools: false,
+      permissionMode: "request" as "request" | "auto" | "full",
       // Compatibility aliases used by early settings builds.
       iterations: undefined as number | undefined,
       mode: undefined as string | undefined,
@@ -2714,6 +2716,22 @@ async function runAgent(requirement: string): Promise<void> {
       ? storedExecutionMode as "ViewOnly" | "ProposeChanges" | "TrackedChanges"
       : "TrackedChanges";
     const legacyExternalTools = currentAgentSettings.externalTools ?? currentAgentSettings.allowExternalTools;
+    const permissionMode = currentAgentSettings.permissionMode === "auto" || currentAgentSettings.permissionMode === "full"
+      ? currentAgentSettings.permissionMode
+      : "request";
+    if (permissionMode === "full") {
+      const approved = await requestDecision(
+        i18n.t("taskpane.agent.fullAccessConfirm"),
+        i18n.t("taskpane.agent.enableForSession"),
+        i18n.t("taskpane.common.cancel"),
+      );
+      if (!approved) {
+        appendMessage(i18n.t("taskpane.agent.fullAccessCancelled"), "system");
+        return;
+      }
+      agentStatusBar.dataset.permissionMode = "full";
+      agentStatusText.textContent = i18n.t("taskpane.agent.fullAccessActive");
+    }
     if (executionMode === "TrackedChanges") {
       previousTrackingMode = await word.beginTrackedChanges();
       if (previousTrackingMode === null) {
@@ -2732,6 +2750,7 @@ async function runAgent(requirement: string): Promise<void> {
       allowLocalTools: currentAgentSettings.allowLocalTools || legacyExternalTools,
       allowNetworkTools: currentAgentSettings.allowNetworkTools || legacyExternalTools,
       allowMcpTools: currentAgentSettings.allowMcpTools || legacyExternalTools,
+      permissionMode,
       languageMode: "auto",
       uiLocale: i18n.resolvedLanguage === "zh-CN" ? "zh-CN" : "en-US",
     });

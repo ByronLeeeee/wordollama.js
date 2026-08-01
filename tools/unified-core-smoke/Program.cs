@@ -348,6 +348,19 @@ try
     }
     Assert(traversalRejected && !File.Exists(Path.Combine(Path.GetDirectoryName(skillTestRoot)!, "escape.txt")),
         "Skill ZIP path traversal is rejected");
+    var networkTools = new LocalToolService(
+        new NoopProcessRunner(),
+        new LocalToolPolicy(new HashSet<string>(), [skillTestRoot], skillTestRoot, "python", true));
+    Assert(networkTools.GetToolDescriptors().Any(tool => tool.Name == "fetch_url") &&
+           networkTools.GetToolDescriptors().All(tool => tool.Name != "http_request"),
+        "network capability is exposed only as constrained fetch_url");
+    foreach (var blockedUrl in new[] { "http://example.com", "https://127.0.0.1/private", "https://[::1]/private" })
+    {
+        var rejected = false;
+        try { await SafeWebFetcher.FetchAsync(new FetchUrlToolRequest(blockedUrl, 1)); }
+        catch (LocalToolPolicyException) { rejected = true; }
+        Assert(rejected, $"fetch_url rejects unsafe target {blockedUrl}");
+    }
     localTools.DeleteSkill(imported.Name);
     Assert(!localTools.ListSkills().Any(skill => skill.Name == imported.Name), "Skill deletion");
 }
@@ -423,10 +436,17 @@ await foreach (var runtimeEvent in granularAgent.ReadEventsAsync())
 }
 var granularNames = granularProvider.LastRequest?.Tools?.Select(tool => tool.Name).ToArray() ?? [];
 Assert(granularNames.Contains("read_skill") &&
-       granularNames.Contains("http_request") &&
+       granularNames.Contains("fetch_url") &&
        granularNames.Contains("mcp__fake__lookup") &&
        !granularNames.Contains("execute_command"),
     "Agent independently filters local, network, and MCP tools");
+
+Assert(await ObservePermissionAsync("request"),
+    "request-approval mode asks before an isolated workspace write");
+Assert(!await ObservePermissionAsync("auto"),
+    "auto-approve mode permits only the isolated workspace write without prompting");
+Assert(!await ObservePermissionAsync("full"),
+    "full-access mode skips per-tool confirmation after the UI session confirmation");
 
 var englishPlanMessages = await CapturePlanMessagesAsync("en-US");
 var chinesePlanMessages = await CapturePlanMessagesAsync("zh-CN");
@@ -665,6 +685,40 @@ static MemoryStream CreateZip(string entryName, string content)
     return stream;
 }
 
+static async Task<bool> ObservePermissionAsync(string permissionMode)
+{
+    var tools = new FakeInternalTools();
+    var provider = new CapturingProvider([
+        new ProviderChatResponse("fake", "fake", "", [
+            new ProviderToolCall("workspace-call", "write_workspace_file", JsonSerializer.SerializeToElement(new { path = "note.txt", content = "ok" })),
+        ]),
+        new ProviderChatResponse("fake", "fake", "finished"),
+    ]);
+    var session = new AgentSession(
+        "permission-mode-" + permissionMode,
+        "https://localhost:3000",
+        new AgentStartRequest(
+            "write a temporary note",
+            Tools: tools.GetToolDescriptors(),
+            AllowLocalTools: false,
+            PermissionMode: permissionMode),
+        provider,
+        [tools]);
+    session.Start();
+    var requested = false;
+    await foreach (var runtimeEvent in session.ReadEventsAsync())
+    {
+        if (runtimeEvent.Type == "permission_request")
+        {
+            requested = true;
+            var callId = runtimeEvent.Data?.GetProperty("callId").GetString() ?? "";
+            session.SubmitPermission(new AgentPermissionRequest(callId, true));
+        }
+        if (runtimeEvent.Type == "completed") break;
+    }
+    return requested;
+}
+
 static void Assert(bool condition, string name)
 {
     if (!condition) throw new InvalidOperationException($"Failed: {name}");
@@ -754,11 +808,12 @@ sealed class FakeInternalTools : IInternalToolExecutor
     [
         new("read_skill", "read skill", false, Schema),
         new("execute_command", "execute", false, Schema),
-        new("http_request", "request", false, Schema),
+        new("fetch_url", "request", false, Schema),
+        new("write_workspace_file", "workspace write", false, Schema),
         new("mcp__fake__lookup", "lookup", false, Schema),
     ];
     public bool IsKnownTool(string name) =>
-        name is "read_skill" or "execute_command" or "http_request" or "mcp__fake__lookup";
+        name is "read_skill" or "execute_command" or "fetch_url" or "write_workspace_file" or "mcp__fake__lookup";
     public Task<string> ExecuteAsync(string name, JsonElement arguments, CancellationToken cancellationToken = default) =>
         Task.FromResult("ok");
 }
