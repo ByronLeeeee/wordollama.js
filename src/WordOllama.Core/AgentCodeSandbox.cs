@@ -152,12 +152,24 @@ internal sealed class MacSandboxExecCodeSandbox : IAgentCodeSandbox
     internal static void EnforceWorkspaceLimit(string workspace)
     {
         long total = 0;
-        foreach (var file in Directory.EnumerateFiles(workspace, "*", SearchOption.AllDirectories))
+        var pending = new Stack<string>();
+        pending.Push(workspace);
+        while (pending.Count > 0)
         {
-            if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidOperationException("Sandbox output contains a link or reparse point.");
-            total += new FileInfo(file).Length;
-            if (total > 10_485_760) throw new InvalidOperationException("Sandbox workspace exceeded 10 MiB.");
+            foreach (var entry in Directory.EnumerateFileSystemEntries(pending.Pop()))
+            {
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidOperationException("Sandbox output contains a link or reparse point.");
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    pending.Push(entry);
+                    continue;
+                }
+                total += new FileInfo(entry).Length;
+                if (total > 10_485_760)
+                    throw new InvalidOperationException("Sandbox workspace exceeded 10 MiB.");
+            }
         }
     }
 
@@ -170,9 +182,10 @@ internal sealed class MacSandboxExecCodeSandbox : IAgentCodeSandbox
 internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
 {
     private readonly string _workspace;
+    private string? _executionWorkspace;
     private readonly string _profileName;
     private readonly IReadOnlyDictionary<string, string?> _runtimes;
-    private readonly List<string> _aclRoots = [];
+    private readonly List<AclGrant> _aclGrants = [];
     private IntPtr _appContainerSid;
     private bool _disposed;
 
@@ -190,11 +203,19 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
             ["python"] = pythonExecutable,
             ["node"] = nodeExecutable,
         };
-        InitializeProfile();
+        try
+        {
+            InitializeProfile();
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
     }
 
     public bool Supports(string runtime) =>
-        !_disposed && _appContainerSid != IntPtr.Zero &&
+        !_disposed && _appContainerSid != IntPtr.Zero && _executionWorkspace is not null &&
         _runtimes.TryGetValue(runtime, out var executable) && executable is not null;
 
     public async Task<ProcessExecutionResult> RunAsync(
@@ -206,16 +227,11 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!Supports(runtime)) throw new PlatformNotSupportedException($"The {runtime} AppContainer sandbox is unavailable.");
         var executable = _runtimes[runtime]!;
-        var script = Path.Combine(_workspace, $".wordollama-{Guid.NewGuid():N}.{(runtime == "python" ? "py" : "mjs")}");
-        await File.WriteAllTextAsync(script, code, new UTF8Encoding(false), cancellationToken);
-        try
-        {
-            return await RunAppContainerAsync(executable!, script, timeout, cancellationToken);
-        }
-        finally
-        {
-            try { File.Delete(script); } catch (IOException) { }
-        }
+        MirrorDirectory(_workspace, _executionWorkspace!, clearDestination: true);
+        var result = await RunAppContainerAsync(executable!, code, timeout, cancellationToken);
+        MacSandboxExecCodeSandbox.EnforceWorkspaceLimit(_executionWorkspace!);
+        MirrorDirectory(_executionWorkspace!, _workspace, clearDestination: true);
+        return result;
     }
 
     private void InitializeProfile()
@@ -227,7 +243,16 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
             hr = DeriveAppContainerSidFromAppContainerName(_profileName, out _appContainerSid);
         if (hr < 0 || _appContainerSid == IntPtr.Zero) return;
         var sid = SidToString(_appContainerSid);
-        GrantAcl(_workspace, sid, "(OI)(CI)M", recursive: false);
+        var folderHr = GetAppContainerFolderPath(sid, out var appContainerFolderPointer);
+        if (folderHr < 0 || appContainerFolderPointer == IntPtr.Zero) return;
+        try
+        {
+            var appContainerFolder = Marshal.PtrToStringUni(appContainerFolderPointer);
+            if (string.IsNullOrWhiteSpace(appContainerFolder)) return;
+            _executionWorkspace = Path.Combine(appContainerFolder, "WordOllama.JS", "workspace");
+            Directory.CreateDirectory(_executionWorkspace);
+        }
+        finally { Marshal.FreeCoTaskMem(appContainerFolderPointer); }
         foreach (var runtimeDirectory in _runtimes.Values
                      .Where(value => value is not null)
                      .Select(value => Path.GetDirectoryName(value!)!)
@@ -236,19 +261,21 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
             if (IsUserOwnedPath(runtimeDirectory))
             {
                 GrantAcl(runtimeDirectory, sid, "(OI)(CI)RX", recursive: true);
-                _aclRoots.Add(runtimeDirectory);
+                _aclGrants.Add(new AclGrant(runtimeDirectory, Recursive: true));
             }
         }
     }
 
     private async Task<ProcessExecutionResult> RunAppContainerAsync(
         string executable,
-        string script,
+        string code,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        var stdoutPath = Path.Combine(_workspace, $".stdout-{Guid.NewGuid():N}.txt");
-        var stderrPath = Path.Combine(_workspace, $".stderr-{Guid.NewGuid():N}.txt");
+        var stdoutPath = Path.Combine(_executionWorkspace!, $".stdout-{Guid.NewGuid():N}.txt");
+        var stderrPath = Path.Combine(_executionWorkspace!, $".stderr-{Guid.NewGuid():N}.txt");
+        var stdinPath = Path.Combine(_executionWorkspace!, $".stdin-{Guid.NewGuid():N}.txt");
+        await File.WriteAllTextAsync(stdinPath, code, new UTF8Encoding(false), cancellationToken);
         IntPtr stdout = IntPtr.Zero, stderr = IntPtr.Zero, stdin = IntPtr.Zero;
         IntPtr attributeList = IntPtr.Zero, capabilitiesPointer = IntPtr.Zero, environment = IntPtr.Zero;
         IntPtr job = IntPtr.Zero;
@@ -258,7 +285,7 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
             var security = new SECURITY_ATTRIBUTES { nLength = Marshal.SizeOf<SECURITY_ATTRIBUTES>(), bInheritHandle = true };
             stdout = CreateFileW(stdoutPath, GenericWrite, FileShareRead | FileShareWrite, ref security, CreateAlways, NormalAttribute, IntPtr.Zero);
             stderr = CreateFileW(stderrPath, GenericWrite, FileShareRead | FileShareWrite, ref security, CreateAlways, NormalAttribute, IntPtr.Zero);
-            stdin = CreateFileW("NUL", GenericRead, FileShareRead | FileShareWrite, ref security, OpenExisting, NormalAttribute, IntPtr.Zero);
+            stdin = CreateFileW(stdinPath, GenericRead, FileShareRead | FileShareWrite, ref security, OpenExisting, NormalAttribute, IntPtr.Zero);
             EnsureHandle(stdout); EnsureHandle(stderr); EnsureHandle(stdin);
 
             nuint attributeSize = 0;
@@ -283,11 +310,11 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
                 },
                 lpAttributeList = attributeList,
             };
-            environment = BuildEnvironmentBlock(_workspace);
-            var commandLine = new StringBuilder(Quote(executable) + " " + Quote(script));
+            environment = BuildEnvironmentBlock(_executionWorkspace!, executable);
+            var commandLine = new StringBuilder(Quote(executable) + " -");
             var flags = ExtendedStartupInfoPresent | CreateNoWindow | CreateUnicodeEnvironment | CreateSuspended;
             if (!CreateProcessW(executable, commandLine, IntPtr.Zero, IntPtr.Zero, true, flags,
-                    environment, _workspace, ref startup, out process))
+                    environment, _executionWorkspace!, ref startup, out process))
                 ThrowLastWin32("start AppContainer process");
 
             job = CreateJobObjectW(IntPtr.Zero, null);
@@ -328,11 +355,11 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
                     break;
                 }
                 await Task.Yield();
-                MacSandboxExecCodeSandbox.EnforceWorkspaceLimit(_workspace);
+                MacSandboxExecCodeSandbox.EnforceWorkspaceLimit(_executionWorkspace!);
             }
             if (!GetExitCodeProcess(process.hProcess, out var exitCode)) ThrowLastWin32("read sandbox exit code");
             Close(ref stdout); Close(ref stderr); Close(ref stdin);
-            MacSandboxExecCodeSandbox.EnforceWorkspaceLimit(_workspace);
+            MacSandboxExecCodeSandbox.EnforceWorkspaceLimit(_executionWorkspace!);
             var result = new ProcessExecutionResult(
                 unchecked((int)exitCode),
                 ReadBounded(stdoutPath),
@@ -342,7 +369,12 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
         }
         catch
         {
-            if (job != IntPtr.Zero && job != InvalidHandle) _ = TerminateJobObject(job, 125);
+            if (job != IntPtr.Zero && job != InvalidHandle)
+            {
+                _ = TerminateJobObject(job, 125);
+                if (process.hProcess != IntPtr.Zero && process.hProcess != InvalidHandle)
+                    _ = WaitForSingleObject(process.hProcess, 5000);
+            }
             throw;
         }
         finally
@@ -354,11 +386,16 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
             if (environment != IntPtr.Zero) Marshal.FreeHGlobal(environment);
             try { File.Delete(stdoutPath); } catch (IOException) { }
             try { File.Delete(stderrPath); } catch (IOException) { }
+            try { File.Delete(stdinPath); } catch (IOException) { }
         }
     }
 
-    private static IntPtr BuildEnvironmentBlock(string workspace)
+    private static IntPtr BuildEnvironmentBlock(string workspace, string executable)
     {
+        static string ReadSystem(string name, string fallback = "") =>
+            Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : fallback;
+        var systemRoot = ReadSystem("SystemRoot", @"C:\Windows");
+        var runtimeDirectory = Path.GetDirectoryName(executable)!;
         var values = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["HOME"] = workspace,
@@ -367,8 +404,19 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
             ["TMP"] = workspace,
             ["PYTHONIOENCODING"] = "utf-8",
             ["NO_PROXY"] = "*",
-            ["SystemRoot"] = Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows",
-            ["WINDIR"] = Environment.GetEnvironmentVariable("WINDIR") ?? @"C:\Windows",
+            ["SystemRoot"] = systemRoot,
+            ["WINDIR"] = ReadSystem("WINDIR", systemRoot),
+            ["SystemDrive"] = ReadSystem("SystemDrive", Path.GetPathRoot(systemRoot) ?? "C:"),
+            ["ComSpec"] = ReadSystem("ComSpec", Path.Combine(systemRoot, "System32", "cmd.exe")),
+            ["PATH"] = string.Join(';', runtimeDirectory, Path.Combine(systemRoot, "System32"), systemRoot),
+            ["PATHEXT"] = ReadSystem("PATHEXT", ".COM;.EXE;.BAT;.CMD"),
+            ["ProgramData"] = ReadSystem("ProgramData"),
+            ["ProgramFiles"] = ReadSystem("ProgramFiles"),
+            ["ProgramFiles(x86)"] = ReadSystem("ProgramFiles(x86)"),
+            ["CommonProgramFiles"] = ReadSystem("CommonProgramFiles"),
+            ["CommonProgramFiles(x86)"] = ReadSystem("CommonProgramFiles(x86)"),
+            ["LOCALAPPDATA"] = ReadSystem("LOCALAPPDATA"),
+            ["APPDATA"] = ReadSystem("APPDATA"),
         };
         var block = string.Join('\0', values.Select(pair => $"{pair.Key}={pair.Value}")) + "\0\0";
         return Marshal.StringToHGlobalUni(block);
@@ -393,6 +441,54 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
             StringComparison.OrdinalIgnoreCase);
     }
 
+    private static void MirrorDirectory(string source, string destination, bool clearDestination)
+    {
+        MacSandboxExecCodeSandbox.EnforceWorkspaceLimit(source);
+        Directory.CreateDirectory(destination);
+        if (clearDestination)
+        {
+            ClearDirectory(destination);
+        }
+        var sourcePrefix = Path.GetFullPath(source).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        {
+            if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException("Sandbox workspace contains a link or reparse point.");
+            var relative = Path.GetFullPath(directory)[sourcePrefix.Length..];
+            Directory.CreateDirectory(Path.Combine(destination, relative));
+        }
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException("Sandbox workspace contains a link or reparse point.");
+            var relative = Path.GetFullPath(file)[sourcePrefix.Length..];
+            var target = Path.Combine(destination, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target, overwrite: false);
+        }
+    }
+
+    private static void ClearDirectory(string directory)
+    {
+        foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+        {
+            var attributes = File.GetAttributes(entry);
+            if ((attributes & FileAttributes.Directory) == 0)
+            {
+                File.Delete(entry);
+            }
+            else if ((attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                Directory.Delete(entry, recursive: false);
+            }
+            else
+            {
+                ClearDirectory(entry);
+                Directory.Delete(entry, recursive: false);
+            }
+        }
+    }
+
     private void GrantAcl(string path, string sid, string rights, bool recursive)
     {
         var args = new List<string> { path, "/grant", $"*{sid}:{rights}" };
@@ -411,10 +507,18 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
         };
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Unable to configure AppContainer access.");
-        if (!process.WaitForExit(30_000) || process.ExitCode != 0)
+        if (!process.WaitForExit(30_000))
         {
-            if (!process.HasExited) process.Kill(entireProcessTree: true);
-            throw new InvalidOperationException("Unable to configure AppContainer filesystem access.");
+            process.Kill(entireProcessTree: true);
+            throw new InvalidOperationException("Timed out while configuring AppContainer filesystem access.");
+        }
+        if (process.ExitCode != 0)
+        {
+            var detail = process.StandardError.ReadToEnd().Trim();
+            if (string.IsNullOrWhiteSpace(detail)) detail = process.StandardOutput.ReadToEnd().Trim();
+            throw new InvalidOperationException(
+                "Unable to configure AppContainer filesystem access: " +
+                (detail.Length <= 500 ? detail : detail[..500]));
         }
     }
 
@@ -435,10 +539,17 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
             try { sid = SidToString(_appContainerSid); } catch { }
             if (sid is not null)
             {
-                foreach (var root in _aclRoots.Append(_workspace))
+                foreach (var grant in _aclGrants.AsEnumerable().Reverse())
                 {
-                    try { RunIcacls([root, "/remove", $"*{sid}", "/T", "/C"]); } catch { }
+                    var arguments = new List<string> { grant.Path, "/remove", $"*{sid}" };
+                    if (grant.Recursive) arguments.AddRange(["/T", "/C"]);
+                    try { RunIcacls(arguments); } catch { }
                 }
+            }
+            if (_executionWorkspace is not null)
+            {
+                try { Directory.Delete(_executionWorkspace, recursive: true); }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
             }
             FreeSid(_appContainerSid);
             _appContainerSid = IntPtr.Zero;
@@ -459,6 +570,7 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
         throw new Win32Exception(Marshal.GetLastWin32Error(), $"Unable to {operation}.");
 
     private static readonly IntPtr InvalidHandle = new(-1);
+    private sealed record AclGrant(string Path, bool Recursive);
     private const uint GenericRead = 0x80000000, GenericWrite = 0x40000000;
     private const uint FileShareRead = 1, FileShareWrite = 2, CreateAlways = 2, OpenExisting = 3, NormalAttribute = 0x80;
     private const uint StartfUseStdHandles = 0x100;
@@ -481,6 +593,7 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
     [DllImport("userenv.dll", CharSet = CharSet.Unicode)] private static extern int CreateAppContainerProfile(string name, string displayName, string description, IntPtr capabilities, uint capabilityCount, out IntPtr sid);
     [DllImport("userenv.dll", CharSet = CharSet.Unicode)] private static extern int DeriveAppContainerSidFromAppContainerName(string name, out IntPtr sid);
     [DllImport("userenv.dll", CharSet = CharSet.Unicode)] private static extern int DeleteAppContainerProfile(string name);
+    [DllImport("userenv.dll", CharSet = CharSet.Unicode)] private static extern int GetAppContainerFolderPath(string appContainerSid, out IntPtr path);
     [DllImport("advapi32.dll", SetLastError = true)] private static extern IntPtr FreeSid(IntPtr sid);
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ConvertSidToStringSidW(IntPtr sid, out IntPtr stringSid);
     [DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr memory);

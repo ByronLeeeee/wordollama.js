@@ -11,6 +11,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot ".."))
 $addinRoot = Join-Path $repoRoot "officejs\apps\addin"
 $unifiedCoreSmokeProject = Join-Path $repoRoot "tools\unified-core-smoke\WordOllama.UnifiedCoreSmoke.csproj"
 $unifiedBridgeSettingsSmokeProject = Join-Path $repoRoot "tools\unified-bridge-settings-smoke\WordOllama.UnifiedBridgeSettingsSmoke.csproj"
+$agentSandboxSmokeProject = Join-Path $repoRoot "tools\agent-sandbox-smoke\WordOllama.AgentSandboxSmoke.csproj"
 $bridgeLiveApiSmoke = Join-Path $repoRoot "tools\bridge-live-api-smoke-test.ps1"
 $offlineNugetConfig = Join-Path $repoRoot "tools\offline-nuget.config"
 $bridgeProject = Join-Path $repoRoot "src\WordOllama.DesktopBridge\WordOllama.DesktopBridge.csproj"
@@ -269,6 +270,13 @@ if ($NoRestore) {
     $coreSmokeArguments += "--no-restore"
 }
 Invoke-Checked -Command "dotnet" -Arguments $coreSmokeArguments -Label "Unified structural document comparer smoke"
+
+if ($IsWindows) {
+    $sandboxSmokeArguments = @("run", "--project", $agentSandboxSmokeProject, "-c", $Configuration)
+    if ($NoRestore) { $sandboxSmokeArguments += "--no-restore" }
+    Invoke-Checked -Command "dotnet" -Arguments $sandboxSmokeArguments `
+        -Label "Windows Agent AppContainer sandbox smoke"
+}
 
 $bridgeSettingsSmokeArguments = @("run", "--project", $unifiedBridgeSettingsSmokeProject, "-c", $Configuration, "--no-restore")
 if (-not $NoRestore) {

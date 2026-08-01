@@ -361,6 +361,21 @@ try
         catch (LocalToolPolicyException) { rejected = true; }
         Assert(rejected, $"fetch_url rejects unsafe target {blockedUrl}");
     }
+    var auditPath = Path.Combine(skillTestRoot, "terminal-audit.jsonl");
+    var terminalTools = new LocalToolService(
+        new NoopProcessRunner(),
+        new LocalToolPolicy(new HashSet<string>(), [skillTestRoot], skillTestRoot, "python", false, auditPath));
+    const string sensitiveTerminalScript = "$env:API_KEY='must-never-enter-audit'; Write-Output ok";
+    _ = await terminalTools.RunTerminalAsync(new RunTerminalRequest(
+        sensitiveTerminalScript,
+        TimeoutSeconds: 5,
+        WorkingDirectory: skillTestRoot));
+    var auditText = File.ReadAllText(auditPath);
+    using var auditDocument = JsonDocument.Parse(auditText);
+    Assert(!auditText.Contains("must-never-enter-audit", StringComparison.Ordinal) &&
+           auditDocument.RootElement.GetProperty("scriptSha256").GetString()?.Length == 64 &&
+           auditDocument.RootElement.GetProperty("scriptCharacters").GetInt32() == sensitiveTerminalScript.Length,
+        "full-terminal audit stores only command hash and metadata, never sensitive arguments");
     localTools.DeleteSkill(imported.Name);
     Assert(!localTools.ListSkills().Any(skill => skill.Name == imported.Name), "Skill deletion");
 }
