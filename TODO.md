@@ -213,8 +213,8 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 
 ## P1：运行与资源
 
-- [ ] 保持 Bridge 单实例和当前用户登录自启。
-- [ ] Provider、MCP 和 Agent 重型组件继续按需初始化。
+- [x] 保持 Bridge 单实例和当前用户登录自启。
+- [x] Provider、MCP 和 Agent 重型组件继续按需初始化。
 - [ ] 建立空闲内存基线门禁；当前 Windows Release 约为：
   - 工作集：65.6 MB。
   - 私有内存：49.3 MB。

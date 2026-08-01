@@ -1616,19 +1616,32 @@ app.MapPost("/mcp/tools/call", async (
     }
 });
 
-app.MapPost("/agent/sessions", (
+app.MapPost("/agent/sessions", async (
     HttpRequest httpRequest,
     AgentStartRequest request,
     BridgeSessionStore sessions,
     LocalToolService localTools,
     IEnumerable<IInternalToolExecutor> internalTools,
-    AgentSessionManager agentSessions) =>
+    AgentSessionManager agentSessions,
+    McpManager mcpManager,
+    McpSettingsStore mcpSettingsStore,
+    CancellationToken cancellationToken) =>
 {
     var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
     var origin = httpRequest.Headers["Origin"].FirstOrDefault();
     if (!sessions.TryGet(token, origin, out _))
     {
         return Results.Unauthorized();
+    }
+
+    if (request.AllowMcpTools == true ||
+        (request.AllowMcpTools is null && request.AllowExternalTools))
+    {
+        await ConnectEnabledMcpServersAsync(
+            mcpManager,
+            mcpSettingsStore,
+            localTools,
+            cancellationToken);
     }
 
     var tools = (request.Tools ?? sessions.GetOfficeTools(token!))
@@ -1795,33 +1808,37 @@ app.MapGet("/events", (HttpRequest httpRequest, BridgeSessionStore sessions) =>
         : Results.Unauthorized();
 });
 
-app.Lifetime.ApplicationStarted.Register(() =>
+static async Task ConnectEnabledMcpServersAsync(
+    McpManager manager,
+    McpSettingsStore settings,
+    LocalToolService localTools,
+    CancellationToken cancellationToken)
 {
-    _ = Task.Run(async () =>
+    var connected = manager.GetServerStates()
+        .Where(state => state.Connected)
+        .Select(state => state.Name)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    foreach (var configured in settings.GetEnabledSettings())
     {
-        var manager = app.Services.GetRequiredService<McpManager>();
-        var settings = app.Services.GetRequiredService<McpSettingsStore>();
-        var localTools = app.Services.GetRequiredService<LocalToolService>();
-        foreach (var configured in settings.GetEnabledSettings())
+        cancellationToken.ThrowIfCancellationRequested();
+        if (connected.Contains(configured.Name)) continue;
+        try
         {
-            try
+            var request = settings.GetRequest(configured.Name);
+            if (string.Equals(request.Transport, "stdio", StringComparison.OrdinalIgnoreCase) &&
+                !localTools.IsExecutableAllowed(request.Command))
             {
-                var request = settings.GetRequest(configured.Name);
-                if (string.Equals(request.Transport, "stdio", StringComparison.OrdinalIgnoreCase) &&
-                    !localTools.IsExecutableAllowed(request.Command))
-                {
-                    Console.Error.WriteLine($"Skipped disallowed MCP executable: {Path.GetFileName(request.Command)}");
-                    continue;
-                }
-                await manager.ConnectAsync(request);
+                Console.Error.WriteLine($"Skipped disallowed MCP executable: {Path.GetFileName(request.Command)}");
+                continue;
             }
-            catch (Exception exception)
-            {
-                Console.Error.WriteLine($"MCP auto-connect failed for {configured.Name}: {exception.Message}");
-            }
+            await manager.ConnectAsync(request, cancellationToken);
         }
-    });
-});
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            Console.Error.WriteLine($"MCP lazy connect failed for {configured.Name}: {exception.Message}");
+        }
+    }
+}
 
 static OllamaModelManager CreateActiveOllamaManager(
     ProviderSettingsStore settings,
