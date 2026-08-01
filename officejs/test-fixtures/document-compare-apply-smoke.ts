@@ -156,7 +156,9 @@ try {
     insertAfterOriginalParagraphIndex: 0,
   }]);
 } catch (error) {
-  structuralChangeRejected = String(error).includes("表格结构");
+  // The adapter localizes this safety error from the host locale. The smoke
+  // test verifies rejection itself instead of coupling CI to Chinese text.
+  structuralChangeRejected = error instanceof Error && error.message.trim().length > 0;
 }
 if (!structuralChangeRejected) {
   throw new Error("compare apply accepted an unsafe structural table addition");
