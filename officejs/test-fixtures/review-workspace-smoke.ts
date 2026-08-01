@@ -81,11 +81,12 @@ const fake = new FakeRuntime([
   '{"suggestions":[{"paragraphIndex":1,"originalText":"原文","suggestedText":"新文","reason":"清晰"}]}',
 ]);
 const generatedIssues = await generateReviewIssues(fake as never, "[P1] 原文", "全文", "silent-review-model");
-const generatedSuggestions = await generateReviewSuggestions(fake as never, "[P1] 原文", "提升清晰度", "正式", undefined);
+const generatedSuggestions = await generateReviewSuggestions(fake as never, "[P1] 原文", "提升清晰度", undefined);
 assert(generatedIssues.length === 1 && generatedSuggestions.length === 1, "generation helpers parse provider responses");
 assert(fake.calls[0][0].content.includes("只返回 JSON"), "issue prompt requires strict JSON");
 assert(fake.profileIds[0] === "silent-review-model", "silent review must route through its saved provider profile");
-assert(fake.calls[1][1].content.includes("写作画像：正式"), "suggestion prompt carries writing profile");
+assert(!fake.calls[1][1].content.includes("正式"),
+  "structured review suggestions must not receive unrelated output preferences");
 
 await i18n.changeLanguage("en-US");
 const englishFake = new FakeRuntime([

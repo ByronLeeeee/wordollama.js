@@ -19,6 +19,16 @@ export type TextWorkflowOutputMode =
 const MAX_SOURCE_CHARACTERS = 100_000;
 const REVIEW_PANE_CHARACTER_THRESHOLD = 4_000;
 const REVIEW_PANE_PARAGRAPH_THRESHOLD = 8;
+const OUTPUT_PREFERENCE_WORKFLOWS = new Set([
+  "writing", "modify", "polish", "expand", "simplify", "continue", "summarize", "fix",
+]);
+
+export function resolveTextWorkflowOutputPreference(
+  definition: TextWorkflowDefinition,
+  outputPreference: string,
+): string {
+  return OUTPUT_PREFERENCE_WORKFLOWS.has(definition.key) ? outputPreference.trim() : "";
+}
 
 export function resolveTextWorkflowOutputMode(
   configuredMode: string,

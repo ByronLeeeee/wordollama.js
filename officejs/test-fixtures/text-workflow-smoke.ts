@@ -1,5 +1,6 @@
 import {
   generateTextWorkflow,
+  resolveTextWorkflowOutputPreference,
   resolveTextWorkflowOutputMode,
   TEXT_WORKFLOWS,
 } from "../apps/addin/src/text-workflow.ts";
@@ -38,6 +39,14 @@ assert(TEXT_WORKFLOWS.continue.preferredAction === "insert", "continue auto-appl
 assert(TEXT_WORKFLOWS.summarize.preferredAction === "replace", "summary auto-apply revises the selected source");
 assert(TEXT_WORKFLOWS.fairness.preferredAction === "replace", "fairness auto-apply revises the selected clause");
 assert(TEXT_WORKFLOWS.risk.preferredAction === "comment", "legal risk output must default to a Word comment");
+assert(resolveTextWorkflowOutputPreference(TEXT_WORKFLOWS.polish, " concise ") === "concise",
+  "editing workflows receive output preferences");
+assert(resolveTextWorkflowOutputPreference(TEXT_WORKFLOWS.writing, "professional") === "professional",
+  "free writing receives output preferences");
+for (const key of ["translate", "translate-zh", "translate-en", "fairness", "risk"]) {
+  assert(resolveTextWorkflowOutputPreference(TEXT_WORKFLOWS[key], "must not leak") === "",
+    `${key} must not receive unrelated output preferences`);
+}
 for (const key of ["modify", "polish", "expand", "simplify", "continue", "summarize", "fix", "fairness", "risk"]) {
   assert(TEXT_WORKFLOWS[key].supportsAutoApply, `${key} should support automatic document modification`);
 }

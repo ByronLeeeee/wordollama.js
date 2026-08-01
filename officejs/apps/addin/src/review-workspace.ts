@@ -168,7 +168,6 @@ export async function generateReviewSuggestions(
   runtime: RuntimeClient,
   source: string,
   instruction: string,
-  writingProfile: string,
   signal?: AbortSignal,
 ): Promise<ReviewSuggestion[]> {
   const response = await runtime.chat([
@@ -180,7 +179,7 @@ export async function generateReviewSuggestions(
       role: "user",
       content: i18n.t("taskpane.reviewRuntime.suggestionUserMessage", {
         instruction: instruction || i18n.t("taskpane.reviewRuntime.defaultInstruction"),
-        profile: writingProfile || i18n.t("taskpane.reviewRuntime.noProfile"),
+        profile: i18n.t("taskpane.reviewRuntime.noProfile"),
         source: boundedSource(source),
         interpolation: { escapeValue: false },
       }),

@@ -38,6 +38,7 @@ import {
 } from "./review-workspace";
 import {
   generateTextWorkflow,
+  resolveTextWorkflowOutputPreference,
   TEXT_WORKFLOWS,
   type TextWorkflowDefinition,
 } from "./text-workflow";
@@ -298,7 +299,6 @@ let reviewScopeKind: "selection" | "paragraphs" | "document" | "" = "";
 let reviewIssues: ReviewIssue[] = [];
 let reviewSuggestions: ReviewSuggestion[] = [];
 let reviewAbortController: AbortController | null = null;
-let reviewWritingProfile = "";
 let reviewScopeAnchors = new Map<number, ReviewAnchor>();
 let reviewScopeChunks: Array<{ source: string; anchors: Map<number, ReviewAnchor> }> = [];
 let reviewPageStart = 1;
@@ -993,9 +993,9 @@ required<HTMLButtonElement>("#workflow-generate").addEventListener("click", asyn
   beginStreamingText(result);
   updateTextWorkflowActions();
   try {
-    let writingProfile = "";
+    let outputPreference = "";
     try {
-      writingProfile = (await runtime.getReviewSettings()).writingProfile;
+      outputPreference = (await runtime.getReviewSettings()).outputPreference;
     } catch {
       // A preference lookup failure must not block the requested editing task.
     }
@@ -1010,7 +1010,7 @@ required<HTMLButtonElement>("#workflow-generate").addEventListener("click", asyn
           : "",
       required<HTMLTextAreaElement>("#workflow-instruction").value.trim(),
       i18n.t("taskpane.language.auto"),
-      writingProfile,
+      resolveTextWorkflowOutputPreference(activeTextWorkflow, outputPreference),
       textWorkflowAbortController.signal,
       (content) => {
         updateStreamingText(result, content);
@@ -3620,7 +3620,6 @@ async function loadReviewSettings(): Promise<void> {
       );
       localStorage.removeItem("wordollama-writing-profile");
     }
-    reviewWritingProfile = settings.writingProfile;
   } catch (error) {
     showError(error);
   }
@@ -3637,7 +3636,6 @@ async function regenerateSuggestion(
       runtime,
       `[P${suggestion.paragraphIndex}] ${suggestion.originalText}`,
       required<HTMLTextAreaElement>("#review-instruction").value.trim(),
-      reviewWritingProfile,
     );
     const replacement = generated[0];
     if (!replacement) throw new Error(i18n.t("taskpane.review.noRegeneratedSuggestion"));
@@ -3829,7 +3827,6 @@ required<HTMLButtonElement>("#generate-review").addEventListener("click", async 
         runtime,
         chunk.source,
         required<HTMLTextAreaElement>("#review-instruction").value.trim(),
-        reviewWritingProfile,
         reviewAbortController.signal,
       );
       collected.push(...attachReviewAnchors(generated, chunk.anchors));
