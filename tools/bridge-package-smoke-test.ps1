@@ -750,7 +750,7 @@ function Assert-NativeMacInstallerPackage {
             if ($LASTEXITCODE -ne 0) {
                 throw "Bridge package smoke: generated macOS script failed sh -n: $scriptPath"
             }
-            & /usr/bin/test -x $scriptPath
+            & /bin/test -x $scriptPath
             if ($LASTEXITCODE -ne 0) {
                 throw "Bridge package smoke: generated macOS script is not executable: $scriptPath"
             }
