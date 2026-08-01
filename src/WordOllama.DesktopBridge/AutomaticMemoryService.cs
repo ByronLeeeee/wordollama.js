@@ -31,9 +31,14 @@ public sealed partial class AutomaticMemoryService : BackgroundService
 
     public void Observe(ProviderChatRequest request)
     {
-        if (!_memories.Get().AutoMemory) return;
         var userText = request.Messages.LastOrDefault(message =>
             string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))?.Content;
+        ObserveUserText(userText);
+    }
+
+    public void ObserveUserText(string? userText)
+    {
+        if (!_memories.Get().AutoMemory) return;
         foreach (var candidate in ExtractExplicitPreferenceCandidates(userText ?? string.Empty))
         {
             _queue.Writer.TryWrite(candidate);

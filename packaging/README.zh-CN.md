@@ -102,8 +102,13 @@ pwsh ./packaging/package-macos-installer.ps1 `
 该 `.pkg` 只允许安装到当前用户 Home，不要求管理员权限；载荷位于
 `~/Library/Application Support/WordOllama.JS/DesktopBridge`，并安装用户级
 LaunchAgent。安装器维护 `current-version`/`current.json`，保留旧版本目录供回滚。
-可信 localhost PFX 尚未配置时 launcher 会安静退出；随后运行
-`provision-bridge-https.ps1` 写入 Keychain 后会自动激活 LaunchAgent。PKG 使用
+首次安装会在 `~/Applications/WordOllama.JS` 放置
+`Complete WordOllama.JS Setup.command`。用户双击并明确确认后，它才会创建仅包含
+`localhost`、`127.0.0.1` 和 `::1` SAN 的独立证书，并调用 macOS `security`
+写入当前用户 Trust Settings；系统仍可显示自己的授权提示，脚本不会绕过。随后密码通过
+Bridge 标准输入写入 Keychain、LaunchAgent 启动，并同时检查 `/health` 与
+`/index.html`。取消或系统拒绝授权时 Bridge 不会启动。已经完成该设置的升级安装会复用
+证书，自动重启并执行同样的健康检查。PKG 使用
 `productbuild` 和 Developer ID Installer 签名，要求 Apple 公证 Accepted、日志无错误、
 stapler staple/validate 和 `spctl --type install` 全部通过，并输出独立安装器证据 JSON。
 PKG 还会在 `~/Applications/WordOllama.JS` 安装可双击的

@@ -278,6 +278,7 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
   const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
   const [editingMemory, setEditingMemory] = useState("");
   const [selectedMemories, setSelectedMemories] = useState<Set<string>>(() => new Set());
+  const [autoMemoryConsentOpen, setAutoMemoryConsentOpen] = useState(false);
   const saved = useRef({ preference, settings, reviewSettings });
 
   useEffect(() => {
@@ -436,10 +437,10 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
                     className="toggle toggle-primary toggle-sm"
                     type="checkbox"
                     checked={reviewSettings.autoMemory}
-                    onChange={(event) => setReviewSettings((current) => ({
-                      ...current,
-                      autoMemory: event.currentTarget.checked,
-                    }))}
+                    onChange={(event) => {
+                      if (event.currentTarget.checked) setAutoMemoryConsentOpen(true);
+                      else setReviewSettings((current) => ({ ...current, autoMemory: false }));
+                    }}
                   />
                 </label>
               </div>
@@ -625,6 +626,32 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
           <Status value={status} />
         </Card>
       </div>
+      {autoMemoryConsentOpen ? (
+        <dialog className="modal modal-open" open onCancel={() => setAutoMemoryConsentOpen(false)}>
+          <div className="modal-box settings-confirm-modal">
+            <h3 className="font-bold text-lg">{t("general.autoMemoryConsentTitle")}</h3>
+            <p>{t("general.autoMemoryConsentMessage")}</p>
+            <div className="modal-action">
+              <button
+                className="btn btn-primary btn-sm"
+                type="button"
+                onClick={() => {
+                  setReviewSettings((current) => ({ ...current, autoMemory: true }));
+                  setAutoMemoryConsentOpen(false);
+                }}
+              >
+                {t("general.autoMemoryConsentAllow")}
+              </button>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => setAutoMemoryConsentOpen(false)}>
+                {t("common.cancel")}
+              </button>
+            </div>
+          </div>
+          <form method="dialog" className="modal-backdrop" onSubmit={() => setAutoMemoryConsentOpen(false)}>
+            <button type="submit">{t("common.close")}</button>
+          </form>
+        </dialog>
+      ) : null}
     </div>
   );
 }

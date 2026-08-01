@@ -123,7 +123,8 @@ public sealed record AgentStartRequest(
     string? KeepAlive = null,
     string LanguageMode = "auto",
     string UiLocale = "en-US",
-    string WritingProfile = "");
+    string WritingProfile = "",
+    string Goal = "");
 
 public sealed record AgentStartResponse(string SessionId, string Status);
 
@@ -163,7 +164,8 @@ public sealed record AgentRecoveryDescriptor(
     int Iteration,
     string ExecutionMode,
     DateTimeOffset UpdatedAt,
-    bool HasImage);
+    bool HasImage,
+    string Goal = "");
 
 public sealed record ExecuteCommandRequest(
     string Command,

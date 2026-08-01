@@ -232,6 +232,9 @@ button { cursor: pointer; }
 .command-item strong { font-size: 11px; }
 .command-item span { color: #64748b; font-size: 10px; }
 .composer-row { min-width: 0; align-items: flex-end; gap: 6px; padding: 2px 7px 7px 10px; }
+.goal-toggle { margin-left: auto; gap: 5px; min-height: 28px; height: 28px; }
+.agent-goal-row { padding: 3px 8px 5px; }
+.agent-goal-row .input { width: 100%; }
 .composer textarea { flex: 1 1 auto; width: auto; min-width: 0; min-height: 42px; max-height: 140px; margin: 0; padding: 8px 2px; resize: vertical; border: 0; outline: 0; background: transparent; }
 .send-button { width: 34px; height: 34px; padding: 0; border-radius: 10px; }
 

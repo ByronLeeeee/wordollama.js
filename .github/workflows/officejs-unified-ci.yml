@@ -13,10 +13,11 @@ on:
       - "src/WordOllama.DesktopBridge/**"
       - "src/WordOllama.Mcp/**"
       - "src/WordOllama.Platform/**"
+      - "src/WordOllama.WindowsInstaller/**"
       - "tools/**"
   push:
     branches:
-      - office.js
+      - main
     paths:
       - ".github/workflows/officejs-unified-ci.yml"
       - ".github/workflows/officejs-signed-candidate.yml"
@@ -27,6 +28,7 @@ on:
       - "src/WordOllama.DesktopBridge/**"
       - "src/WordOllama.Mcp/**"
       - "src/WordOllama.Platform/**"
+      - "src/WordOllama.WindowsInstaller/**"
       - "tools/**"
 
 permissions:

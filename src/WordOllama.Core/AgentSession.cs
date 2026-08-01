@@ -110,6 +110,7 @@ public sealed class AgentSession
                     : _executionMode == "ProposeChanges"
                         ? "The session is ProposeChanges: describe proposed edits but do not change the document."
                         : "The session is TrackedChanges: document writes are permitted and the host records revisions.") +
+                GoalInstruction(request.Goal) +
                 LanguageInstruction(_languageMode) +
                 WritingProfileInstruction(request.WritingProfile)));
             _messages.Add(new ChatMessage(
@@ -133,6 +134,14 @@ public sealed class AgentSession
             ? string.Empty
             : "\nApply the following user memories and output preferences only when relevant. " +
               "The explicit task, document facts, legal accuracy, and required output schema take precedence.\n" +
+              value.Trim();
+
+    private static string GoalInstruction(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : "\nThis session has a durable goal. Use it to choose and sequence steps across iterations, " +
+              "but do not broaden the user's permissions or invent work outside the request. Explicitly " +
+              "state when the goal is achieved; if it cannot be achieved, explain the concrete blocker.\nGoal:\n" +
               value.Trim();
 
     private static string LanguageInstruction(string mode) =>
@@ -202,7 +211,8 @@ public sealed class AgentSession
                 _checkpoint.Iteration,
                 _executionMode,
                 _checkpoint.CreatedAt,
-                !string.IsNullOrWhiteSpace(_request.ImageDataUrl));
+                !string.IsNullOrWhiteSpace(_request.ImageDataUrl),
+                _request.Goal);
 
     public void Cancel()
     {
@@ -471,6 +481,13 @@ public sealed class AgentSession
             return true;
         }
 
+        if (name.StartsWith("workspace_", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith("_workspace_file", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "list_workspace_files", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         if (name.StartsWith("mcp__", StringComparison.OrdinalIgnoreCase))
         {
             return _allowMcpTools;
@@ -552,6 +569,7 @@ public sealed class AgentSessionManager : IAgentRecoveryStore
     private readonly IModelProvider _provider;
     private readonly IReadOnlyList<IInternalToolExecutor> _internalTools;
     private readonly IAgentRecoveryStore _recoveryStore;
+    private readonly IAgentWorkspaceFactory? _workspaceFactory;
     private readonly ConcurrentDictionary<string, AgentSession> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, AgentRecoverySnapshot> _recoveries = new(StringComparer.Ordinal);
     private readonly object _recoveryGate = new();
@@ -559,11 +577,13 @@ public sealed class AgentSessionManager : IAgentRecoveryStore
     public AgentSessionManager(
         IModelProvider provider,
         IEnumerable<IInternalToolExecutor> internalTools,
-        IAgentRecoveryStore? recoveryStore = null)
+        IAgentRecoveryStore? recoveryStore = null,
+        IAgentWorkspaceFactory? workspaceFactory = null)
     {
         _provider = provider;
         _internalTools = internalTools.ToArray();
         _recoveryStore = recoveryStore ?? new NullAgentRecoveryStore();
+        _workspaceFactory = workspaceFactory;
         try
         {
             foreach (var snapshot in _recoveryStore.LoadAll())
@@ -579,12 +599,15 @@ public sealed class AgentSessionManager : IAgentRecoveryStore
 
     public AgentSession Create(AgentStartRequest request, string origin)
     {
+        var id = Guid.NewGuid().ToString("N");
+        var tools = AddWorkspaceTool(id);
+        request = AddInternalToolDescriptors(request, tools);
         var session = new AgentSession(
-            Guid.NewGuid().ToString("N"),
+            id,
             origin,
             request,
             _provider,
-            _internalTools,
+            tools,
             this,
             onCompleted: RemoveLiveSession);
         _sessions[session.Id] = session;
@@ -610,12 +633,14 @@ public sealed class AgentSessionManager : IAgentRecoveryStore
                 session = null!;
                 return false;
             }
+            var internalTools = AddWorkspaceTool(id);
+            var recoveredRequest = AddInternalToolDescriptors(recovery.Request, internalTools);
             session = new AgentSession(
                 recovery.SessionId,
                 recovery.Origin,
-                recovery.Request,
+                recoveredRequest,
                 _provider,
-                _internalTools,
+                internalTools,
                 this,
                 recovery,
                 RemoveLiveSession);
@@ -656,7 +681,8 @@ public sealed class AgentSessionManager : IAgentRecoveryStore
                 snapshot.Checkpoint.ExecutionMode,
                 snapshot.UpdatedAt,
                 snapshot.Messages.Any(message =>
-                    !string.IsNullOrWhiteSpace(message.ImageDataUrl))));
+                    !string.IsNullOrWhiteSpace(message.ImageDataUrl)),
+                snapshot.Request.Goal));
         var live = _sessions.Values
             .Where(session => string.Equals(session.Origin, origin, StringComparison.OrdinalIgnoreCase))
             .Select(session => session.GetRecoveryDescriptor())
@@ -684,9 +710,37 @@ public sealed class AgentSessionManager : IAgentRecoveryStore
         {
             session.Cancel();
         }
+        TryDeleteWorkspace(id);
     }
 
-    private void RemoveLiveSession(string id) => _sessions.TryRemove(id, out _);
+    private void RemoveLiveSession(string id)
+    {
+        _sessions.TryRemove(id, out _);
+        TryDeleteWorkspace(id);
+    }
+
+    private IReadOnlyList<IInternalToolExecutor> AddWorkspaceTool(string id) =>
+        _workspaceFactory is null
+            ? _internalTools
+            : [.. _internalTools, _workspaceFactory.Create(id)];
+
+    private static AgentStartRequest AddInternalToolDescriptors(
+        AgentStartRequest request,
+        IReadOnlyList<IInternalToolExecutor> internalTools) =>
+        request with
+        {
+            Tools = (request.Tools ?? [])
+                .Concat(internalTools.SelectMany(tool => tool.GetToolDescriptors()))
+                .GroupBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToArray(),
+        };
+
+    private void TryDeleteWorkspace(string id)
+    {
+        try { _workspaceFactory?.Delete(id); }
+        catch { /* Workspace cleanup is best-effort and never broadens file access. */ }
+    }
 
     IReadOnlyList<AgentRecoverySnapshot> IAgentRecoveryStore.LoadAll() =>
         _recoveryStore.LoadAll();

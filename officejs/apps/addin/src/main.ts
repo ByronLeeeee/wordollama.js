@@ -202,6 +202,9 @@ const runtimeStatusText = required<HTMLSpanElement>("#runtime-status-text");
 const agentOutput = required<HTMLDivElement>("#agent-output");
 const emptyChatState = required<HTMLDivElement>("#empty-chat-state");
 const agentRequirement = required<HTMLTextAreaElement>("#agent-requirement");
+const agentGoal = required<HTMLInputElement>("#agent-goal");
+const agentGoalRow = required<HTMLDivElement>("#agent-goal-row");
+const toggleAgentGoal = required<HTMLButtonElement>("#toggle-agent-goal");
 const agentRunButton = required<HTMLButtonElement>("#agent-run");
 const agentImageInput = required<HTMLInputElement>("#agent-image-input");
 const agentImagePreview = required<HTMLDivElement>("#agent-image-preview");
@@ -346,7 +349,15 @@ interface AgentRecoveryState {
   iteration: number;
   updatedAt: string;
   persisted?: boolean;
+  goal?: string;
 }
+
+toggleAgentGoal.addEventListener("click", () => {
+  const expanded = toggleAgentGoal.getAttribute("aria-expanded") === "true";
+  toggleAgentGoal.setAttribute("aria-expanded", String(!expanded));
+  agentGoalRow.hidden = expanded;
+  if (!expanded) agentGoal.focus();
+});
 
 function appendDiagnostic(category: string, message: string): void {
   const settings = readLocalSettings("wordollama-diagnostic-settings", { enabled: false });
@@ -2495,6 +2506,7 @@ async function offerAgentRecovery(): Promise<void> {
         iteration: persisted.iteration,
         updatedAt: persisted.updatedAt,
         persisted: true,
+        goal: persisted.goal ?? "",
       };
       saveAgentRecovery(recovery);
     }
@@ -2520,6 +2532,7 @@ async function consumeAgentSession(
   requirement: string,
   imageDataUrl: string,
   executionMode: "ViewOnly" | "ProposeChanges" | "TrackedChanges",
+  goal = "",
 ): Promise<void> {
   let streamingBubble: HTMLDivElement | null = null;
   let planRevisionRequested = false;
@@ -2538,6 +2551,7 @@ async function consumeAgentSession(
         executionMode,
         iteration: checkpoint.iteration ?? 0,
         updatedAt: checkpoint.createdAt ?? new Date().toISOString(),
+        goal,
       });
     } else if (event.type === "plan_pending") {
       const approved = await requestDecision(
@@ -2653,6 +2667,7 @@ async function runAgent(requirement: string): Promise<void> {
   clearError();
   activateTab("chat");
   const imageDataUrl = agentImageDataUrl;
+  const goal = agentGoal.value.trim();
   appendMessage(requirement, "user", imageDataUrl);
   agentRequirement.value = "";
   clearAgentImage();
@@ -2688,6 +2703,7 @@ async function runAgent(requirement: string): Promise<void> {
       }
     }
     const session = await runtime.startAgent(requirement, tools.list(), {
+      goal: goal || undefined,
       imageDataUrl: imageDataUrl || undefined,
       requirePlanConfirmation: !currentGeneralSettings.suppressPlan,
       maxIterations: currentAgentSettings.unlimited
@@ -2709,9 +2725,10 @@ async function runAgent(requirement: string): Promise<void> {
       executionMode,
       iteration: 0,
       updatedAt: new Date().toISOString(),
+      goal,
     });
     setAgentRunning(true, i18n.t("taskpane.agent.running"));
-    await consumeAgentSession(session.sessionId, requirement, imageDataUrl, executionMode);
+    await consumeAgentSession(session.sessionId, requirement, imageDataUrl, executionMode, goal);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     appendDiagnostic("agent", message);
@@ -2765,6 +2782,7 @@ required<HTMLButtonElement>("#resume-agent-session").addEventListener("click", a
       recovery.requirement || i18n.t("taskpane.agent.recoveredTask"),
       recovery.imageDataUrl || "",
       recovery.executionMode,
+      recovery.goal ?? "",
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

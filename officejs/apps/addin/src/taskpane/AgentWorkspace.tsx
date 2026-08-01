@@ -1,4 +1,4 @@
-import { ArrowUp, ImagePlus, Sparkles } from "lucide-react";
+import { ArrowUp, ImagePlus, Sparkles, Target } from "lucide-react";
 
 export function AgentWorkspace() {
   return (
@@ -103,6 +103,28 @@ export function AgentWorkspace() {
             >
               <ImagePlus size={16} strokeWidth={2} aria-hidden="true" />
             </button>
+            <button
+              id="toggle-agent-goal"
+              className="btn btn-ghost btn-sm goal-toggle"
+              type="button"
+              aria-expanded="false"
+              aria-controls="agent-goal-row"
+            >
+              <Target size={15} strokeWidth={2} aria-hidden="true" />
+              <span data-i18n="taskpane.agent.goal">Goal</span>
+            </button>
+          </div>
+          <div id="agent-goal-row" className="agent-goal-row" hidden>
+            <input
+              id="agent-goal"
+              className="input input-sm"
+              type="text"
+              maxLength={500}
+              placeholder="Define an outcome that may take multiple steps…"
+              data-i18n-placeholder="taskpane.agent.goalPlaceholder"
+              aria-label="Agent goal"
+              data-i18n-aria-label="taskpane.agent.goal"
+            />
           </div>
           <div
             id="command-menu"

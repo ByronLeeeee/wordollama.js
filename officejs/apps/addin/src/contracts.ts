@@ -236,6 +236,7 @@ export interface AgentStartResponse {
 }
 
 export interface AgentStartOptions {
+  goal?: string;
   model?: string;
   imageDataUrl?: string;
   temperature?: number;
@@ -275,6 +276,7 @@ export interface AgentRecoveryDescriptor {
   executionMode: "ViewOnly" | "ProposeChanges" | "TrackedChanges";
   updatedAt: string;
   hasImage: boolean;
+  goal?: string;
 }
 
 export interface CommandRequest {

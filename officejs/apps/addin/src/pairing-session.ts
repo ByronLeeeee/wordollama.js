@@ -83,7 +83,10 @@ export function clearPairingSession(storage: PairingStorage | undefined): void {
 
 export function browserPairingStorage(): PairingStorage | undefined {
   try {
-    return typeof window === "undefined" ? undefined : window.localStorage;
+    // Pairing credentials belong to the current Office WebView session. A new
+    // pane can obtain a fresh loopback session automatically; persisting the
+    // bearer token across browser restarts only increases exposure.
+    return typeof window === "undefined" ? undefined : window.sessionStorage;
   } catch {
     return undefined;
   }

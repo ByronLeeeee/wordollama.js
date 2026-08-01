@@ -374,7 +374,8 @@ var agent = new AgentSession(
         ExecutionMode: "ViewOnly",
         AllowExternalTools: false,
         ImageDataUrl: "data:image/png;base64,iVBORw0KGgo=",
-        LanguageMode: "zh"),
+        LanguageMode: "zh",
+        Goal: "Finish the document review"),
     agentProvider,
     [fakeInternalTools]);
 agent.Start();
@@ -396,6 +397,10 @@ Assert(agentProvider.LastRequest?.Messages.Any(message =>
            message.Role == "system" &&
            message.Content.Contains("Simplified Chinese", StringComparison.Ordinal)) == true,
     "Agent applies the configured output language to every provider iteration");
+Assert(agentProvider.LastRequest?.Messages.Any(message =>
+           message.Role == "system" &&
+           message.Content.Contains("Finish the document review", StringComparison.Ordinal)) == true,
+    "Agent persists the durable goal in the model context");
 
 var granularProvider = new CapturingProvider([
     new ProviderChatResponse("fake", "fake", "done"),
@@ -514,7 +519,7 @@ var persistedCheckpoint = new AgentCheckpoint(
 var persistedSnapshot = new AgentRecoverySnapshot(
     "persisted-agent",
     "https://localhost:3000",
-    new AgentStartRequest("continue review", MaxIterations: 5),
+    new AgentStartRequest("continue review", MaxIterations: 5, Goal: "Complete the recovered review"),
     [
         new ChatMessage("system", "system"),
         new ChatMessage("user", "continue review"),
@@ -530,7 +535,8 @@ var recoveredManager = new AgentSessionManager(
     recoveredProvider,
     Array.Empty<IInternalToolExecutor>(),
     memoryRecoveryStore);
-Assert(recoveredManager.ListRecoveries("https://localhost:3000").Single().Iteration == 3,
+Assert(recoveredManager.ListRecoveries("https://localhost:3000").Single() is
+       { Iteration: 3, Goal: "Complete the recovered review" },
     "Agent manager discovers encrypted checkpoints after Bridge restart");
 Assert(recoveredManager.ListRecoveries("https://other-origin.test").Count == 0,
     "Agent recovery discovery is isolated by paired Office.js origin");
@@ -588,6 +594,51 @@ Assert(googleModels.SequenceEqual(["gemini-test"]), "Gemini OAuth model response
 Assert(googleHandler.RefreshRequested, "expired Google access tokens are refreshed");
 Assert(googleHandler.BearerToken == "fresh-access-token", "Gemini requests use refreshed Bearer authentication");
 Assert(googleHandler.QuotaProject == "wordollama-smoke-project", "Gemini OAuth sends the quota project");
+
+var workspaceRoot = Path.Combine(Path.GetTempPath(), "wordollama-workspace-smoke-" + Guid.NewGuid().ToString("N"));
+var workspaceFactory = new AgentWorkspaceFactory(workspaceRoot);
+var workspaceSessionId = Guid.NewGuid().ToString("N");
+var workspace = workspaceFactory.Create(workspaceSessionId);
+await workspace.ExecuteAsync("write_workspace_file", JsonSerializer.SerializeToElement(new
+{
+    path = "notes/plan.md",
+    content = "# Plan\nSafe workspace",
+}));
+var workspaceRead = await workspace.ExecuteAsync("read_workspace_file", JsonSerializer.SerializeToElement(new
+{
+    path = "notes/plan.md",
+}));
+Assert(workspaceRead.Contains("Safe workspace", StringComparison.Ordinal), "workspace roundtrip");
+var workspaceEscapeBlocked = false;
+try
+{
+    await workspace.ExecuteAsync("read_workspace_file", JsonSerializer.SerializeToElement(new { path = "../outside.txt" }));
+}
+catch (InvalidOperationException)
+{
+    workspaceEscapeBlocked = true;
+}
+Assert(workspaceEscapeBlocked, "workspace traversal is blocked");
+workspaceFactory.Delete(workspaceSessionId);
+Assert(!Directory.Exists(Path.Combine(workspaceRoot, workspaceSessionId)), "workspace cleanup");
+var workspaceProvider = new CapturingProvider([
+    new ProviderChatResponse("fake", "fake", "workspace ready"),
+]);
+var workspaceManager = new AgentSessionManager(
+    workspaceProvider,
+    Array.Empty<IInternalToolExecutor>(),
+    workspaceFactory: workspaceFactory);
+var workspaceAgent = workspaceManager.Create(new AgentStartRequest("prepare notes"), "https://localhost:3000");
+await foreach (var runtimeEvent in workspaceAgent.ReadEventsAsync())
+{
+    if (runtimeEvent.Type == "completed") break;
+}
+Assert(workspaceProvider.LastRequest?.Tools?.Any(tool => tool.Name == "write_workspace_file") == true,
+    "session workspace tools are advertised to the Agent");
+workspaceManager.Remove(workspaceAgent.Id);
+Assert(!Directory.Exists(Path.Combine(workspaceRoot, workspaceAgent.Id)),
+    "session manager cleans the workspace after completion");
+Directory.Delete(workspaceRoot);
 
 Console.WriteLine("Unified comparer and provider settings smoke passed.");
 

@@ -166,6 +166,7 @@ esac
 executable="$root/versions/$version/WordOllama.DesktopBridge"
 [ -x "$executable" ] || exit 3
 [ -f "$root/certs/bridge.pfx" ] || exit 0
+export Bridge__HttpsCertificate__Path="$root/certs/bridge.pfx"
 exec "$executable" >>"$root/bridge.log" 2>&1
 '@
     Set-Content -LiteralPath $launcherPath -Value $launcher `
@@ -252,6 +253,15 @@ fi
 /usr/bin/security delete-generic-password \
   -s "WordOllama.JS/WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD" \
   -a "$(id -un)" >/dev/null 2>&1 || true
+ownership="$root/certs/ownership.json"
+if [ -f "$ownership" ]; then
+  thumbprint=$(sed -n 's/.*"thumbprint":"\([0-9A-Fa-f]*\)".*/\1/p' "$ownership" | head -n 1)
+  case "$thumbprint" in
+    ''|*[!0-9A-Fa-f]*) ;;
+    *) /usr/bin/security delete-certificate -Z "$thumbprint" \
+         "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 || true ;;
+  esac
+fi
 rm -f "$launch_agent"
 if [ -f "$addin_manifest" ] && grep -q '4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701' "$addin_manifest"; then
   rm -f "$addin_manifest"
@@ -261,10 +271,121 @@ rm -rf "$root"
 rm -f "$resources/messages.en-US" "$resources/messages.zh-CN"
 rmdir "$resources" >/dev/null 2>&1 || true
 rm -f "$application_dir/Uninstall WordOllama.JS Desktop Bridge.command"
+rm -f "$application_dir/Complete WordOllama.JS Setup.command"
 rmdir "$application_dir" >/dev/null 2>&1 || true
 printf '%s\n' "$removed_message"
 '@
     Set-Content -LiteralPath $uninstallerPath -Value $uninstaller `
+        -Encoding utf8NoBOM -NoNewline
+
+    $setupPath = Join-Path $payloadApplications `
+        "Complete WordOllama.JS Setup.command"
+    $setup = @'
+#!/bin/sh
+set -eu
+root="$HOME/Library/Application Support/WordOllama.JS/DesktopBridge"
+expected="$HOME/Library/Application Support/WordOllama.JS/DesktopBridge"
+[ "$root" = "$expected" ] || exit 3
+pointer="$root/current-version"
+[ -f "$pointer" ] || exit 4
+version=$(cat "$pointer")
+case "$version" in ''|*[!0-9A-Za-z._-]*) exit 5 ;; esac
+executable="$root/versions/$version/WordOllama.DesktopBridge"
+plist="$HOME/Library/LaunchAgents/com.wordollama.desktopbridge.plist"
+[ -x "$executable" ] && [ -f "$plist" ] || exit 6
+
+locale="${LC_ALL:-${LC_MESSAGES:-${LANG:-en-US}}}"
+case "$locale" in
+  zh*|ZH*)
+    confirm='WordOllama.JS 需要为当前用户创建并信任一个仅限 localhost、127.0.0.1 和 ::1 的证书。macOS 可能继续显示系统授权提示。继续？[y/N] '
+    success='WordOllama.JS 本地服务已启动并通过健康检查。请重新启动 Word。'
+    cancelled='已取消安全设置；WordOllama.JS 本地服务尚未启动。'
+    failed='本地服务未能通过健康检查。请查看 DesktopBridge/bridge.log。'
+    ;;
+  *)
+    confirm='WordOllama.JS will create and trust a current-user certificate limited to localhost, 127.0.0.1 and ::1. macOS may show an additional authorization prompt. Continue? [y/N] '
+    success='The WordOllama.JS local service is running and healthy. Restart Word.'
+    cancelled='Setup was cancelled; the WordOllama.JS local service has not started.'
+    failed='The local service did not pass its health check. Review DesktopBridge/bridge.log.'
+    ;;
+esac
+printf '%s' "$confirm"
+IFS= read -r answer
+case "$answer" in y|Y|yes|YES|是) ;; *) printf '%s\n' "$cancelled"; exit 0 ;; esac
+
+cert_root="$root/certs"
+pfx="$cert_root/bridge.pfx"
+ownership="$cert_root/ownership.json"
+keychain="$HOME/Library/Keychains/login.keychain-db"
+mkdir -p "$cert_root"
+chmod 700 "$cert_root"
+if [ ! -f "$pfx" ]; then
+  command -v openssl >/dev/null 2>&1 || exit 20
+  command -v security >/dev/null 2>&1 || exit 21
+  password=$(openssl rand -base64 32 | tr -d '\r\n')
+  work="$cert_root/.provision.$$"
+  mkdir -m 700 "$work"
+  cleanup_work() { rm -rf "$work"; }
+  trap cleanup_work EXIT HUP INT TERM
+  cat > "$work/openssl.cnf" <<'WORDOLLAMA_OPENSSL_CONFIG'
+[req]
+distinguished_name=dn
+x509_extensions=server_ext
+prompt=no
+[dn]
+CN=WordOllama.JS localhost
+[server_ext]
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+subjectAltName=critical,@alt_names
+[alt_names]
+DNS.1=localhost
+IP.1=127.0.0.1
+IP.2=::1
+WORDOLLAMA_OPENSSL_CONFIG
+  openssl req -x509 -newkey rsa:3072 -sha256 -nodes -days 730 \
+    -config "$work/openssl.cnf" -extensions server_ext \
+    -keyout "$work/bridge.key" -out "$work/bridge.crt"
+  printf '%s\n' "$password" | openssl pkcs12 -export -out "$work/bridge.pfx" \
+    -inkey "$work/bridge.key" -in "$work/bridge.crt" -passout stdin
+  security add-trusted-cert -d -r trustAsRoot -p ssl -k "$keychain" "$work/bridge.crt"
+  fingerprint=$(openssl x509 -in "$work/bridge.crt" -sha1 -fingerprint -noout |
+    sed 's/^[^=]*=//; s/://g')
+  case "$fingerprint" in ''|*[!0-9A-Fa-f]*) exit 22 ;; esac
+  mv "$work/bridge.pfx" "$pfx"
+  chmod 600 "$pfx"
+  printf '{"schemaVersion":1,"thumbprint":"%s","subject":"CN=WordOllama.JS localhost","hosts":["localhost","127.0.0.1","::1"]}\n' \
+    "$fingerprint" > "$ownership"
+  chmod 600 "$ownership"
+  if ! printf '%s\n' "$password" | "$executable" https-certificate-secret set >/dev/null; then
+    security delete-certificate -Z "$fingerprint" "$keychain" >/dev/null 2>&1 || true
+    rm -f "$pfx" "$ownership"
+    exit 23
+  fi
+  password=''
+  cleanup_work
+  trap - EXIT HUP INT TERM
+fi
+
+uid=$(id -u)
+launchctl bootout "gui/$uid" "$plist" >/dev/null 2>&1 || true
+launchctl bootstrap "gui/$uid" "$plist"
+launchctl kickstart -k "gui/$uid/com.wordollama.desktopbridge"
+attempt=0
+while [ "$attempt" -lt 30 ]; do
+  if curl --fail --silent --show-error --max-time 2 https://localhost:37421/health >/dev/null 2>&1 &&
+     curl --fail --silent --show-error --max-time 2 https://localhost:37421/index.html >/dev/null 2>&1; then
+    printf '%s\n' "$success"
+    exit 0
+  fi
+  attempt=$((attempt + 1))
+  sleep 1
+done
+printf '%s\n' "$failed" >&2
+exit 24
+'@
+    Set-Content -LiteralPath $setupPath -Value $setup `
         -Encoding utf8NoBOM -NoNewline
     Set-Content -LiteralPath (Join-Path $uninstallerResources "messages.en-US") `
         -Value @'
@@ -309,12 +430,28 @@ plist="`$HOME/Library/LaunchAgents/com.wordollama.desktopbridge.plist"
 launchctl bootout "gui/`$uid" "`$plist" >/dev/null 2>&1 || true
 launchctl bootstrap "gui/`$uid" "`$plist"
 launchctl kickstart -k "gui/`$uid/com.wordollama.desktopbridge" || true
+if [ -f "`$root/certs/bridge.pfx" ]; then
+  healthy=0
+  attempt=0
+  while [ "`$attempt" -lt 30 ]; do
+    if curl --fail --silent --show-error --max-time 2 https://localhost:37421/health >/dev/null 2>&1 &&
+       curl --fail --silent --show-error --max-time 2 https://localhost:37421/index.html >/dev/null 2>&1; then
+      healthy=1
+      break
+    fi
+    attempt=`$((attempt + 1))
+    sleep 1
+  done
+  [ "`$healthy" -eq 1 ] || exit 24
+else
+  printf '%s\n' 'Run ~/Applications/WordOllama.JS/Complete WordOllama.JS Setup.command to approve localhost certificate trust and start the service.' > "`$root/setup-required.txt"
+fi
 "@
     Set-Content -LiteralPath $postinstallPath -Value $postinstall `
         -Encoding utf8NoBOM -NoNewline
 
     if (-not $DryRun) {
-        & /bin/chmod 700 $launcherPath $postinstallPath $uninstallerPath
+        & /bin/chmod 700 $launcherPath $postinstallPath $uninstallerPath $setupPath
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to set executable permissions in the package payload."
         }

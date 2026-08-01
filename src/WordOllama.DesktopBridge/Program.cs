@@ -245,6 +245,8 @@ builder.Services.AddSingleton<IModelProvider>(reloadableProvider);
 builder.Services.AddSingleton(mcpSettings);
 builder.Services.AddSingleton(reviewSettings);
 builder.Services.AddSingleton<IAgentRecoveryStore>(agentRecoveryStore);
+builder.Services.AddSingleton<IAgentWorkspaceFactory>(
+    new AgentWorkspaceFactory(Path.Combine(settingsRoot, "agent-workspaces")));
 builder.Services.AddSingleton<GoogleOAuthService>();
 builder.Services.AddSingleton(updateService);
 builder.Services.AddSingleton<IUpdateInstallerPlatform, SystemUpdateInstallerPlatform>();
@@ -297,15 +299,27 @@ app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
-    if (context.Request.Method is "POST" or "PUT" or "PATCH" or "DELETE" &&
+    var unsafeMethod = context.Request.Method is "POST" or "PUT" or "PATCH" or "DELETE";
+    var hasRequestBody = context.Request.ContentLength.GetValueOrDefault() > 0 ||
+        context.Request.Headers.TransferEncoding.Count > 0;
+    if (unsafeMethod && hasRequestBody && !context.Request.HasJsonContentType())
+    {
+        context.Response.StatusCode = StatusCodes.Status415UnsupportedMediaType;
+        return;
+    }
+    if (unsafeMethod &&
         !context.Request.Path.StartsWithSegments("/pair"))
     {
         var token = context.Request.Headers[BridgeProtocol.SessionHeader].FirstOrDefault()
             ?? context.Request.Cookies[BridgeSessionStore.CookieName];
         var origin = context.Request.Headers.Origin.FirstOrDefault();
         if (!context.RequestServices.GetRequiredService<BridgeSessionStore>()
-                .TryGet(token, origin, out var session) ||
-            !session.IsCsrfValid(context.Request.Headers[BridgeProtocol.CsrfHeader].FirstOrDefault()))
+                .TryGet(token, origin, out var session))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+        if (!session.IsCsrfValid(context.Request.Headers[BridgeProtocol.CsrfHeader].FirstOrDefault()))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
@@ -339,11 +353,11 @@ app.MapGet("/health", (IAgentRuntime runtime, IModelProvider provider) =>
         BridgeProtocol.CurrentVersion,
         bridgeVersion,
         Ready: true,
-        ["bridge", .. runtime.Capabilities, provider.ProviderType, "provider-settings", "local-process", "local-secrets", "legal-articles", .. agentRecoveryCapabilities])));
+        ["bridge", .. runtime.Capabilities, provider.ProviderType, "provider-settings", "isolated-agent-workspace", "local-process", "local-secrets", "legal-articles", .. agentRecoveryCapabilities])));
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapPost("/pair", (PairRequest request, BridgeSessionStore sessions) =>
+    app.MapPost("/pair", (PairRequest request, HttpContext httpContext, BridgeSessionStore sessions) =>
     {
         if (string.IsNullOrWhiteSpace(request.PairingCode) ||
             !sessions.IsPairingCodeValid(request.PairingCode))
@@ -357,6 +371,7 @@ if (app.Environment.IsDevelopment())
         }
 
         var session = sessions.Create(request.Origin);
+        httpContext.Response.Headers.CacheControl = "no-store";
         return Results.Ok(new PairResponse(
             BridgeProtocol.CurrentVersion,
             session.Token,
@@ -387,6 +402,7 @@ app.MapPost("/pair/automatic", (
     }
 
     var session = sessions.Create(request.Origin);
+    httpContext.Response.Headers.CacheControl = "no-store";
     httpContext.Response.Cookies.Append(
         BridgeSessionStore.CookieName,
         session.Token,
@@ -508,7 +524,6 @@ async Task<IResult> ChatWithProvider(
     BridgeSessionStore sessions,
     ProviderSettingsStore settings,
     IModelProvider provider,
-    AutomaticMemoryService automaticMemory,
     CancellationToken cancellationToken)
 {
     var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
@@ -526,7 +541,6 @@ async Task<IResult> ChatWithProvider(
         var response = await selectedProvider.ChatAsync(
             settings.ApplyDefaults(request, request.ProviderProfileId),
             cancellationToken);
-        automaticMemory.Observe(request);
         return Results.Ok(response);
     }
     catch (HttpRequestException exception)
@@ -552,7 +566,6 @@ async Task StreamProviderChat(
     BridgeSessionStore sessions,
     ProviderSettingsStore settings,
     IModelProvider provider,
-    AutomaticMemoryService automaticMemory,
     CancellationToken cancellationToken)
 {
     var token = httpContext.Request.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
@@ -577,7 +590,6 @@ async Task StreamProviderChat(
             cancellationToken);
         await httpContext.Response.Body.FlushAsync(cancellationToken);
     }
-    automaticMemory.Observe(request);
 }
 
 app.MapPost("/providers/chat/stream", StreamProviderChat);
@@ -1635,6 +1647,7 @@ app.MapGet("/agent/sessions/{id}/events", async (
     string id,
     AgentSessionManager agentSessions,
     BridgeSessionStore sessions,
+    AutomaticMemoryService automaticMemory,
     CancellationToken cancellationToken) =>
 {
     var token = httpContext.Request.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
@@ -1648,8 +1661,14 @@ app.MapGet("/agent/sessions/{id}/events", async (
 
     httpContext.Response.ContentType = "application/x-ndjson";
     httpContext.Response.Headers.CacheControl = "no-cache";
+    var memoryObserved = false;
     await foreach (var runtimeEvent in session.ReadEventsAsync(cancellationToken))
     {
+        if (!memoryObserved && string.Equals(runtimeEvent.Type, "completed", StringComparison.OrdinalIgnoreCase))
+        {
+            automaticMemory.ObserveUserText(session.UserRequirement);
+            memoryObserved = true;
+        }
         await httpContext.Response.WriteAsync(
             JsonSerializer.Serialize(runtimeEvent, eventJsonOptions) + "\n",
             cancellationToken);
@@ -1841,14 +1860,31 @@ public sealed class BridgeSessionStore
 
     public Session Create(string origin)
     {
+        var now = DateTimeOffset.UtcNow;
         var session = new Session(
             Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
             Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
             origin,
-            DateTimeOffset.UtcNow.AddHours(8));
+            now.AddHours(8),
+            now);
 
         lock (_gate)
         {
+            foreach (var expired in _sessions.Values
+                         .Where(value => value.ExpiresAt <= now)
+                         .Select(value => value.Token)
+                         .ToArray())
+            {
+                _sessions.Remove(expired);
+                _officeTools.Remove(expired);
+            }
+            while (_sessions.Count >= 256)
+            {
+                var oldest = _sessions.Values.MinBy(value => value.CreatedAt);
+                if (oldest is null) break;
+                _sessions.Remove(oldest.Token);
+                _officeTools.Remove(oldest.Token);
+            }
             _sessions[session.Token] = session;
         }
 
@@ -1893,7 +1929,12 @@ public sealed class BridgeSessionStore
     private static string CreatePairingCode() =>
         Convert.ToHexString(RandomNumberGenerator.GetBytes(4));
 
-    public sealed record Session(string Token, string CsrfToken, string Origin, DateTimeOffset ExpiresAt)
+    public sealed record Session(
+        string Token,
+        string CsrfToken,
+        string Origin,
+        DateTimeOffset ExpiresAt,
+        DateTimeOffset CreatedAt)
     {
         public bool IsCsrfValid(string? value) =>
             !string.IsNullOrWhiteSpace(value) &&

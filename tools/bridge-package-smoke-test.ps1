@@ -564,6 +564,9 @@ function Assert-MacInstallerDryRun {
     $uninstaller = Get-Content -LiteralPath `
         (Join-Path $dryRunStagingPath `
             "payload/Applications/WordOllama.JS/Uninstall WordOllama.JS Desktop Bridge.command") -Raw
+    $setup = Get-Content -LiteralPath `
+        (Join-Path $dryRunStagingPath `
+            "payload/Applications/WordOllama.JS/Complete WordOllama.JS Setup.command") -Raw
     $uninstallerEnglish = Get-Content -LiteralPath `
         (Join-Path $dryRunStagingPath `
             "payload/Applications/WordOllama.JS/Uninstaller Resources/messages.en-US") -Raw
@@ -575,13 +578,22 @@ function Assert-MacInstallerDryRun {
         $distribution -notlike '*hostArchitectures="arm64"*' -or
         $launcher -notlike '*certs/bridge.pfx*' -or
         $launcher -notlike '*current-version*' -or
+        $launcher -notlike '*Bridge__HttpsCertificate__Path*' -or
         @($launchAgent.plist.dict.string)[0] -ne "com.wordollama.desktopbridge" -or
         $postinstall -notlike '*current.json*' -or
         $postinstall -notlike '*WordOllama.JS.xml*' -or
         $postinstall -notlike '*launchctl bootstrap*' -or
+        $postinstall -notlike '*setup-required.txt*' -or
+        $postinstall -notlike '*localhost:37421/health*' -or
+        -not $setup.Contains('Continue? [y/N]') -or
+        -not $setup.Contains('security add-trusted-cert -d -r trustAsRoot') -or
+        -not $setup.Contains('subjectAltName=critical') -or
+        -not $setup.Contains('https-certificate-secret set') -or
+        -not $setup.Contains('localhost:37421/index.html') -or
         $uninstaller -notlike '*launchctl bootout*' -or
         $uninstaller -notlike '*WordOllama.JS.xml*' -or
         $uninstaller -notlike '*WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD*' -or
+        $uninstaller -notlike '*security delete-certificate -Z*' -or
         $uninstaller -notlike '*pkgutil --forget com.wordollama.desktopbridge*' -or
         $uninstaller -notlike '*process_path*' -or
         $uninstaller -notlike '*rm -rf "$root"*' -or

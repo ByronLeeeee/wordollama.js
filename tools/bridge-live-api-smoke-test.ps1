@@ -181,6 +181,27 @@ try {
     }
     $token = New-BridgeSession -BaseUrl $baseUrl
 
+    $missingCsrfRejected = $false
+    try {
+        Invoke-RestMethod -Method Post -Uri "$baseUrl/updates/install" -Headers @{
+            Origin = $origin
+            "X-WordOllama-Session" = $token
+        } -TimeoutSec 5 | Out-Null
+    }
+    catch { $missingCsrfRejected = $_.Exception.Response.StatusCode.value__ -eq 403 }
+    if (-not $missingCsrfRejected) { throw "Live Bridge accepted a state-changing request without CSRF." }
+
+    $wrongContentTypeRejected = $false
+    try {
+        Invoke-RestMethod -Method Post -Uri "$baseUrl/providers/chat" -Headers @{
+            Origin = $origin
+            "X-WordOllama-Session" = $token
+            "X-WordOllama-CSRF" = $script:csrfToken
+        } -ContentType "text/plain" -Body "{}" -TimeoutSec 5 | Out-Null
+    }
+    catch { $wrongContentTypeRejected = $_.Exception.Response.StatusCode.value__ -eq 415 }
+    if (-not $wrongContentTypeRejected) { throw "Live Bridge accepted a JSON API request with text/plain." }
+
     $unauthorizedRejected = $false
     try { Invoke-RestMethod -Method Get -Uri "$baseUrl/settings/providers" -TimeoutSec 5 | Out-Null }
     catch { $unauthorizedRejected = $_.Exception.Response.StatusCode.value__ -eq 401 }
