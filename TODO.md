@@ -230,7 +230,7 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
   下载文件托管于独立 HTTPS 域名/对象存储。
 - [ ] 配置正式下载域名和双平台 stable 更新索引。
 - [ ] 完成 Windows x64/macOS arm64 两个 runtime 的 `releaseReady: true` 终审描述文件。
-- [ ] 验证更新下载的大小、SHA-256、签名发布者和失败清理。
+- [x] 验证更新下载的大小、SHA-256、签名发布者和失败清理。
 - [ ] 验证设置页一键更新、版本回滚和旧版本保留策略。
 - [ ] 发布前递增四段 `ManifestVersion`，避免 Word 使用旧 Ribbon 缓存。
 - [x] 准备最终用户安装、升级、卸载和离线使用文档。

@@ -570,6 +570,52 @@ try
          !Directory.EnumerateFiles(wrongHashRoot).Any()),
         "hash-mismatched update installer is deleted and never launched");
 
+    var wrongSizeIndex = updateIndex.Replace(
+        $"\"sizeBytes\":{installerPayload.Length}",
+        $"\"sizeBytes\":{installerPayload.Length + 1}",
+        StringComparison.Ordinal);
+    var wrongSizeHandler = new UpdateDownloadHandler(wrongSizeIndex, installerPayload);
+    var wrongSizeRoot = Path.Combine(root, "updates-wrong-size");
+    var wrongSizeRejected = false;
+    try
+    {
+        await new UpdateInstallerService(
+            new HttpClient(wrongSizeHandler),
+            new UpdateIndexService(new HttpClient(wrongSizeHandler), "https://updates.example.test/index.json", "1.1.0"),
+            new RecordingUpdateInstallerPlatform(),
+            wrongSizeRoot,
+            installerPublisher,
+            installerThumbprint,
+            installerPublicKeySha256).DownloadVerifyAndLaunchAsync();
+    }
+    catch (InvalidDataException)
+    {
+        wrongSizeRejected = true;
+    }
+    Assert(wrongSizeRejected &&
+           (!Directory.Exists(wrongSizeRoot) || !Directory.EnumerateFiles(wrongSizeRoot).Any()),
+        "size-mismatched update installer is deleted and never launched");
+
+    var mismatchedSignerHandler = new UpdateDownloadHandler(updateIndex, installerPayload);
+    var mismatchedSignerRejected = false;
+    try
+    {
+        await new UpdateInstallerService(
+            new HttpClient(mismatchedSignerHandler),
+            new UpdateIndexService(new HttpClient(mismatchedSignerHandler), "https://updates.example.test/index.json", "1.1.0"),
+            new RecordingUpdateInstallerPlatform(),
+            Path.Combine(root, "updates-mismatched-signer"),
+            installerPublisher,
+            new string('e', 40),
+            installerPublicKeySha256).DownloadVerifyAndLaunchAsync();
+    }
+    catch (UpdateInstallUnavailableException)
+    {
+        mismatchedSignerRejected = true;
+    }
+    Assert(mismatchedSignerRejected && mismatchedSignerHandler.InstallerRequests == 0,
+        "update installer signer thumbprint must match the identity pinned by the installed Bridge");
+
     var missingPublisherIndex = updateIndex.Replace(
         $@",""publisherSubject"":""{installerPublisher}""",
         string.Empty,
