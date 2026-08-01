@@ -32,6 +32,8 @@ import {
   type LawArticleResult,
   type UpdateCheckResult,
   type UpdateInstallResult,
+  type UpdateRollbackStatus,
+  type UpdateRollbackResult,
   type ResourceDiagnosticsSnapshot,
 } from "./contracts";
 import i18n from "./i18n";
@@ -142,6 +144,14 @@ export class RuntimeClient {
 
   async installUpdate(): Promise<UpdateInstallResult> {
     return this.settingsRequest("/updates/install", { method: "POST" });
+  }
+
+  async getUpdateRollbackStatus(): Promise<UpdateRollbackStatus> {
+    return this.settingsRequest("/updates/rollback");
+  }
+
+  async rollbackUpdate(): Promise<UpdateRollbackResult> {
+    return this.settingsRequest("/updates/rollback", { method: "POST" });
   }
 
   async getResourceDiagnostics(): Promise<ResourceDiagnosticsSnapshot> {

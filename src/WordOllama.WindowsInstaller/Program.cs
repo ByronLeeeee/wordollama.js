@@ -89,6 +89,12 @@ internal static class Program
             }
 
             var noStart = options.ContainsKey("--no-start");
+            if (options.ContainsKey("--rollback"))
+            {
+                Rollback(installRoot, noStart, skipRegistration);
+                Notify(InstallerText.RolledBack, quiet);
+                return 0;
+            }
             var trustLocalhostCertificate = options.ContainsKey(
                 "--trust-localhost-certificate");
             var promptForLocalhostCertificateTrust =
@@ -129,7 +135,7 @@ internal static class Program
         for (var index = 0; index < args.Length; index++)
         {
             var argument = args[index];
-            if (argument is "--quiet" or "--no-start" or "--uninstall" or
+            if (argument is "--quiet" or "--no-start" or "--uninstall" or "--rollback" or
                 "--skip-registration" or "--trust-localhost-certificate")
             {
                 result[argument] = null;
@@ -353,6 +359,16 @@ internal static class Program
             metadata.ArchiveSha256.ToLowerInvariant(),
             "exe");
         WriteAtomic(
+            Path.Combine(target, "install-metadata.json"),
+            JsonSerializer.Serialize(
+                new
+                {
+                    version = metadata.Version,
+                    archiveSha256 = metadata.ArchiveSha256.ToLowerInvariant(),
+                },
+                new JsonSerializerOptions { WriteIndented = true }),
+            new UTF8Encoding(false));
+        WriteAtomic(
             Path.Combine(installRoot, "current.json"),
             JsonSerializer.Serialize(
                 state,
@@ -570,8 +586,11 @@ internal static class Program
         key.SetValue(
             "QuietUninstallString",
             $"\"{uninstallPath}\" --uninstall --quiet");
+        key.SetValue(
+            "ModifyPath",
+            $"\"{uninstallPath}\" --rollback");
         key.SetValue("InstallLocation", installRoot);
-        key.SetValue("NoModify", 1, RegistryValueKind.DWord);
+        key.SetValue("NoModify", 0, RegistryValueKind.DWord);
         key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
         key.SetValue(
             "EstimatedSize",
@@ -681,6 +700,91 @@ internal static class Program
                 $"Unable to remove the Bridge HTTPS credential ({error}).");
         }
     }
+
+    private static void Rollback(string installRoot, bool noStart, bool skipRegistration)
+    {
+        var statePath = Path.Combine(installRoot, "current.json");
+        var pointerPath = Path.Combine(installRoot, "current-version");
+        if (!File.Exists(statePath) || !File.Exists(pointerPath))
+        {
+            throw new InvalidOperationException("No installed Bridge version is available to roll back.");
+        }
+        using var document = JsonDocument.Parse(File.ReadAllText(statePath));
+        var root = document.RootElement;
+        var current = root.TryGetProperty("currentVersion", out var currentValue)
+            ? currentValue.GetString()
+            : null;
+        var previous = root.TryGetProperty("previousVersion", out var previousValue)
+            ? previousValue.GetString()
+            : null;
+        var pointer = File.ReadAllText(pointerPath).Trim();
+        if (!IsSafeVersion(current) || !IsSafeVersion(previous) ||
+            !string.Equals(pointer, current, StringComparison.Ordinal) ||
+            string.Equals(current, previous, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("No distinct previous Bridge version is available to roll back.");
+        }
+        var previousRoot = Path.GetFullPath(Path.Combine(installRoot, "versions", previous!));
+        var versionsPrefix = Path.GetFullPath(Path.Combine(installRoot, "versions"))
+            .TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!previousRoot.StartsWith(versionsPrefix, StringComparison.OrdinalIgnoreCase) ||
+            !File.Exists(Path.Combine(previousRoot, "WordOllama.DesktopBridge.exe")) ||
+            !File.Exists(Path.Combine(previousRoot, "appsettings.json")))
+        {
+            throw new InvalidOperationException("The previous Bridge version is missing or incomplete.");
+        }
+        var previousMetadataPath = Path.Combine(previousRoot, "install-metadata.json");
+        if (!File.Exists(previousMetadataPath))
+        {
+            throw new InvalidOperationException("The previous Bridge version has no trusted install metadata.");
+        }
+        using var previousMetadata = JsonDocument.Parse(File.ReadAllText(previousMetadataPath));
+        var recordedVersion = previousMetadata.RootElement.GetProperty("version").GetString();
+        var archiveHash = previousMetadata.RootElement.GetProperty("archiveSha256").GetString();
+        if (!string.Equals(recordedVersion, previous, StringComparison.Ordinal) ||
+            archiveHash is null ||
+            !System.Text.RegularExpressions.Regex.IsMatch(archiveHash, "^[0-9a-f]{64}$"))
+        {
+            throw new InvalidOperationException("The previous Bridge install metadata is invalid.");
+        }
+        StopOwnedBridgeProcesses(installRoot);
+        WriteAtomic(pointerPath, previous!, new UTF8Encoding(false));
+        WriteAtomic(
+            statePath,
+            JsonSerializer.Serialize(
+                new InstallState(previous!, current, DateTimeOffset.UtcNow.ToString("O"), archiveHash, "rollback"),
+                new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    WriteIndented = true,
+                }),
+            new UTF8Encoding(false));
+        if (!skipRegistration)
+        {
+            using var uninstallKey = Registry.CurrentUser.OpenSubKey(
+                UninstallRegistryPath,
+                writable: true);
+            uninstallKey?.SetValue("DisplayVersion", previous!);
+        }
+
+        var launcherPath = Path.Combine(installRoot, "start-bridge.cmd");
+        var certificatePath = Path.Combine(installRoot, "certs", "bridge.pfx");
+        if (!noStart && File.Exists(launcherPath) && File.Exists(certificatePath))
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = launcherPath,
+                WorkingDirectory = installRoot,
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            });
+            VerifyBridgeReadyAsync().GetAwaiter().GetResult();
+        }
+    }
+
+    private static bool IsSafeVersion(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        System.Text.RegularExpressions.Regex.IsMatch(value, "^[0-9A-Za-z][0-9A-Za-z._-]*$");
 
     private static async Task VerifyBridgeReadyAsync()
     {

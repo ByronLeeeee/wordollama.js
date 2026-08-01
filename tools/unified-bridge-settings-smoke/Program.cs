@@ -685,6 +685,7 @@ try
             installerPublisher,
             installerThumbprint,
             installerPublicKeySha256,
+            "platform-trusted",
             CancellationToken.None);
     }
     catch (InvalidDataException)
@@ -769,6 +770,60 @@ try
         loopbackUpdateRejected = true;
     }
     Assert(loopbackUpdateRejected, "update index rejects loopback HTTPS sources");
+
+    var rollbackRoot = Path.Combine(root, "rollback-installed");
+    var rollbackCurrent = "1.2.0";
+    var rollbackPrevious = "1.1.0";
+    foreach (var version in new[] { rollbackCurrent, rollbackPrevious })
+    {
+        var versionRoot = Path.Combine(rollbackRoot, "versions", version);
+        Directory.CreateDirectory(versionRoot);
+        await File.WriteAllTextAsync(
+            Path.Combine(
+                versionRoot,
+                OperatingSystem.IsWindows()
+                    ? "WordOllama.DesktopBridge.exe"
+                    : "WordOllama.DesktopBridge"),
+            "smoke");
+        await File.WriteAllTextAsync(Path.Combine(versionRoot, "appsettings.json"), "{}");
+    }
+    await File.WriteAllTextAsync(
+        Path.Combine(rollbackRoot, "current-version"),
+        rollbackCurrent);
+    await File.WriteAllTextAsync(
+        Path.Combine(rollbackRoot, "current.json"),
+        $$"""{"currentVersion":"{{rollbackCurrent}}","previousVersion":"{{rollbackPrevious}}"}""");
+    var rollbackPlatform = new RecordingUpdateRollbackPlatform(rollbackRoot);
+    var rollbackService = new UpdateRollbackService(rollbackPlatform);
+    var rollbackStatus = rollbackService.GetStatus();
+    Assert(
+        rollbackStatus.Available &&
+        rollbackStatus.CurrentVersion == rollbackCurrent &&
+        rollbackStatus.PreviousVersion == rollbackPrevious &&
+        rollbackStatus.Reason is null,
+        "installed update exposes only a validated retained version for rollback");
+    var launchedRollback = rollbackService.Launch();
+    Assert(
+        launchedRollback.Available && rollbackPlatform.LaunchedRoot == rollbackRoot,
+        "rollback launches the platform-owned installer helper instead of mutating files in the Bridge");
+    await File.WriteAllTextAsync(
+        Path.Combine(rollbackRoot, "current.json"),
+        $$"""{"currentVersion":"{{rollbackCurrent}}","previousVersion":"../escape"}""");
+    var unsafeRollback = rollbackService.GetStatus();
+    var unsafeRollbackRejected = false;
+    try
+    {
+        rollbackService.Launch();
+    }
+    catch (UpdateRollbackUnavailableException)
+    {
+        unsafeRollbackRejected = true;
+    }
+    Assert(
+        !unsafeRollback.Available &&
+        unsafeRollback.Reason == "previous-version-unavailable" &&
+        unsafeRollbackRejected,
+        "rollback rejects unsafe or tampered previous-version pointers");
 
     var memoryCandidates = AutomaticMemoryService.ExtractExplicitPreferenceCandidates(
         "今天天气不错。以后请始终使用简洁的中文。api_key=top-secret。I prefer short headings.");
@@ -902,6 +957,7 @@ sealed class RecordingUpdateInstallerPlatform : IUpdateInstallerPlatform
         string expectedPublisherSubject,
         string expectedSignerThumbprint,
         string expectedPublicKeySha256,
+        string distributionTrust,
         CancellationToken cancellationToken)
     {
         if (!File.Exists(installerPath))
@@ -917,4 +973,13 @@ sealed class RecordingUpdateInstallerPlatform : IUpdateInstallerPlatform
     {
         LaunchedPath = installerPath;
     }
+}
+
+sealed class RecordingUpdateRollbackPlatform(string? installRoot) : IUpdateRollbackPlatform
+{
+    public string? LaunchedRoot { get; private set; }
+
+    public string? ResolveInstallRoot() => installRoot;
+
+    public void Launch(string root) => LaunchedRoot = root;
 }

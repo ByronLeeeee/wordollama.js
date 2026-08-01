@@ -7,6 +7,7 @@
   <data name="Title" xml:space="preserve"><value>WordOllama.JS 安装程序</value></data>
   <data name="Installed" xml:space="preserve"><value>已为当前用户安装 WordOllama.JS Desktop Bridge。</value></data>
   <data name="Removed" xml:space="preserve"><value>已移除 WordOllama.JS Desktop Bridge。</value></data>
+  <data name="RolledBack" xml:space="preserve"><value>WordOllama.JS Desktop Bridge 已回滚到保留的上一版本。</value></data>
   <data name="CertificateTrustPrompt" xml:space="preserve"><value>是否在当前用户证书库中信任以下 WordOllama.JS HTTPS 服务器证书？
 
 用途：仅用于保护本机 Desktop Bridge 连接

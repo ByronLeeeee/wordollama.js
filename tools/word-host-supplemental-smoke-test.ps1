@@ -122,7 +122,10 @@ $report = [ordered]@{
     dialogs = [ordered]@{
         status = "passed"
         dialogIds = @("WordOllama.JS.SettingsDialog")
-        cases = New-PassedCases -Names @("settings-opens-as-office-dialog")
+        cases = New-PassedCases -Names @(
+            "settings-opens-as-office-dialog",
+            "office-frame-policy-allows-dialog-and-taskpane"
+        )
         errors = @()
     }
     appearance = [ordered]@{
@@ -209,6 +212,7 @@ try {
             -ConfirmStaleWriteRejected `
             -ConfirmIndependentTaskPanes `
             -ConfirmSettingsOfficeDialog `
+            -ConfirmOfficeFramePolicy `
             -ConfirmAppearanceMatrix
     }
     catch {
@@ -226,6 +230,7 @@ try {
         -ConfirmStaleWriteRejected `
         -ConfirmIndependentTaskPanes `
         -ConfirmSettingsOfficeDialog `
+        -ConfirmOfficeFramePolicy `
         -ConfirmAppearanceMatrix
     $recordedCompleted = Get-Content -LiteralPath $recordedReportPath -Raw | ConvertFrom-Json
     if ($recordedCompleted.compare.appliedRevisionCount -ne 2 -or

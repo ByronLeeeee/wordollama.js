@@ -100,6 +100,10 @@
       {
         "name": "settings-opens-as-office-dialog",
         "status": "REPLACE_WITH_passed"
+      },
+      {
+        "name": "office-frame-policy-allows-dialog-and-taskpane",
+        "status": "REPLACE_WITH_passed"
       }
     ],
     "errors": []

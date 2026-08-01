@@ -6,6 +6,7 @@ $indexScript = Join-Path $repoRoot "packaging/create-update-index.ps1"
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) "wordollama-update-index-$([Guid]::NewGuid().ToString('N'))"
 $version = "9.8.7-test"
 $runtimes = @("win-x64", "osx-arm64")
+$indexUrl = "https://updates.example.test/wordollama/stable/index.json"
 
 function Assert-Throws {
     param(
@@ -55,8 +56,14 @@ try {
             product = "WordOllama.JS"
             version = $version
             runtime = $runtime
+            updateIndexUrl = $indexUrl
             finalizedAt = [DateTimeOffset]::UtcNow.ToString("O")
             releaseReady = $true
+            distributionTrust = if ($runtime -eq "win-x64") {
+                "platform-trusted"
+            } else {
+                "explicit-local-user-trust"
+            }
             publisherSubject = "CN=WordOllama Test Publisher"
             installerPublisherSubject = if ($runtime -eq "win-x64") {
                 "CN=WordOllama Test Publisher"
@@ -74,8 +81,8 @@ try {
                     [pscustomobject]@{ kind = "windows-installer-package" }
                 }
                 else {
-                    [pscustomobject]@{ kind = "apple-notarization" }
-                    [pscustomobject]@{ kind = "apple-installer-package" }
+                    [pscustomobject]@{ kind = "apple-local-signature" }
+                    [pscustomobject]@{ kind = "apple-local-installer-package" }
                 }
             )
         } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $descriptorPath -Encoding UTF8
@@ -87,6 +94,7 @@ try {
         -ArtifactRoot $testRoot `
         -Version $version `
         -DownloadBaseUrl "https://updates.example.test/wordollama" `
+        -IndexUrl $indexUrl `
         -VerifiedReleaseDescriptorPaths $descriptorPaths `
         -OutputPath $verifiedIndexPath
     $verifiedIndex = Get-Content -LiteralPath $verifiedIndexPath -Raw | ConvertFrom-Json
@@ -103,6 +111,12 @@ try {
         if ($installer.publisherSubject -ne $expectedPublisher) {
             throw "Verified update index did not preserve the pinned installer publisher."
         }
+        $expectedTrust = if ($installer.runtime -eq "win-x64") {
+            "platform-trusted"
+        } else { "explicit-local-user-trust" }
+        if ($installer.distributionTrust -ne $expectedTrust) {
+            throw "Verified update index did not preserve the distribution trust mode."
+        }
     }
 
     Assert-Throws -Message "Production update index accepted archives without verified descriptors." -Action {
@@ -110,6 +124,7 @@ try {
             -ArtifactRoot $testRoot `
             -Version $version `
             -DownloadBaseUrl "https://updates.example.test/wordollama" `
+            -IndexUrl $indexUrl `
             -OutputPath (Join-Path $testRoot "missing-descriptor-index.json")
     }
 
@@ -121,6 +136,7 @@ try {
             -ArtifactRoot $testRoot `
             -Version $version `
             -DownloadBaseUrl "https://updates.example.test/wordollama" `
+            -IndexUrl $indexUrl `
             -VerifiedReleaseDescriptorPaths $descriptorPaths `
             -OutputPath (Join-Path $testRoot "tampered-installer-index.json")
     }
@@ -133,6 +149,7 @@ try {
             -ArtifactRoot $testRoot `
             -Version $version `
             -DownloadBaseUrl "https://updates.example.test/wordollama" `
+            -IndexUrl $indexUrl `
             -VerifiedReleaseDescriptorPaths $descriptorPaths `
             -OutputPath (Join-Path $testRoot "tampered-index.json")
     }

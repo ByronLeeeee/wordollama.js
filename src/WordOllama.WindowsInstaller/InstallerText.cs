@@ -12,6 +12,7 @@ internal static class InstallerText
     public static string Title => Get(nameof(Title));
     public static string Installed => Get(nameof(Installed));
     public static string Removed => Get(nameof(Removed));
+    public static string RolledBack => Get(nameof(RolledBack));
     public static string CertificateTrustPrompt(string thumbprint, DateTime expiresAt) =>
         string.Format(
             CultureInfo.CurrentUICulture,

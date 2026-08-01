@@ -22,6 +22,7 @@ param(
     [switch]$ConfirmStaleWriteRejected,
     [switch]$ConfirmIndependentTaskPanes,
     [switch]$ConfirmSettingsOfficeDialog,
+    [switch]$ConfirmOfficeFramePolicy,
     [switch]$ConfirmAppearanceMatrix
 )
 
@@ -214,7 +215,10 @@ if ($Mode -eq "Start") {
         dialogs = [ordered]@{
             status = "pending"
             dialogIds = @("WordOllama.JS.SettingsDialog")
-            cases = & $pendingCases @("settings-opens-as-office-dialog")
+            cases = & $pendingCases @(
+                "settings-opens-as-office-dialog",
+                "office-frame-policy-allows-dialog-and-taskpane"
+            )
             errors = @()
         }
         appearance = [ordered]@{
@@ -243,6 +247,7 @@ $confirmations = [ordered]@{
     ConfirmStaleWriteRejected = $ConfirmStaleWriteRejected
     ConfirmIndependentTaskPanes = $ConfirmIndependentTaskPanes
     ConfirmSettingsOfficeDialog = $ConfirmSettingsOfficeDialog
+    ConfirmOfficeFramePolicy = $ConfirmOfficeFramePolicy
     ConfirmAppearanceMatrix = $ConfirmAppearanceMatrix
 }
 $missingConfirmations = @($confirmations.GetEnumerator() |

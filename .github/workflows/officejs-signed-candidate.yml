@@ -20,7 +20,7 @@ on:
         required: true
         type: string
       macos_installer_publisher:
-        description: Exact macOS Developer ID Installer authority
+        description: Exact macOS local self-signed installer authority
         required: true
         type: string
 
@@ -113,7 +113,7 @@ jobs:
             -Version '${{ inputs.version }}' `
             -WindowsCertificateThumbprint '${{ steps.windows-certificate.outputs.thumbprint }}' `
             -ExpectedPublisherSubject $env:PUBLISHER_SUBJECT
-      - name: Import macOS signing identity and notarize
+      - name: Import macOS local self-signing identities
         if: ${{ startsWith(matrix.runtime, 'osx-') }}
         shell: pwsh
         env:
@@ -122,16 +122,12 @@ jobs:
           SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
           INSTALLER_IDENTITY: ${{ secrets.MACOS_INSTALLER_IDENTITY }}
           PINNED_INSTALLER_PUBLISHER: ${{ inputs.macos_installer_publisher }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $true
           foreach ($name in @(
             "SIGNING_P12_BASE64", "SIGNING_P12_PASSWORD", "SIGNING_IDENTITY",
-            "INSTALLER_IDENTITY",
-            "APPLE_ID", "APPLE_TEAM_ID", "APPLE_APP_PASSWORD"
+            "INSTALLER_IDENTITY"
           )) {
             if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
               throw "macOS signing secret '$name' is not configured."
@@ -153,26 +149,22 @@ jobs:
           & security set-key-partition-list -S apple-tool:,apple: -s `
             -k $keychainPassword $keychainPath
           & security list-keychains -d user -s $keychainPath
-          & xcrun notarytool store-credentials wordollama-ci `
-            --apple-id $env:APPLE_ID --team-id $env:APPLE_TEAM_ID `
-            --password $env:APPLE_APP_PASSWORD --keychain $keychainPath
-          if ($LASTEXITCODE -ne 0) { throw "Unable to configure Apple notarization credentials." }
           ./packaging/sign-bridge-release.ps1 `
             -Runtime '${{ matrix.runtime }}' `
             -ArtifactRoot ./signed-candidate/bridge `
             -Version '${{ inputs.version }}' `
             -MacSigningIdentity $env:SIGNING_IDENTITY `
-            -MacNotaryProfile wordollama-ci `
-            -MacNotaryKeychain $keychainPath
+            -MacNotaryKeychain $keychainPath `
+            -LocalSelfSignedMacRelease
           ./packaging/package-macos-installer.ps1 `
             -Runtime '${{ matrix.runtime }}' `
             -ArtifactRoot ./signed-candidate/bridge `
             -Version '${{ inputs.version }}' `
             -MacInstallerIdentity $env:INSTALLER_IDENTITY `
-            -MacNotaryProfile wordollama-ci `
             -MacNotaryKeychain $keychainPath `
-            -BridgeNotarizationEvidencePath `
-              "./signed-candidate/bridge/WordOllama-Bridge-${{ inputs.version }}-${{ matrix.runtime }}.notarization.json"
+            -LocalSelfSignedRelease `
+            -BridgeLocalSignatureEvidencePath `
+              "./signed-candidate/bridge/WordOllama-Bridge-${{ inputs.version }}-${{ matrix.runtime }}.local-signature.json"
       - name: Verify signed candidate live API
         shell: pwsh
         run: |

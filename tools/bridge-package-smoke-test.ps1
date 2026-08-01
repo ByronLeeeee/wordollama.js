@@ -572,6 +572,9 @@ function Assert-MacInstallerDryRun {
     $setup = Get-Content -LiteralPath `
         (Join-Path $dryRunStagingPath `
             "payload/Applications/WordOllama.JS/Complete WordOllama.JS Setup.command") -Raw
+    $rollbackCommand = Get-Content -LiteralPath `
+        (Join-Path $dryRunStagingPath `
+            "payload/Applications/WordOllama.JS/Rollback WordOllama.JS Desktop Bridge.command") -Raw
     $uninstallerEnglish = Get-Content -LiteralPath `
         (Join-Path $dryRunStagingPath `
             "payload/Applications/WordOllama.JS/Uninstaller Resources/messages.en-US") -Raw
@@ -595,6 +598,9 @@ function Assert-MacInstallerDryRun {
         -not $setup.Contains('subjectAltName=critical') -or
         -not $setup.Contains('https-certificate-secret set') -or
         -not $setup.Contains('localhost:37421/index.html') -or
+        $rollbackCommand -notlike '*plutil -extract previousVersion*' -or
+        $rollbackCommand -notlike '*launchctl bootout*' -or
+        $rollbackCommand -notlike '*"installer":"rollback"*' -or
         $uninstaller -notlike '*launchctl bootout*' -or
         $uninstaller -notlike '*WordOllama.JS.xml*' -or
         $uninstaller -notlike '*WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD*' -or
@@ -628,7 +634,7 @@ function Assert-WindowsInstallerLifecycle {
     $englishKeys = @($installerEnglish.root.data.name | Sort-Object)
     $chineseKeys = @($installerChinese.root.data.name | Sort-Object)
     if (($englishKeys -join ",") -ne ($chineseKeys -join ",") -or
-        $englishKeys.Count -ne 6) {
+        $englishKeys.Count -ne 7) {
         throw "Bridge package smoke: Windows installer locales are incomplete or mismatched."
     }
 
@@ -681,6 +687,34 @@ function Assert-WindowsInstallerLifecycle {
         throw "Bridge package smoke: Windows setup payload or version state is invalid."
     }
 
+    $previousVersion = "previous-smoke"
+    $previousRoot = Join-Path $installRoot "versions/$previousVersion"
+    Copy-Item -LiteralPath (Join-Path $installRoot "versions/$version") `
+        -Destination $previousRoot -Recurse
+    $previousMetadataPath = Join-Path $previousRoot "install-metadata.json"
+    $previousMetadata = Get-Content -LiteralPath $previousMetadataPath -Raw | ConvertFrom-Json
+    $previousMetadata.version = $previousVersion
+    $previousMetadata | ConvertTo-Json | Set-Content -LiteralPath $previousMetadataPath -Encoding utf8
+    $state.previousVersion = $previousVersion
+    $state | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath `
+        (Join-Path $installRoot "current.json") -Encoding utf8
+    $rollbackArguments = @(
+        "--quiet", "--rollback", "--no-start", "--skip-registration",
+        "--install-root", $installRoot, "--startup-root", $startupRoot
+    )
+    $rollback = Start-Process -FilePath $setupPath -ArgumentList $rollbackArguments `
+        -WindowStyle Hidden -Wait -PassThru
+    $rolledBackState = Get-Content -LiteralPath (Join-Path $installRoot "current.json") `
+        -Raw | ConvertFrom-Json
+    if ($rollback.ExitCode -ne 0 -or
+        $rolledBackState.currentVersion -ne $previousVersion -or
+        $rolledBackState.previousVersion -ne $version -or
+        $rolledBackState.installer -ne "rollback" -or
+        (Get-Content -LiteralPath (Join-Path $installRoot "current-version") -Raw).Trim() -ne
+            $previousVersion) {
+        throw "Bridge package smoke: Windows setup rollback did not atomically swap retained versions."
+    }
+
     $uninstallArguments = @(
         "--quiet",
         "--uninstall",
@@ -729,6 +763,8 @@ function Assert-NativeMacInstallerPackage {
             Where-Object {
                 $_.Name -eq "Uninstall WordOllama.JS Desktop Bridge.command"
             })
+        $rollbackCommands = @(Get-ChildItem -LiteralPath $expanded -Recurse -File |
+            Where-Object { $_.Name -eq "Rollback WordOllama.JS Desktop Bridge.command" })
         $postinstalls = @(Get-ChildItem -LiteralPath $expanded -Recurse -File |
             Where-Object { $_.Name -eq "postinstall" })
         $launchAgents = @(Get-ChildItem -LiteralPath $expanded -Recurse -File |
@@ -737,6 +773,7 @@ function Assert-NativeMacInstallerPackage {
             Where-Object { $_.Name -in @("messages.en-US", "messages.zh-CN") })
         if ($distribution -notlike "*hostArchitectures=`"$expectedArchitecture`"*" -or
             $launchers.Count -ne 1 -or $uninstallers.Count -ne 1 -or
+            $rollbackCommands.Count -ne 1 -or
             $postinstalls.Count -ne 1 -or $launchAgents.Count -ne 1 -or
             $messageFiles.Count -ne 2) {
             throw "Bridge package smoke: expanded native macOS PKG payload is incomplete."
@@ -744,6 +781,7 @@ function Assert-NativeMacInstallerPackage {
         foreach ($scriptPath in @(
             $launchers[0].FullName,
             $uninstallers[0].FullName,
+            $rollbackCommands[0].FullName,
             $postinstalls[0].FullName
         )) {
             & /bin/sh -n $scriptPath
@@ -853,12 +891,20 @@ if ($hostRuntime -eq "win-x64") {
     $windowsInstallerSource = Get-Content -LiteralPath $windowsInstallerScript -Raw
     $windowsInstallerProgram = Get-Content -LiteralPath `
         (Join-Path $repoRoot "src/WordOllama.WindowsInstaller/Program.cs") -Raw
+    $signedCandidateWorkflow = Get-Content -LiteralPath `
+        (Join-Path $repoRoot ".github/workflows/officejs-signed-candidate.yml") -Raw
     if ($windowsInstallerProgram -notmatch 'SubjectAlternativeNameBuilder' -or
         $windowsInstallerProgram -notmatch 'IPAddress\.IPv6Loopback' -or
         $windowsInstallerProgram -notmatch 'StoreName\.Root, StoreLocation\.CurrentUser' -or
         $windowsInstallerProgram -notmatch 'ownership\.json' -or
         $windowsInstallerProgram -notmatch 'https-certificate-secret') {
         throw "Bridge package smoke: Windows installer lacks owned current-user localhost certificate provisioning."
+    }
+    if ($signedCandidateWorkflow -notmatch 'LocalSelfSignedMacRelease' -or
+        $signedCandidateWorkflow -notmatch 'LocalSelfSignedRelease' -or
+        $signedCandidateWorkflow -notmatch 'BridgeLocalSignatureEvidencePath' -or
+        $signedCandidateWorkflow -match 'APPLE_ID|APPLE_TEAM_ID|APPLE_APP_PASSWORD') {
+        throw "Bridge package smoke: signed candidate workflow does not follow the local self-signed Apple Silicon release policy."
     }
     if ($installerSource -notmatch "TimeStamperCertificate" -or
         $finalizerSource -notmatch "TimeStamperCertificate") {

@@ -768,6 +768,16 @@ assert(
   "signed installer launch must use an in-page publisher confirmation instead of a native dialog",
 );
 assert(
+  settingsApp.includes("runtime.getUpdateRollbackStatus()") &&
+    settingsApp.includes("runtime.rollbackUpdate()") &&
+    settingsApp.includes('t("updates.rollbackConfirmation"') &&
+    settingsApp.includes('t("updates.confirmRollback")') &&
+    runtimeClient.includes('async getUpdateRollbackStatus(): Promise<UpdateRollbackStatus>') &&
+    runtimeClient.includes('async rollbackUpdate(): Promise<UpdateRollbackResult>') &&
+    runtimeClient.includes('settingsRequest("/updates/rollback", { method: "POST" })'),
+  "the update page must expose a validated, confirmed platform rollback flow",
+);
+assert(
   settingsApp.includes('["unorderedList", "unorderedList"]') &&
     settingsApp.includes('["orderedList", "orderedList"]') &&
     settingsApp.includes('value="footnote"') &&

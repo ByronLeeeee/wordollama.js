@@ -14,7 +14,8 @@ public sealed record UpdateArtifact(
     string? SignatureUrl,
     string? PublisherSubject,
     string? SignerThumbprint,
-    string? SignerPublicKeySha256);
+    string? SignerPublicKeySha256,
+    string? DistributionTrust);
 
 public sealed record UpdateCheckResult(
     bool Configured,
@@ -34,7 +35,8 @@ internal sealed record UpdateIndexArtifact(
     string? SignatureUrl,
     string? PublisherSubject,
     string? SignerThumbprint,
-    string? SignerPublicKeySha256);
+    string? SignerPublicKeySha256,
+    string? DistributionTrust);
 
 internal sealed record UpdateIndex(
     int SchemaVersion,
@@ -144,6 +146,15 @@ public sealed class UpdateIndexService
             if (!IsOptionalHex(selected.SignerThumbprint, 40, 128) ||
                 !IsOptionalHex(selected.SignerPublicKeySha256, 64, 64))
                 throw new InvalidDataException("Update artifact signer pin metadata is invalid.");
+            var distributionTrust = string.IsNullOrWhiteSpace(selected.DistributionTrust)
+                ? "platform-trusted"
+                : selected.DistributionTrust.Trim();
+            if (distributionTrust is not ("platform-trusted" or "explicit-local-user-trust") ||
+                (distributionTrust == "explicit-local-user-trust" &&
+                 !runtime.StartsWith("osx-", StringComparison.Ordinal)))
+            {
+                throw new InvalidDataException("Update artifact distribution trust metadata is invalid.");
+            }
             artifact = new UpdateArtifact(
                 kind,
                 selected.Runtime,
@@ -153,7 +164,8 @@ public sealed class UpdateIndexService
                 selected.SignatureUrl,
                 selected.PublisherSubject?.Trim(),
                 NormalizeHex(selected.SignerThumbprint),
-                NormalizeHex(selected.SignerPublicKeySha256));
+                NormalizeHex(selected.SignerPublicKeySha256),
+                distributionTrust);
         }
 
         return new UpdateCheckResult(

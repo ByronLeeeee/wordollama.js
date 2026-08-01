@@ -52,8 +52,9 @@ Mac 仅支持 Apple Silicon，不提供 Intel 构建。若以后改用 Developer
 SHA-256；Bridge 还会核对 runtime、文件大小、SHA-256 和平台签名。任何失败都会删除
 临时下载，不会启动安装器。
 
-每次升级保留上一个 Bridge 版本，并原子切换 `current-version`。需要回滚时，先完全
-退出 Word，再使用安装包随附的回滚入口；开发/离线包可运行：
+每次升级保留上一个 Bridge 版本，并原子切换 `current-version`。当上一版本完整可用时，
+“设置 > 更新”会显示回滚按钮并要求二次确认；启动平台回滚入口后先完全退出 Word。
+安装包也提供独立回滚入口；开发/离线包可运行：
 
 ```powershell
 pwsh ./packaging/rollback-bridge.ps1 -InstallRoot <DesktopBridge 安装目录>

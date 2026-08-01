@@ -47,6 +47,7 @@ export interface UpdateArtifact {
   publisherSubject?: string;
   signerThumbprint?: string;
   signerPublicKeySha256?: string;
+  distributionTrust?: "platform-trusted" | "explicit-local-user-trust";
 }
 
 export interface UpdateCheckResult {
@@ -74,6 +75,19 @@ export interface PairResponse {
   expiresAt: string;
   capabilities: string[];
   cookieSession?: boolean;
+}
+
+export interface UpdateRollbackStatus {
+  available: boolean;
+  currentVersion?: string;
+  previousVersion?: string;
+  reason?: string;
+}
+
+export interface UpdateRollbackResult {
+  status: "launched";
+  currentVersion: string;
+  targetVersion: string;
 }
 
 export interface OfficeToolDescriptor {

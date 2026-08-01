@@ -26,6 +26,10 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 隔离文件工作区与操作系统级 Python/Node 沙箱已经接通；当前先完成可自动实现的功能，
 真实 Word、目标设备和正式签名验收统一留到功能冻结后执行。
 
+截至 2026-08-02，可在当前开发机完成的产品功能与自动化门禁已冻结并通过。下方仍未
+勾选的项目只包含真实 Word/目标设备操作、正式下载域名与由这些真实证据生成的终审
+描述文件；按当前安排暂不让它们阻塞功能完成，也不会用模拟报告冒充实机通过。
+
 ## 已完成
 
 - [x] COM/VSTO 与 JS 仓库完全分离。
@@ -118,6 +122,8 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 - [x] macOS PKG 安装显式的“完成安全设置”入口；用户再次确认后才调用当前用户
   Trust Settings，且不绕过 macOS 自己的授权提示，随后执行启动与双端健康检查。
 - [ ] 为证书创建、信任、轮换和卸载添加目标平台实机回归。
+  自动化安装器和失败关闭门禁已完成；此项只等待干净 Windows 用户与 Apple Silicon
+  Mac 上实际变更当前用户证书库并记录前后状态。
 
 注意：该授权只覆盖 WordOllama.JS 自有的 localhost HTTPS 证书和当前用户信任库；
 不得静默安装、不得写入机器级根证书库，也不得信任可签发任意站点证书的通用 CA。
@@ -138,6 +144,8 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
   Content-Type 的 415。
 - [ ] 在不破坏 Office Dialog/Taskpane 的前提下验证 frame 限制；不能直接使用会阻断
   Office WebView 的通用 `frame-ancestors 'none'`。
+  Bridge/live smoke 已强制 `frame-ancestors 'self'` 且拒绝 `'none'`；补充宿主报告现在
+  也强制包含 `office-frame-policy-allows-dialog-and-taskpane`，只等待真实 Word 执行。
 - [x] 添加首次安装、会话过期、Bridge 重启和多任务窗格共享会话回归。
 
 ### 安装器体验
@@ -232,10 +240,17 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 - [x] 产品决策：首期只有 stable 通道；Windows x64、macOS arm64 共用签名索引，
   下载文件托管于独立 HTTPS 域名/对象存储。
 - [ ] 配置正式下载域名和双平台 stable 更新索引。
+  索引生成器现已强制非回环 HTTPS、精确 `IndexUrl`、两个 runtime 的终审描述文件、
+  产物哈希/大小/发布者和分发信任模式；此项只等待实际域名与对象存储凭据。
 - [ ] 完成 Windows x64/macOS arm64 两个 runtime 的 `releaseReady: true` 终审描述文件。
+  终审器与证据门禁已完成；描述文件必须由上述真实平台/Word 验收生成，不能预先勾选。
 - [x] 验证更新下载的大小、SHA-256、签名发布者和失败清理。
 - [x] 验证设置页一键更新、版本回滚和旧版本保留策略：前端确认流、Bridge 下载/签名
-  门禁、两版本原子指针切换、上一版本保留、回滚和失败残留清理均已通过自动 smoke。
+  门禁、两版本原子指针切换、上一版本保留、设置页回滚确认、Windows“修改/回滚”入口、
+  macOS 独立回滚入口和失败残留清理均已通过自动 smoke。
+- [x] 将首发自签名决策贯通候选工作流和 stable 索引：Windows 固定 Authenticode
+  身份，macOS arm64 固定本地自签名 Application/Installer 身份并记录
+  `explicit-local-user-trust`，不再错误要求 Apple ID、公证或 Intel Mac 产物。
 - [x] 发布前将四段 `ManifestVersion` 从 `1.1.0.0` 递增到 `1.2.0.0`，避免 Word
   使用旧 Ribbon 缓存；正式 CI 仍使用单调递增的 `1.2.<run>.<attempt>`。
 - [x] 准备最终用户安装、升级、卸载和离线使用文档。

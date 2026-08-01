@@ -44,8 +44,9 @@ separate localhost certificate. Intel Mac is not supported.
 - Settings > Updates shows the pinned publisher, certificate thumbprint, and
   public-key SHA-256. The Bridge verifies runtime, size, SHA-256, and platform
   signature before opening an installer; failed downloads are removed.
-- The previous Bridge version is retained and can be selected with the packaged
-  rollback entry. Development/offline deployments can run
+- The previous Bridge version is retained. Settings > Updates shows a confirmed
+  rollback action only when that retained version validates successfully; the
+  packaged rollback entry remains available independently. Development/offline deployments can run
   `packaging/rollback-bridge.ps1` against their install root.
 - The local UI, Word tools, Ollama, Skills, local MCP, and isolated Python/Node
   workspace can run offline when their dependencies were installed in advance.

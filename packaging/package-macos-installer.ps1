@@ -305,10 +305,52 @@ rm -f "$resources/messages.en-US" "$resources/messages.zh-CN"
 rmdir "$resources" >/dev/null 2>&1 || true
 rm -f "$application_dir/Uninstall WordOllama.JS Desktop Bridge.command"
 rm -f "$application_dir/Complete WordOllama.JS Setup.command"
+rm -f "$application_dir/Rollback WordOllama.JS Desktop Bridge.command"
 rmdir "$application_dir" >/dev/null 2>&1 || true
 printf '%s\n' "$removed_message"
 '@
     Set-Content -LiteralPath $uninstallerPath -Value $uninstaller `
+        -Encoding utf8NoBOM -NoNewline
+
+    $rollbackPath = Join-Path $payloadApplications `
+        "Rollback WordOllama.JS Desktop Bridge.command"
+    $rollback = @'
+#!/bin/sh
+set -eu
+root="$HOME/Library/Application Support/WordOllama.JS/DesktopBridge"
+expected="$HOME/Library/Application Support/WordOllama.JS/DesktopBridge"
+[ "$root" = "$expected" ] || exit 3
+state="$root/current.json"
+pointer="$root/current-version"
+[ -f "$state" ] && [ -f "$pointer" ] || exit 4
+current=$(/usr/bin/plutil -extract currentVersion raw -o - "$state")
+previous=$(/usr/bin/plutil -extract previousVersion raw -o - "$state")
+case "$current" in ''|*[!0-9A-Za-z._-]*) exit 5 ;; esac
+case "$previous" in ''|*[!0-9A-Za-z._-]*) exit 6 ;; esac
+[ "$(cat "$pointer")" = "$current" ] || exit 7
+[ "$current" != "$previous" ] || exit 8
+executable="$root/versions/$previous/WordOllama.DesktopBridge"
+[ -x "$executable" ] && [ -f "$root/versions/$previous/appsettings.json" ] || exit 9
+
+uid=$(id -u)
+plist="$HOME/Library/LaunchAgents/com.wordollama.desktopbridge.plist"
+launchctl bootout "gui/$uid" "$plist" >/dev/null 2>&1 || true
+pointer_tmp="$root/.current-version.$$"
+state_tmp="$root/.current.json.$$"
+trap 'rm -f "$pointer_tmp" "$state_tmp"' EXIT HUP INT TERM
+printf '%s' "$previous" > "$pointer_tmp"
+printf '{"currentVersion":"%s","previousVersion":"%s","installedAt":"%s","installer":"rollback"}\n' \
+  "$previous" "$current" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$state_tmp"
+mv -f "$pointer_tmp" "$pointer"
+mv -f "$state_tmp" "$state"
+trap - EXIT HUP INT TERM
+if [ -f "$root/certs/bridge.pfx" ] && [ -f "$plist" ]; then
+  launchctl bootstrap "gui/$uid" "$plist" >/dev/null 2>&1 || true
+  launchctl kickstart -k "gui/$uid/com.wordollama.desktopbridge"
+fi
+printf '%s\n' 'WordOllama.JS Desktop Bridge was rolled back to the previous retained version.'
+'@
+    Set-Content -LiteralPath $rollbackPath -Value $rollback `
         -Encoding utf8NoBOM -NoNewline
 
     $setupPath = Join-Path $payloadApplications `
@@ -484,7 +526,7 @@ fi
         -Encoding utf8NoBOM -NoNewline
 
     if (-not $DryRun) {
-        & /bin/chmod 700 $launcherPath $postinstallPath $uninstallerPath $setupPath
+        & /bin/chmod 700 $launcherPath $postinstallPath $uninstallerPath $setupPath $rollbackPath
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to set executable permissions in the package payload."
         }

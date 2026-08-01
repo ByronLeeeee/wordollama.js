@@ -260,6 +260,8 @@ builder.Services.AddSingleton<IAgentWorkspaceFactory>(sp => new AgentWorkspaceFa
 builder.Services.AddSingleton<GoogleOAuthService>();
 builder.Services.AddSingleton(updateService);
 builder.Services.AddSingleton<IUpdateInstallerPlatform, SystemUpdateInstallerPlatform>();
+builder.Services.AddSingleton<IUpdateRollbackPlatform, SystemUpdateRollbackPlatform>();
+builder.Services.AddSingleton<UpdateRollbackService>();
 builder.Services.AddSingleton(sp => new UpdateInstallerService(
     new HttpClient(),
     updateService,
@@ -1049,6 +1051,27 @@ app.MapPut("/settings/review", (
         return Results.Ok(settings.Save(request));
     }
     catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapGet("/updates/rollback", (UpdateRollbackService rollback) =>
+    Results.Ok(rollback.GetStatus()));
+
+app.MapPost("/updates/rollback", (UpdateRollbackService rollback) =>
+{
+    try
+    {
+        var status = rollback.Launch();
+        return Results.Ok(new
+        {
+            status = "launched",
+            currentVersion = status.CurrentVersion,
+            targetVersion = status.PreviousVersion,
+        });
+    }
+    catch (UpdateRollbackUnavailableException exception)
     {
         return Results.BadRequest(new { error = exception.Message });
     }

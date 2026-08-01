@@ -5,6 +5,7 @@ param(
     [string]$Version,
     [Parameter(Mandatory = $true)]
     [string]$DownloadBaseUrl,
+    [string]$IndexUrl = "",
     [string]$ReleaseNotes = "",
     [string]$OutputPath = "",
     [string]$SignatureUrl = "",
@@ -16,7 +17,24 @@ $ErrorActionPreference = "Stop"
 $artifactRootPath = (Resolve-Path $ArtifactRoot).Path
 $runtimes = @("win-x64", "osx-arm64")
 $verifiedDescriptors = @{}
+
+function Assert-PublicHttpsUrl {
+    param([Parameter(Mandatory = $true)][string]$Value, [Parameter(Mandatory = $true)][string]$Label)
+    [Uri]$uri = $null
+    if (-not [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$uri) -or
+        $uri.Scheme -ne "https" -or
+        $uri.IsLoopback -or
+        [string]::IsNullOrWhiteSpace($uri.Host)) {
+        throw "$Label must be a non-loopback HTTPS URL."
+    }
+}
+
+Assert-PublicHttpsUrl -Value $DownloadBaseUrl -Label "DownloadBaseUrl"
 if (-not $AllowUnsignedForTests) {
+    if ([string]::IsNullOrWhiteSpace($IndexUrl)) {
+        throw "Production update indexes require -IndexUrl for the exact stable HTTPS index URL."
+    }
+    Assert-PublicHttpsUrl -Value $IndexUrl -Label "IndexUrl"
     if ($VerifiedReleaseDescriptorPaths.Count -eq 0) {
         throw "Production update indexes require -VerifiedReleaseDescriptorPaths from finalize-unified-release.ps1."
     }
@@ -26,6 +44,7 @@ if (-not $AllowUnsignedForTests) {
         if ($descriptor.schemaVersion -ne 1 -or $descriptor.product -ne "WordOllama.JS" -or
             $descriptor.releaseReady -ne $true -or $descriptor.version -ne $Version -or
             $descriptor.runtime -notin $runtimes -or
+            $descriptor.updateIndexUrl -ne $IndexUrl -or
             [string]::IsNullOrWhiteSpace($descriptor.publisherSubject) -or
             [string]::IsNullOrWhiteSpace($descriptor.installerPublisherSubject) -or
             [string]::IsNullOrWhiteSpace($descriptor.finalizedAt) -or
@@ -34,6 +53,9 @@ if (-not $AllowUnsignedForTests) {
         }
         $requiredEvidenceKinds = if ($descriptor.runtime -eq "win-x64") {
             @("windows-installer-package")
+        }
+        elseif ($descriptor.distributionTrust -eq "explicit-local-user-trust") {
+            @("apple-local-signature", "apple-local-installer-package")
         }
         else {
             @("apple-notarization", "apple-installer-package")
@@ -98,6 +120,7 @@ foreach ($runtime in $runtimes) {
             signerPublicKeySha256 = if ($runtime -eq "win-x64") {
                 [string]$verifiedDescriptors[$runtime].installerSignerPublicKeySha256
             } else { $null }
+            distributionTrust = [string]$verifiedDescriptors[$runtime].distributionTrust
         }
     }
     $artifacts += [pscustomobject]@{

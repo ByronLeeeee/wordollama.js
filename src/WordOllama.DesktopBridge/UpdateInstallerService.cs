@@ -17,6 +17,7 @@ public interface IUpdateInstallerPlatform
         string expectedPublisherSubject,
         string expectedSignerThumbprint,
         string expectedPublicKeySha256,
+        string distributionTrust,
         CancellationToken cancellationToken);
 
     void Launch(string installerPath);
@@ -169,6 +170,7 @@ public sealed class UpdateInstallerService
                 publisherSubject,
                 _expectedSignerThumbprint,
                 _expectedPublicKeySha256,
+                artifact.DistributionTrust ?? "platform-trusted",
                 cancellationToken);
             _platform.Launch(installerPath);
             return new UpdateInstallResult(
@@ -242,6 +244,7 @@ public sealed class SystemUpdateInstallerPlatform : IUpdateInstallerPlatform
         string expectedPublisherSubject,
         string expectedSignerThumbprint,
         string expectedPublicKeySha256,
+        string distributionTrust,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(expectedPublisherSubject))
@@ -250,13 +253,18 @@ public sealed class SystemUpdateInstallerPlatform : IUpdateInstallerPlatform
         }
         if (OperatingSystem.IsWindows())
         {
+            if (!string.Equals(distributionTrust, "platform-trusted", StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("Windows updates require platform-trusted installers.");
+            }
             await VerifyWindowsAsync(installerPath, expectedPublisherSubject,
                 expectedSignerThumbprint, expectedPublicKeySha256, cancellationToken);
             return;
         }
         if (OperatingSystem.IsMacOS())
         {
-            await VerifyMacAsync(installerPath, expectedPublisherSubject, cancellationToken);
+            await VerifyMacAsync(installerPath, expectedPublisherSubject,
+                distributionTrust, cancellationToken);
             return;
         }
         throw new PlatformNotSupportedException(
@@ -332,6 +340,7 @@ public sealed class SystemUpdateInstallerPlatform : IUpdateInstallerPlatform
     private static async Task VerifyMacAsync(
         string installerPath,
         string expectedPublisherSubject,
+        string distributionTrust,
         CancellationToken cancellationToken)
     {
         var signature = await RunAsync(
@@ -356,6 +365,14 @@ public sealed class SystemUpdateInstallerPlatform : IUpdateInstallerPlatform
         {
             throw new InvalidDataException(
                 "macOS installer signature or pinned publisher is invalid.");
+        }
+        if (string.Equals(distributionTrust, "explicit-local-user-trust", StringComparison.Ordinal))
+        {
+            return;
+        }
+        if (!string.Equals(distributionTrust, "platform-trusted", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("macOS installer distribution trust mode is invalid.");
         }
         var assessment = await RunAsync(
             "/usr/sbin/spctl",

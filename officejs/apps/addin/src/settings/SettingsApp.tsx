@@ -43,6 +43,7 @@ import type {
   ResourceDiagnosticsSnapshot,
   SkillSummary,
   UpdateCheckResult,
+  UpdateRollbackStatus,
 } from "../contracts";
 import { RuntimeClient } from "../runtime-client";
 import {
@@ -1916,11 +1917,16 @@ function UpdatesPage() {
   const { t } = useTranslation();
   const [bridgeVersion, setBridgeVersion] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
+  const [rollback, setRollback] = useState<UpdateRollbackStatus | null>(null);
   const [status, setStatus] = useState<StatusState>(null);
   const [confirmInstall, setConfirmInstall] = useState(false);
+  const [confirmRollback, setConfirmRollback] = useState(false);
   const [installing, setInstalling] = useState(false);
   useEffect(() => {
-    void runtime.health().then((health) => setBridgeVersion(health.bridgeVersion)).catch(() => undefined);
+    void Promise.all([
+      runtime.health().then((health) => setBridgeVersion(health.bridgeVersion)),
+      runtime.getUpdateRollbackStatus().then(setRollback),
+    ]).catch(() => undefined);
   }, []);
   const install = async () => {
     setInstalling(true);
@@ -1931,6 +1937,19 @@ function UpdatesPage() {
       setStatus(translatedStatus("updates.installerLaunched", { version: result.version }));
     } catch (error) {
       setStatus(toStatus(error, "updates.installFailed"));
+    } finally {
+      setInstalling(false);
+    }
+  };
+  const launchRollback = async () => {
+    setInstalling(true);
+    setStatus(translatedStatus("updates.preparingRollback"));
+    try {
+      const result = await runtime.rollbackUpdate();
+      setConfirmRollback(false);
+      setStatus(translatedStatus("updates.rollbackLaunched", { version: result.targetVersion }));
+    } catch (error) {
+      setStatus(toStatus(error, "updates.rollbackFailed"));
     } finally {
       setInstalling(false);
     }
@@ -1980,6 +1999,12 @@ function UpdatesPage() {
                 : "updates.downloadArchive")}
             </a>
           ) : null}
+          {rollback?.available ? (
+            <button className="btn btn-sm" type="button" disabled={installing}
+              onClick={() => setConfirmRollback(true)}>
+              {t("updates.rollback", { version: rollback.previousVersion })}
+            </button>
+          ) : null}
         </div>
         {confirmInstall && update?.artifact?.publisherSubject ? (
           <div className="settings-update-confirmation" role="alert">
@@ -2013,6 +2038,19 @@ function UpdatesPage() {
               >
                 {t("common.cancel")}
               </button>
+            </div>
+          </div>
+        ) : null}
+        {confirmRollback && rollback?.available ? (
+          <div className="settings-update-confirmation" role="alert">
+            <p>{t("updates.rollbackConfirmation", { version: rollback.previousVersion })}</p>
+            <div className="settings-actions">
+              <button className="btn btn-primary btn-sm" type="button" disabled={installing}
+                onClick={() => void launchRollback()}>
+                {installing ? t("updates.preparingRollback") : t("updates.confirmRollback")}
+              </button>
+              <button className="btn btn-sm" type="button" disabled={installing}
+                onClick={() => setConfirmRollback(false)}>{t("common.cancel")}</button>
             </div>
           </div>
         ) : null}

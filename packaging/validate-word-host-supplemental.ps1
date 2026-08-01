@@ -35,7 +35,10 @@ $requiredCoauthoringCases = @(
     "stale-write-is-rejected-before-application"
 )
 $requiredMultiPaneCases = @("independent-panes-open-without-replacing-each-other")
-$requiredDialogCases = @("settings-opens-as-office-dialog")
+$requiredDialogCases = @(
+    "settings-opens-as-office-dialog",
+    "office-frame-policy-allows-dialog-and-taskpane"
+)
 $requiredThemes = @("light", "dark")
 $requiredLanguages = @("zh-CN", "en-US")
 $requiredWidths = @("narrow", "wide")
