@@ -382,6 +382,7 @@ try
 
     string? googleAuthorizationUrl = null;
     string? googleCallbackHtml = null;
+    Task<string>? googleCallbackRequest = null;
     var googleTokenHandler = new GoogleOAuthExchangeHandler();
     var googleOAuth = new GoogleOAuthService(
         new HttpClient(googleTokenHandler),
@@ -389,18 +390,20 @@ try
         {
             googleAuthorizationUrl = authorizationUrl;
             var query = ParseQuery(new Uri(authorizationUrl).Query);
-            _ = Task.Run(async () =>
+            googleCallbackRequest = Task.Run(async () =>
             {
                 using var callbackClient = new HttpClient();
-                googleCallbackHtml = await callbackClient.GetStringAsync(
+                return await callbackClient.GetStringAsync(
                     $"{query["redirect_uri"]}?state={Uri.EscapeDataString(query["state"])}&code=smoke-code");
             });
         });
     var googleOAuthResult = await googleOAuth.AuthorizeAsync(new GoogleOAuthRequest(
         "client.apps.googleusercontent.com",
-        "client-secret",
-        "wordollama-smoke-project",
-        "zh-CN"));
+         "client-secret",
+         "wordollama-smoke-project",
+         "zh-CN"));
+    googleCallbackHtml = await (googleCallbackRequest
+        ?? throw new InvalidOperationException("Google OAuth callback request was not started"));
     var authorizationQuery = ParseQuery(new Uri(googleAuthorizationUrl!).Query);
     Assert(authorizationQuery["code_challenge_method"] == "S256", "Google OAuth uses PKCE S256");
     Assert(!string.IsNullOrWhiteSpace(authorizationQuery["code_challenge"]), "Google OAuth sends a PKCE challenge");
