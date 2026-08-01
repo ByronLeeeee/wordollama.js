@@ -21,9 +21,11 @@ function isValidPairing(
   const expiresAt = typeof pairing.expiresAt === "string"
     ? Date.parse(pairing.expiresAt)
     : Number.NaN;
+  const hasCredential = pairing.cookieSession === true
+    ? pairing.sessionToken === "" || pairing.sessionToken === undefined
+    : typeof pairing.sessionToken === "string" && pairing.sessionToken.length >= 32;
   return pairing.protocolVersion === BRIDGE_PROTOCOL_VERSION &&
-    typeof pairing.sessionToken === "string" &&
-    pairing.sessionToken.length >= 32 &&
+    hasCredential &&
     typeof pairing.csrfToken === "string" &&
     pairing.csrfToken.length >= 32 &&
     Array.isArray(pairing.capabilities) &&

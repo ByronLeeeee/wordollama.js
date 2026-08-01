@@ -37,6 +37,7 @@ import i18n from "./i18n";
 
 const tr = (key: string, values?: Record<string, unknown>): string =>
   i18n.t(key, values);
+const HTTP_ONLY_COOKIE_SESSION = "__wordollama_http_only_cookie__";
 
 async function responseError(response: Response, fallback: string): Promise<Error> {
   try {
@@ -60,6 +61,7 @@ import {
 } from "./pairing-session";
 
 export class RuntimeClient {
+  private cookieSession = false;
   private sessionToken: string | undefined;
   private csrfToken: string | undefined;
   private outputLanguage: OutputLanguageMode = "auto";
@@ -68,17 +70,19 @@ export class RuntimeClient {
   constructor(pairingStorage: PairingStorage | undefined = browserPairingStorage()) {
     this.pairingStorage = pairingStorage;
     const pairing = readPairingSession(pairingStorage);
-    this.sessionToken = pairing?.sessionToken;
+    this.cookieSession = pairing?.cookieSession === true;
+    this.sessionToken = this.cookieSession ? HTTP_ONLY_COOKIE_SESSION : pairing?.sessionToken;
     this.csrfToken = pairing?.csrfToken;
   }
 
   hasPairing(): boolean {
-    return Boolean(this.sessionToken);
+    return this.cookieSession || Boolean(this.sessionToken);
   }
 
   refreshPairing(): boolean {
     const pairing = readPairingSession(this.pairingStorage);
-    this.sessionToken = pairing?.sessionToken;
+    this.cookieSession = pairing?.cookieSession === true;
+    this.sessionToken = this.cookieSession ? HTTP_ONLY_COOKIE_SESSION : pairing?.sessionToken;
     this.csrfToken = pairing?.csrfToken;
     return this.hasPairing();
   }
@@ -91,11 +95,13 @@ export class RuntimeClient {
       throw new Error(tr("runtime.pairingInvalid"));
     }
     writePairingSession(this.pairingStorage, result);
-    this.sessionToken = result.sessionToken;
+    this.cookieSession = result.cookieSession === true;
+    this.sessionToken = this.cookieSession ? HTTP_ONLY_COOKIE_SESSION : result.sessionToken;
     this.csrfToken = result.csrfToken;
   }
 
   clearPairing(): void {
+    this.cookieSession = false;
     this.sessionToken = undefined;
     this.csrfToken = undefined;
     clearPairingSession(this.pairingStorage);
@@ -106,6 +112,7 @@ export class RuntimeClient {
     init?: RequestInit,
   ): Promise<Response> {
     const headers = new Headers(init?.headers);
+    if (this.cookieSession) headers.delete("X-WordOllama-Session");
     if (this.csrfToken && init?.method && !["GET", "HEAD", "OPTIONS"].includes(init.method.toUpperCase())) {
       headers.set("X-WordOllama-CSRF", this.csrfToken);
     }

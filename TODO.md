@@ -124,12 +124,13 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 ### 无感首次配对
 
 - [x] 产品决策：取消正式版手动配对；Ribbon 不显示配对码、Bridge 调试或开发入口。
-- [ ] 桌面同源模式改为 Bridge 托管页面自动建立 HttpOnly、SameSite 会话，普通用户
-  不需要从日志复制随机配对码。当前已同时签发 HttpOnly/SameSite Cookie 和兼容
-  Office WebView 的会话头，后续应在确认各宿主 Cookie 行为后移除生产环境 JS token。
+- [x] 桌面同源模式改为 Bridge 托管页面自动建立 HttpOnly、SameSite 会话，普通用户
+  不需要从日志复制随机配对码。生产环境不再向 JavaScript 返回 bearer token；只有
+  CSRF 元数据保存在 WebView sessionStorage，跨 origin 开发模式继续使用兼容会话头。
 - [x] 跨 origin 开发模式使用仅开发构建可见的诊断授权，不进入正式 Ribbon；相关
   状态、日志导出和连接测试统一放到“设置 > 进阶 > 诊断”。
-- [ ] 防止任意本地网页伪造 `Origin` 后获取 Bridge 会话。
+- [x] 防止任意本地网页伪造 `Origin` 后获取 Bridge 会话；生产环境自动会话只接受
+  与 Bridge 完全同源的页面，跨端口兼容 bearer 仅保留在 Development 环境。
 - [x] 增加 CSRF token、自定义请求头和严格 CORS；配对凭据只保存在当前 WebView
   会话，Bridge 会清理过期会话并限制池大小。同源自动会话不等同于无鉴权 API。
 - [x] 敏感 JSON API 拒绝非 JSON 请求体，live smoke 覆盖缺少 CSRF 的 403 和错误

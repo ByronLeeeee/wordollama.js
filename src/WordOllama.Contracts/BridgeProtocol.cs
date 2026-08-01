@@ -24,7 +24,8 @@ public sealed record PairResponse(
     string SessionToken,
     DateTimeOffset ExpiresAt,
     IReadOnlyList<string> Capabilities,
-    string CsrfToken = "");
+    string CsrfToken = "",
+    bool CookieSession = false);
 
 public sealed record CommandRequest(
     string Command,

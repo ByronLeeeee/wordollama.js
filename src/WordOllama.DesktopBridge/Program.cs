@@ -299,6 +299,16 @@ app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    context.Response.Headers["Content-Security-Policy"] =
+        "frame-ancestors 'self' https://*.office.com https://*.officeapps.live.com";
+    if (!context.Request.Headers.ContainsKey(BridgeProtocol.SessionHeader) &&
+        context.Request.Cookies.TryGetValue(BridgeSessionStore.CookieName, out var cookieToken) &&
+        !string.IsNullOrWhiteSpace(cookieToken))
+    {
+        // Downstream handlers use one internal credential path. The browser still
+        // cannot read this HttpOnly cookie or persist a bearer token in JavaScript.
+        context.Request.Headers[BridgeProtocol.SessionHeader] = cookieToken;
+    }
     var unsafeMethod = context.Request.Method is "POST" or "PUT" or "PATCH" or "DELETE";
     var hasRequestBody = context.Request.ContentLength.GetValueOrDefault() > 0 ||
         context.Request.Headers.TransferEncoding.Count > 0;
@@ -384,7 +394,8 @@ if (app.Environment.IsDevelopment())
 app.MapPost("/pair/automatic", (
     AutomaticPairRequest request,
     HttpContext httpContext,
-    BridgeSessionStore sessions) =>
+    BridgeSessionStore sessions,
+    IWebHostEnvironment environment) =>
 {
     var remoteAddress = httpContext.Connection.RemoteIpAddress;
     var requestOrigin = httpContext.Request.Headers["Origin"].FirstOrDefault();
@@ -399,6 +410,15 @@ app.MapPost("/pair/automatic", (
     if (!sessions.IsOriginAllowed(request.Origin))
     {
         return Results.BadRequest(new { error = "origin_not_allowed" });
+    }
+
+    var bridgeOrigin = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
+    var isSameOrigin = string.Equals(request.Origin, bridgeOrigin, StringComparison.OrdinalIgnoreCase);
+    if (!isSameOrigin && !environment.IsDevelopment())
+    {
+        // A page on another localhost port must not mint a production Bridge
+        // session merely by being able to send an allowed-looking Origin value.
+        return Results.Unauthorized();
     }
 
     var session = sessions.Create(request.Origin);
@@ -416,10 +436,11 @@ app.MapPost("/pair/automatic", (
         });
     return Results.Ok(new PairResponse(
         BridgeProtocol.CurrentVersion,
-        session.Token,
+        isSameOrigin ? "" : session.Token,
         session.ExpiresAt,
         ["agent", "providers", "provider-settings", "mcp", "skills", "local-tools", .. agentRecoveryCapabilities],
-        session.CsrfToken));
+        session.CsrfToken,
+        CookieSession: isSameOrigin));
 });
 
 app.MapGet("/updates/check", async (

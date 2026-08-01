@@ -56,6 +56,7 @@ export interface PairResponse {
   csrfToken: string;
   expiresAt: string;
   capabilities: string[];
+  cookieSession?: boolean;
 }
 
 export interface OfficeToolDescriptor {
