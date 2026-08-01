@@ -206,7 +206,7 @@ assert(
     css.includes("--border: 1px;") &&
     css.includes("--line: #e4e4e7;") &&
     !css.includes("--border: #e4e4e7;") &&
-    main.includes("setCustomPromptEditor(prompt);\n  localizeStaticDocument();") &&
+    /setCustomPromptEditor\(prompt\);\r?\n  localizeStaticDocument\(\);/.test(main) &&
     legalWorkflows.includes('<span className="fieldset-legend" data-i18n="taskpane.prompts.name">') &&
     !legalWorkflows.includes("custom-prompt-category") &&
     !main.includes("prompt.category"),
