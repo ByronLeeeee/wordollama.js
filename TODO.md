@@ -217,11 +217,12 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 
 - [x] 保持 Bridge 单实例和当前用户登录自启。
 - [x] Provider、MCP 和 Agent 重型组件继续按需初始化。
-- [ ] 建立空闲内存基线门禁；当前 Windows Release 约为：
-  - 工作集：65.6 MB。
-  - 私有内存：49.3 MB。
-  - 空闲 CPU：接近 0。
-- [ ] 测量连接多个 MCP Server、长 Agent 会话和多窗格后的资源占用。
+- [x] 建立 Windows Release 空闲资源门禁：工作集不超过 160 MB、私有内存不超过
+  128 MB、采样 CPU 不超过 5%；2026-08-02 实测工作集 71.9 MB、私有内存
+  52.7 MB、CPU 1.8%。
+- [x] 测量两个 MCP Server、活动 Agent 和多个任务窗格会话后的资源占用；
+  2026-08-02 实测工作集 87.7 MB、私有内存 59.8 MB、CPU 3.4%，并由 live API
+  smoke 持续验证组件计数和 Bridge 单实例。
 - [x] 不把 Ollama 模型内存计入 Bridge 指标；单独展示本地模型资源。
 
 ## P1：发布与更新

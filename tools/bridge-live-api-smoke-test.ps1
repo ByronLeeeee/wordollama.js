@@ -3,7 +3,10 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug",
     [string]$BridgeAssemblyPath = "",
-    [string]$BuildRoot = ""
+    [string]$BuildRoot = "",
+    [int]$MaxIdleWorkingSetMb = 160,
+    [int]$MaxIdlePrivateMemoryMb = 128,
+    [double]$MaxIdleCpuPercent = 5
 )
 
 $ErrorActionPreference = "Stop"
@@ -126,6 +129,20 @@ function Invoke-Bridge {
     return Invoke-RestMethod @parameters
 }
 
+function Get-ResourceSnapshot {
+    param(
+        [Parameter(Mandatory = $true)][string]$BaseUrl,
+        [Parameter(Mandatory = $true)][string]$Token
+    )
+    # The first sample primes the process CPU-time delta. A second sample after
+    # a short quiet interval is the meaningful idle reading shown in diagnostics.
+    Invoke-Bridge -BaseUrl $BaseUrl -Token $Token -Method Get `
+        -Path "/diagnostics/resources" | Out-Null
+    Start-Sleep -Milliseconds 750
+    return Invoke-Bridge -BaseUrl $BaseUrl -Token $Token -Method Get `
+        -Path "/diagnostics/resources"
+}
+
 function Start-IsolatedBridge {
     param(
         [Parameter(Mandatory = $true)][string]$AssemblyPath,
@@ -193,6 +210,20 @@ try {
         throw "Live Bridge does not expose the Office-compatible frame-ancestors policy."
     }
     $token = New-BridgeSession -BaseUrl $baseUrl
+    $idleResources = Get-ResourceSnapshot -BaseUrl $baseUrl -Token $token
+    $idleWorkingSetMb = [Math]::Round($idleResources.bridge.workingSetBytes / 1MB, 1)
+    $idlePrivateMb = [Math]::Round($idleResources.bridge.privateBytes / 1MB, 1)
+    if ($idleResources.bridge.processCount -ne 1 -or
+        $idleResources.connectedMcpServers -ne 0 -or
+        $idleResources.activeAgentSessions -ne 0) {
+        throw "Idle resource diagnostics reported unexpected active Bridge components."
+    }
+    if ($idleWorkingSetMb -gt $MaxIdleWorkingSetMb -or
+        $idlePrivateMb -gt $MaxIdlePrivateMemoryMb -or
+        $idleResources.bridge.cpuPercent -gt $MaxIdleCpuPercent) {
+        throw "Idle Bridge resource gate failed: workingSet=$idleWorkingSetMb MB, private=$idlePrivateMb MB, CPU=$($idleResources.bridge.cpuPercent)%."
+    }
+    Write-Host "Idle Bridge resources: workingSet=$idleWorkingSetMb MB, private=$idlePrivateMb MB, CPU=$($idleResources.bridge.cpuPercent)%; Ollama is reported separately ($($idleResources.ollama.processCount) process(es))."
 
     $missingCsrfRejected = $false
     try {
@@ -291,6 +322,22 @@ try {
         throw "Live MCP tool call returned an unexpected result."
     }
 
+    $secondMcp = Invoke-Bridge -BaseUrl $baseUrl -Token $token -Method Post `
+        -Path "/mcp/servers" -Body @{
+            name = "live-mcp-2"
+            transport = "stdio"
+            command = $node
+            arguments = @($mcpFixture)
+            workingDirectory = $repoRoot
+            environment = @{}
+            headers = @{}
+            enabled = $true
+            trusted = $false
+        }
+    if ($secondMcp.toolCount -ne 1) {
+        throw "Second live MCP stdio connection did not expose its tool."
+    }
+
     Invoke-Bridge -BaseUrl $baseUrl -Token $token -Method Post -Path "/capabilities" -Body @{
         tools = @(@{
             name = "get_selection"
@@ -319,6 +366,21 @@ try {
         -not (Test-Path -LiteralPath (Join-Path $smokeRoot "agent-recovery.bin"))) {
         throw "Live Agent did not persist its encrypted checkpoint."
     }
+    # Simulate additional task panes establishing their own authenticated
+    # sessions, then capture a loaded-state diagnostic snapshot.
+    New-BridgeSession -BaseUrl $baseUrl | Out-Null
+    New-BridgeSession -BaseUrl $baseUrl | Out-Null
+    $loadedToken = New-BridgeSession -BaseUrl $baseUrl
+    $loadedResources = Get-ResourceSnapshot -BaseUrl $baseUrl -Token $loadedToken
+    if ($loadedResources.connectedMcpServers -lt 2 -or
+        $loadedResources.activeAgentSessions -lt 1 -or
+        $loadedResources.bridge.processCount -ne 1) {
+        throw "Loaded resource diagnostics did not report multiple MCP connections and the active Agent session."
+    }
+    $loadedWorkingSetMb = [Math]::Round($loadedResources.bridge.workingSetBytes / 1MB, 1)
+    $loadedPrivateMb = [Math]::Round($loadedResources.bridge.privateBytes / 1MB, 1)
+    Write-Host "Loaded Bridge resources: workingSet=$loadedWorkingSetMb MB, private=$loadedPrivateMb MB, CPU=$($loadedResources.bridge.cpuPercent)%, MCP=$($loadedResources.connectedMcpServers), Agent=$($loadedResources.activeAgentSessions)."
+    $token = $loadedToken
 
     $preRestartToken = $token
     Stop-SmokeProcess -Process $bridgeProcess
@@ -345,9 +407,12 @@ try {
     }
     $servers = @(Invoke-Bridge -BaseUrl $baseUrl -Token $token -Method Get `
         -Path "/mcp/servers")
+    $persistedLiveMcp = @($servers | Where-Object { $_.name -eq "live-mcp" }) | Select-Object -First 1
     if ($servers.name -notcontains "live-mcp" -or
-        $servers[0].toolPermissions.echo -ne $true) {
-        throw "MCP settings or permissions did not survive a real Bridge restart."
+        $servers.name -notcontains "live-mcp-2" -or
+        $null -eq $persistedLiveMcp -or
+        $persistedLiveMcp.toolPermissions.echo -ne $true) {
+        throw "MCP settings or permissions did not survive a real Bridge restart: $($servers | ConvertTo-Json -Depth 8 -Compress)"
     }
     $recoveries = @(Invoke-Bridge -BaseUrl $baseUrl -Token $token -Method Get `
         -Path "/agent/recoveries")
