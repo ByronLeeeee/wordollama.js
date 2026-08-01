@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
 using WordOllama.Contracts;
 
 namespace WordOllama.Core;
@@ -10,7 +12,8 @@ public sealed record LocalToolPolicy(
     IReadOnlyList<string> AuthorizedRoots,
     string SkillsRoot,
     string PythonExecutable,
-    bool AllowHttpRequests = false);
+    bool AllowHttpRequests = false,
+    string? AuditPath = null);
 
 public sealed class LocalToolPolicyException : Exception
 {
@@ -39,8 +42,8 @@ public sealed class LocalToolService : IInternalToolExecutor
     public string SkillsRoot => Path.GetFullPath(_policy.SkillsRoot);
 
     public bool IsKnownTool(string name) =>
-        name is "execute_command" or "run_python_script" or "grep" or "read_skill" or "fetch_url" &&
-        (name != "fetch_url" || _policy.AllowHttpRequests);
+        name is "execute_command" or "run_python_script" or "run_terminal" or "grep" or "read_skill" ||
+        (name == "fetch_url" && _policy.AllowHttpRequests);
 
     public IReadOnlyList<OfficeToolDescriptor> GetToolDescriptors()
     {
@@ -76,6 +79,21 @@ public sealed class LocalToolService : IInternalToolExecutor
                     timeout_seconds = new { type = "integer" },
                 },
                 required = new[] { "skill_name" },
+            })),
+        new OfficeToolDescriptor(
+            "run_terminal",
+            "Run an unrestricted operating-system shell script. This tool is visible only in a user-confirmed full-access Agent session.",
+            false,
+            JsonSerializer.SerializeToElement(new
+            {
+                type = "object",
+                properties = new
+                {
+                    script = new { type = "string" },
+                    timeout_seconds = new { type = "integer" },
+                    working_directory = new { type = "string" },
+                },
+                required = new[] { "script" },
             })),
         new OfficeToolDescriptor(
             "grep",
@@ -156,6 +174,10 @@ public sealed class LocalToolService : IInternalToolExecutor
                 JsonSerializer.Deserialize<FetchUrlToolRequest>(arguments.GetRawText(), options)
                     ?? throw new ArgumentException("Invalid fetch_url arguments."),
                 cancellationToken)),
+            "run_terminal" => JsonSerializer.Serialize(await RunTerminalAsync(
+                JsonSerializer.Deserialize<RunTerminalRequest>(arguments.GetRawText(), options)
+                    ?? throw new ArgumentException("Invalid run_terminal arguments."),
+                cancellationToken)),
             _ => throw new ArgumentException($"Unknown local tool: {name}"),
         };
     }
@@ -210,6 +232,75 @@ public sealed class LocalToolService : IInternalToolExecutor
                 TimeSpan.FromSeconds(Math.Clamp(request.TimeoutSeconds, 1, 600))),
             cancellationToken);
         return new LocalToolResponse(result.ExitCode, result.Stdout, result.Stderr, result.TimedOut);
+    }
+
+    public async Task<LocalToolResponse> RunTerminalAsync(
+        RunTerminalRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Script))
+            throw new ArgumentException("Terminal script is required.", nameof(request));
+        if (request.Script.Length > 100_000)
+            throw new LocalToolPolicyException("Terminal script exceeds the 100,000 character limit.");
+        var (shell, arguments) = OperatingSystem.IsWindows()
+            ? ("powershell.exe", (IReadOnlyList<string>)["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", request.Script])
+            : (File.Exists("/bin/zsh") ? "/bin/zsh" : "/bin/bash",
+                (IReadOnlyList<string>)["-lc", request.Script]);
+        var workingDirectory = string.IsNullOrWhiteSpace(request.WorkingDirectory)
+            ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+            : Path.GetFullPath(request.WorkingDirectory);
+        if (!Directory.Exists(workingDirectory))
+            throw new DirectoryNotFoundException("Terminal working directory was not found.");
+        var startedAt = DateTimeOffset.UtcNow;
+        ProcessExecutionResult? result = null;
+        try
+        {
+            result = await _processRunner.RunAsync(
+                new ProcessExecutionRequest(
+                    shell,
+                    arguments,
+                    workingDirectory,
+                    new Dictionary<string, string> { ["PYTHONIOENCODING"] = "utf-8" },
+                    TimeSpan.FromSeconds(Math.Clamp(request.TimeoutSeconds, 1, 600))),
+                cancellationToken);
+            return new LocalToolResponse(result.ExitCode, result.Stdout, result.Stderr, result.TimedOut);
+        }
+        finally
+        {
+            WriteTerminalAudit(request.Script, shell, startedAt, result);
+        }
+    }
+
+    private void WriteTerminalAudit(
+        string script,
+        string shell,
+        DateTimeOffset startedAt,
+        ProcessExecutionResult? result)
+    {
+        if (string.IsNullOrWhiteSpace(_policy.AuditPath)) return;
+        try
+        {
+            var path = Path.GetFullPath(_policy.AuditPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var record = JsonSerializer.Serialize(new
+            {
+                timestamp = startedAt,
+                shell = Path.GetFileName(shell),
+                scriptSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(script))).ToLowerInvariant(),
+                scriptCharacters = script.Length,
+                exitCode = result?.ExitCode,
+                timedOut = result?.TimedOut,
+                durationMs = (long)(DateTimeOffset.UtcNow - startedAt).TotalMilliseconds,
+            });
+            lock (_policy)
+            {
+                File.AppendAllText(path, record + Environment.NewLine, new UTF8Encoding(false));
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Audit failure must not expose the script through an exception message.
+        }
     }
 
     public async Task<IReadOnlyList<GrepMatch>> GrepAsync(

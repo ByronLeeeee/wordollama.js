@@ -180,6 +180,11 @@ public sealed record RunPythonScriptRequest(
     string? ScriptArgs = null,
     int TimeoutSeconds = 60);
 
+public sealed record RunTerminalRequest(
+    string Script,
+    int TimeoutSeconds = 60,
+    string? WorkingDirectory = null);
+
 public sealed record HttpRequestToolRequest(
     string Method,
     string Url,

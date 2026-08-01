@@ -235,7 +235,8 @@ builder.Services.AddSingleton(new LocalToolPolicy(
     authorizedRoots,
     skillsRoot,
     pythonExecutable,
-    allowHttpRequests));
+    allowHttpRequests,
+    Path.Combine(settingsRoot, "logs", "terminal-audit.jsonl")));
 builder.Services.AddSingleton<LocalToolService>();
 builder.Services.AddSingleton<IInternalToolExecutor>(sp => sp.GetRequiredService<LocalToolService>());
 builder.Services.AddSingleton<IMutableSecretStore>(secretStore);

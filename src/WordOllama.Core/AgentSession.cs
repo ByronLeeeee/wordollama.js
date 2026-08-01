@@ -453,6 +453,11 @@ public sealed class AgentSession
 
     private bool IsInternalToolAllowed(string name)
     {
+        if (string.Equals(name, "run_terminal", StringComparison.OrdinalIgnoreCase))
+        {
+            return _permissionMode == "full" && _allowLocalTools;
+        }
+
         if (string.Equals(name, "read_skill", StringComparison.OrdinalIgnoreCase))
         {
             return true;
