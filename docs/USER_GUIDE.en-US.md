@@ -50,7 +50,12 @@ separate localhost certificate. Intel Mac is not supported.
 - The local UI, Word tools, Ollama, Skills, local MCP, and isolated Python/Node
   workspace can run offline when their dependencies were installed in advance.
   Cloud providers and web tools fail fast without disabling local features.
+- Microsoft requires Word API pages to reference `office.js` from the official
+  Office CDN. Word must therefore be able to load its own runtime bootstrap; the
+  installer does not ship an unsupported private copy of `office.js` and does
+  not promise a cold start when the Microsoft CDN is blocked. Apart from that
+  host bootstrap, React/CSS/SVG, settings, Bridge APIs, and local features are
+  served from localhost, with a build gate preventing extra remote assets.
 - On Windows, uninstall from Installed apps. On Mac, run
   `~/Applications/WordOllama.JS/Uninstall WordOllama.JS.command`. Removal does not
   delete Ollama, its models, the old COM add-in, or unrelated certificates.
-

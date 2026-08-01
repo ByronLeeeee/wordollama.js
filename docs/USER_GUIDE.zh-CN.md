@@ -65,10 +65,16 @@ pwsh ./packaging/rollback-bridge.ps1 -InstallRoot <DesktopBridge 安装目录>
 ## 离线使用
 
 - 桌面前端和 API 均由 localhost Bridge 托管，不依赖在线网页。
+- Word 与文档交互所需的 `office.js` 必须按 Microsoft 的 Office Add-in 规范从官方
+  CDN 引用。因此，普通 Microsoft 365 桌面版仍需能加载 Office 自身的运行库；本产品
+  不把未经支持的 `office.js` 私有副本塞入安装包，也不承诺隔绝 Microsoft CDN 的冷启动。
 - 已配置的 Ollama、本地 Word 工具、Skills、本地 MCP、隔离 Python/Node 工作区可离线
   使用；在线 Provider、网页读取和 Search MCP 会快速失败并保持其他本地功能可用。
 - 离线前应提前安装所需 Python/Node runtime、Ollama 模型、Skills 和 MCP 依赖。
 - Ollama 内存单独显示，不计入 Bridge 资源；可在“设置 > 进阶”按需刷新。
+
+除上述 Office 宿主引导脚本外，任务窗格的 React/CSS/SVG、设置、Bridge API 和本地
+功能均随安装包在 localhost 提供；构建门禁会拒绝新增的远程字体、图片、脚本或样式。
 
 ## 卸载
 
@@ -79,4 +85,3 @@ Bridge、移除 Startup、JS manifest、版本目录和产品专用 localhost �
 Mac 运行 `~/Applications/WordOllama.JS/Uninstall WordOllama.JS.command`。脚本移除
 LaunchAgent、JS manifest、Bridge 文件和产品专用 localhost 项；发布者签名证书的
 信任由用户在 Keychain Access 中单独撤销，避免卸载器扩大证书库写权限。
-

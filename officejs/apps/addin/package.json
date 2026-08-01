@@ -31,6 +31,7 @@
     "test:updates": "node --experimental-strip-types ../../test-fixtures/update-status-smoke.ts",
     "test:pairing-session": "node --experimental-strip-types ../../test-fixtures/pairing-session-smoke.ts",
     "test:permission-scope": "node --experimental-strip-types ../../test-fixtures/permission-scope-smoke.ts",
+    "test:offline": "node --experimental-strip-types ../../test-fixtures/offline-product-smoke.ts",
     "certs:install": "office-addin-dev-certs install",
     "dev": "vite --host localhost --port 3000",
     "dev-server": "vite --host localhost --port 3000",
