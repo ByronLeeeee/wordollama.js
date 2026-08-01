@@ -8,5 +8,6 @@
   <data name="Installed" xml:space="preserve"><value>WordOllama.JS Desktop Bridge was installed for the current user.</value></data>
   <data name="Removed" xml:space="preserve"><value>WordOllama.JS Desktop Bridge has been removed.</value></data>
   <data name="CertificateTrustPrompt" xml:space="preserve"><value>Trust a WordOllama.JS certificate for localhost in your current-user certificate store? It is limited to localhost, 127.0.0.1 and ::1, and will be removed when you uninstall WordOllama.JS.</value></data>
+  <data name="RestartWord" xml:space="preserve"><value>Microsoft Word is currently running. Completely close and reopen Word to load the updated WordOllama.JS Ribbon.</value></data>
   <data name="Failed" xml:space="preserve"><value>Setup failed: {0}</value></data>
 </root>

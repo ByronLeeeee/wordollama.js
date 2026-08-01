@@ -99,6 +99,10 @@ internal static class Program
                 skipRegistration,
                 trustLocalhostCertificate);
             Notify(InstallerText.Installed, quiet);
+            if (!quiet && Process.GetProcessesByName("WINWORD").Length > 0)
+            {
+                Notify(InstallerText.RestartWord, quiet: false);
+            }
             return 0;
         }
         catch (Exception exception)
@@ -389,6 +393,8 @@ internal static class Program
                     new FileInfo(uninstallPath).Length / 1024d)));
         }
 
+        StopOwnedBridgeProcesses(installRoot);
+
         if (!skipRegistration && trustLocalhostCertificate)
         {
             ProvisionLocalhostCertificate(installRoot, target);
@@ -408,6 +414,7 @@ internal static class Program
                     UseShellExecute = true,
                     WindowStyle = ProcessWindowStyle.Hidden,
                 });
+            VerifyBridgeReadyAsync().GetAwaiter().GetResult();
         }
     }
 
@@ -666,6 +673,41 @@ internal static class Program
             throw new InvalidOperationException(
                 $"Unable to remove the Bridge HTTPS credential ({error}).");
         }
+    }
+
+    private static async Task VerifyBridgeReadyAsync()
+    {
+        using var handler = new HttpClientHandler
+        {
+            UseProxy = false,
+            AllowAutoRedirect = false,
+        };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(3) };
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+        Exception? lastError = null;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            try
+            {
+                using var health = await client.GetAsync("https://127.0.0.1:37421/health");
+                using var index = await client.GetAsync("https://127.0.0.1:37421/index.html");
+                if (health.IsSuccessStatusCode && index.IsSuccessStatusCode)
+                {
+                    return;
+                }
+                lastError = new InvalidOperationException(
+                    $"health={(int)health.StatusCode}, index={(int)index.StatusCode}");
+            }
+            catch (Exception exception) when (
+                exception is HttpRequestException or TaskCanceledException)
+            {
+                lastError = exception;
+            }
+            await Task.Delay(300);
+        }
+        throw new InvalidOperationException(
+            "The Desktop Bridge was installed but did not become ready within 30 seconds.",
+            lastError);
     }
 
     private static bool ConfirmLocalhostCertificateTrust() =>

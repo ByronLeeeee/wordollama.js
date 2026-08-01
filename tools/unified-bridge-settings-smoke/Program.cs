@@ -654,6 +654,27 @@ try
     }
     Assert(loopbackUpdateRejected, "update index rejects loopback HTTPS sources");
 
+    var memoryCandidates = AutomaticMemoryService.ExtractExplicitPreferenceCandidates(
+        "今天天气不错。以后请始终使用简洁的中文。api_key=top-secret。I prefer short headings.");
+    Assert(
+        memoryCandidates.Count == 2 &&
+        memoryCandidates.Any(value => value.Contains("简洁的中文", StringComparison.Ordinal)) &&
+        memoryCandidates.Any(value => value.Contains("short headings", StringComparison.OrdinalIgnoreCase)),
+        "automatic memory only observes explicit preference statements and rejects secrets");
+    var existingMemory = new MemoryItem(
+        "memory-1",
+        "User prefers long answers.",
+        DateTimeOffset.UtcNow,
+        DateTimeOffset.UtcNow);
+    var memoryChanges = AutomaticMemoryService.ParseChanges(
+        """{"operations":[{"action":"update","id":"memory-1","content":"User prefers concise answers."},{"action":"add","id":"","content":"User prefers concise Chinese headings."},{"action":"update","id":"missing","content":"ignored"}]}""",
+        [existingMemory]);
+    Assert(
+        memoryChanges.Count == 2 &&
+        memoryChanges.Any(change => change.Action == "update" && change.Id == "memory-1") &&
+        memoryChanges.Any(change => change.Action == "add"),
+        "automatic memory validates strict JSON operations and known ids");
+
     await manager.DisposeAsync();
 }
 finally
@@ -661,7 +682,7 @@ finally
     Directory.Delete(root, recursive: true);
 }
 
-Console.WriteLine("Unified HTTPS secret, signed update installer, encrypted recovery, MCP, Ollama settings, and Google OAuth PKCE smoke passed.");
+Console.WriteLine("Unified HTTPS secret, signed update installer, encrypted recovery, MCP, automatic memory, Ollama settings, and Google OAuth PKCE smoke passed.");
 
 static void Assert(bool condition, string name)
 {

@@ -91,9 +91,11 @@ function New-BridgeSession {
         -Headers @{ Origin = $origin } -ContentType "application/json" `
         -Body (@{ origin = $origin } | ConvertTo-Json)
     if ($response.protocolVersion -ne "1.0" -or
-        [string]::IsNullOrWhiteSpace([string]$response.sessionToken)) {
+        [string]::IsNullOrWhiteSpace([string]$response.sessionToken) -or
+        [string]::IsNullOrWhiteSpace([string]$response.csrfToken)) {
         throw "Live Bridge pairing did not return a protocol 1.0 session."
     }
+    $script:csrfToken = [string]$response.csrfToken
     return [string]$response.sessionToken
 }
 
@@ -108,7 +110,11 @@ function Invoke-Bridge {
     $parameters = @{
         Method = $Method
         Uri = "$BaseUrl$Path"
-        Headers = @{ Origin = $origin; "X-WordOllama-Session" = $Token }
+        Headers = @{
+            Origin = $origin
+            "X-WordOllama-Session" = $Token
+            "X-WordOllama-CSRF" = $script:csrfToken
+        }
         TimeoutSec = 15
     }
     if ($null -ne $Body) {

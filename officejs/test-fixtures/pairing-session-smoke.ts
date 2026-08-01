@@ -28,6 +28,7 @@ const now = Date.parse("2026-07-30T08:00:00.000Z");
 const validPairing: PairResponse = {
   protocolVersion: "1.0",
   sessionToken: "a".repeat(44),
+  csrfToken: "b".repeat(44),
   expiresAt: new Date(now + 8 * 60 * 60 * 1000).toISOString(),
   capabilities: ["agent", "settings"],
 };
@@ -63,6 +64,9 @@ if (isPairingSessionValid({ ...validPairing, protocolVersion: "2.0" }, now)) {
 }
 if (isPairingSessionValid({ ...validPairing, sessionToken: "short" }, now)) {
   throw new Error("A malformed Bridge session token was accepted.");
+}
+if (isPairingSessionValid({ ...validPairing, csrfToken: "short" }, now)) {
+  throw new Error("A malformed Bridge CSRF token was accepted.");
 }
 
 writePairingSession(storage, validPairing, now);

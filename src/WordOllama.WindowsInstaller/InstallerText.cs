@@ -13,6 +13,7 @@ internal static class InstallerText
     public static string Installed => Get(nameof(Installed));
     public static string Removed => Get(nameof(Removed));
     public static string CertificateTrustPrompt => Get(nameof(CertificateTrustPrompt));
+    public static string RestartWord => Get(nameof(RestartWord));
 
     public static string Failed(string detail) =>
         string.Format(

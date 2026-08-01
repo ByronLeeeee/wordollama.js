@@ -53,6 +53,7 @@ export interface UpdateInstallResult {
 export interface PairResponse {
   protocolVersion: string;
   sessionToken: string;
+  csrfToken: string;
   expiresAt: string;
   capabilities: string[];
 }

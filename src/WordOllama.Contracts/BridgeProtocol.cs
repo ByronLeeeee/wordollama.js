@@ -6,6 +6,7 @@ public static class BridgeProtocol
 {
     public const string CurrentVersion = "1.0";
     public const string SessionHeader = "X-WordOllama-Session";
+    public const string CsrfHeader = "X-WordOllama-CSRF";
 }
 
 public sealed record BridgeHealthResponse(
@@ -22,7 +23,8 @@ public sealed record PairResponse(
     string ProtocolVersion,
     string SessionToken,
     DateTimeOffset ExpiresAt,
-    IReadOnlyList<string> Capabilities);
+    IReadOnlyList<string> Capabilities,
+    string CsrfToken = "");
 
 public sealed record CommandRequest(
     string Command,

@@ -259,6 +259,8 @@ builder.Services.AddSingleton<IInternalToolExecutor, McpToolExecutor>();
 builder.Services.AddSingleton<McpManager>();
 builder.Services.AddSingleton<IDocumentComparer, OpenXmlDocumentComparer>();
 builder.Services.AddSingleton<LegalArticleService>();
+builder.Services.AddSingleton<AutomaticMemoryService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomaticMemoryService>());
 builder.Services.AddSingleton<IAgentRuntime>(sp => new AgentRuntime(
     sp.GetRequiredService<IModelProvider>(),
     sp.GetServices<IInternalToolExecutor>()));
@@ -271,8 +273,9 @@ builder.Services.AddCors(options =>
             ?? ["https://localhost:3000", "https://localhost:5173"];
 
         policy.WithOrigins(origins)
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+            .WithHeaders("Content-Type", "Accept-Language", BridgeProtocol.SessionHeader, BridgeProtocol.CsrfHeader)
+            .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+            .AllowCredentials();
     });
 });
 
@@ -290,6 +293,26 @@ if (Directory.Exists(addinWebRoot))
     });
 }
 app.UseCors("officejs");
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    if (context.Request.Method is "POST" or "PUT" or "PATCH" or "DELETE" &&
+        !context.Request.Path.StartsWithSegments("/pair"))
+    {
+        var token = context.Request.Headers[BridgeProtocol.SessionHeader].FirstOrDefault()
+            ?? context.Request.Cookies[BridgeSessionStore.CookieName];
+        var origin = context.Request.Headers.Origin.FirstOrDefault();
+        if (!context.RequestServices.GetRequiredService<BridgeSessionStore>()
+                .TryGet(token, origin, out var session) ||
+            !session.IsCsrfValid(context.Request.Headers[BridgeProtocol.CsrfHeader].FirstOrDefault()))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+    }
+    await next();
+});
 app.Use(async (context, next) =>
 {
     try
@@ -338,7 +361,8 @@ if (app.Environment.IsDevelopment())
             BridgeProtocol.CurrentVersion,
             session.Token,
             session.ExpiresAt,
-            ["agent", "providers", "provider-settings", "mcp", "skills", "local-tools", .. agentRecoveryCapabilities]));
+            ["agent", "providers", "provider-settings", "mcp", "skills", "local-tools", .. agentRecoveryCapabilities],
+            session.CsrfToken));
     });
 }
 
@@ -363,11 +387,23 @@ app.MapPost("/pair/automatic", (
     }
 
     var session = sessions.Create(request.Origin);
+    httpContext.Response.Cookies.Append(
+        BridgeSessionStore.CookieName,
+        session.Token,
+        new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = httpContext.Request.IsHttps,
+            SameSite = SameSiteMode.Strict,
+            Path = "/",
+            Expires = session.ExpiresAt,
+        });
     return Results.Ok(new PairResponse(
         BridgeProtocol.CurrentVersion,
         session.Token,
         session.ExpiresAt,
-        ["agent", "providers", "provider-settings", "mcp", "skills", "local-tools", .. agentRecoveryCapabilities]));
+        ["agent", "providers", "provider-settings", "mcp", "skills", "local-tools", .. agentRecoveryCapabilities],
+        session.CsrfToken));
 });
 
 app.MapGet("/updates/check", async (
@@ -472,6 +508,7 @@ async Task<IResult> ChatWithProvider(
     BridgeSessionStore sessions,
     ProviderSettingsStore settings,
     IModelProvider provider,
+    AutomaticMemoryService automaticMemory,
     CancellationToken cancellationToken)
 {
     var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
@@ -486,9 +523,11 @@ async Task<IResult> ChatWithProvider(
         var selectedProvider = string.IsNullOrWhiteSpace(request.ProviderProfileId)
             ? provider
             : ModelProviderFactory.Create(settings.GetOptions(request.ProviderProfileId));
-        return Results.Ok(await selectedProvider.ChatAsync(
+        var response = await selectedProvider.ChatAsync(
             settings.ApplyDefaults(request, request.ProviderProfileId),
-            cancellationToken));
+            cancellationToken);
+        automaticMemory.Observe(request);
+        return Results.Ok(response);
     }
     catch (HttpRequestException exception)
     {
@@ -513,6 +552,7 @@ async Task StreamProviderChat(
     BridgeSessionStore sessions,
     ProviderSettingsStore settings,
     IModelProvider provider,
+    AutomaticMemoryService automaticMemory,
     CancellationToken cancellationToken)
 {
     var token = httpContext.Request.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
@@ -537,6 +577,7 @@ async Task StreamProviderChat(
             cancellationToken);
         await httpContext.Response.Body.FlushAsync(cancellationToken);
     }
+    automaticMemory.Observe(request);
 }
 
 app.MapPost("/providers/chat/stream", StreamProviderChat);
@@ -1769,6 +1810,7 @@ finally
 
 public sealed class BridgeSessionStore
 {
+    public const string CookieName = "WordOllama.Session";
     private readonly string _pairingCode;
     private readonly string[] _allowedOrigins;
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
@@ -1800,6 +1842,7 @@ public sealed class BridgeSessionStore
     public Session Create(string origin)
     {
         var session = new Session(
+            Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
             Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
             origin,
             DateTimeOffset.UtcNow.AddHours(8));
@@ -1850,5 +1893,12 @@ public sealed class BridgeSessionStore
     private static string CreatePairingCode() =>
         Convert.ToHexString(RandomNumberGenerator.GetBytes(4));
 
-    public sealed record Session(string Token, string Origin, DateTimeOffset ExpiresAt);
+    public sealed record Session(string Token, string CsrfToken, string Origin, DateTimeOffset ExpiresAt)
+    {
+        public bool IsCsrfValid(string? value) =>
+            !string.IsNullOrWhiteSpace(value) &&
+            CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(CsrfToken),
+                Encoding.UTF8.GetBytes(value));
+    }
 }

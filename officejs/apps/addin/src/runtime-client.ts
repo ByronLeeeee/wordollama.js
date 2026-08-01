@@ -61,12 +61,15 @@ import {
 
 export class RuntimeClient {
   private sessionToken: string | undefined;
+  private csrfToken: string | undefined;
   private outputLanguage: OutputLanguageMode = "auto";
   private readonly pairingStorage: PairingStorage | undefined;
 
   constructor(pairingStorage: PairingStorage | undefined = browserPairingStorage()) {
     this.pairingStorage = pairingStorage;
-    this.sessionToken = readPairingSession(pairingStorage)?.sessionToken;
+    const pairing = readPairingSession(pairingStorage);
+    this.sessionToken = pairing?.sessionToken;
+    this.csrfToken = pairing?.csrfToken;
   }
 
   hasPairing(): boolean {
@@ -74,7 +77,9 @@ export class RuntimeClient {
   }
 
   refreshPairing(): boolean {
-    this.sessionToken = readPairingSession(this.pairingStorage)?.sessionToken;
+    const pairing = readPairingSession(this.pairingStorage);
+    this.sessionToken = pairing?.sessionToken;
+    this.csrfToken = pairing?.csrfToken;
     return this.hasPairing();
   }
 
@@ -87,10 +92,12 @@ export class RuntimeClient {
     }
     writePairingSession(this.pairingStorage, result);
     this.sessionToken = result.sessionToken;
+    this.csrfToken = result.csrfToken;
   }
 
   clearPairing(): void {
     this.sessionToken = undefined;
+    this.csrfToken = undefined;
     clearPairingSession(this.pairingStorage);
   }
 
@@ -98,7 +105,11 @@ export class RuntimeClient {
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> {
-    const response = await fetch(input, init);
+    const headers = new Headers(init?.headers);
+    if (this.csrfToken && init?.method && !["GET", "HEAD", "OPTIONS"].includes(init.method.toUpperCase())) {
+      headers.set("X-WordOllama-CSRF", this.csrfToken);
+    }
+    const response = await fetch(input, { ...init, headers, credentials: "include" });
     if (response.status === 401) this.clearPairing();
     return response;
   }
@@ -151,6 +162,7 @@ export class RuntimeClient {
     const response = await fetch(`${BRIDGE_URL}/pair/automatic`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ origin }),
     });
 

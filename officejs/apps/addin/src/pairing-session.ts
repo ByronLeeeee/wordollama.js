@@ -24,6 +24,8 @@ function isValidPairing(
   return pairing.protocolVersion === BRIDGE_PROTOCOL_VERSION &&
     typeof pairing.sessionToken === "string" &&
     pairing.sessionToken.length >= 32 &&
+    typeof pairing.csrfToken === "string" &&
+    pairing.csrfToken.length >= 32 &&
     Array.isArray(pairing.capabilities) &&
     Number.isFinite(expiresAt) &&
     expiresAt > now + EXPIRY_SAFETY_MARGIN_MS;

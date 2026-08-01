@@ -611,7 +611,7 @@ function Assert-WindowsInstallerLifecycle {
     $englishKeys = @($installerEnglish.root.data.name | Sort-Object)
     $chineseKeys = @($installerChinese.root.data.name | Sort-Object)
     if (($englishKeys -join ",") -ne ($chineseKeys -join ",") -or
-        $englishKeys.Count -ne 5) {
+        $englishKeys.Count -ne 6) {
         throw "Bridge package smoke: Windows installer locales are incomplete or mismatched."
     }
 
