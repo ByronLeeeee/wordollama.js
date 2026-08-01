@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Collections.Concurrent;
 using WordOllama.Contracts;
 
 namespace WordOllama.Core;
@@ -13,19 +14,31 @@ public interface IAgentWorkspaceFactory
 public sealed class AgentWorkspaceFactory : IAgentWorkspaceFactory
 {
     private readonly string _root;
+    private readonly IAgentCodeSandboxFactory? _sandboxFactory;
+    private readonly ConcurrentDictionary<string, AgentWorkspaceToolExecutor> _executors = new(StringComparer.Ordinal);
 
-    public AgentWorkspaceFactory(string root)
+    public AgentWorkspaceFactory(string root, IAgentCodeSandboxFactory? sandboxFactory = null)
     {
         _root = Path.GetFullPath(root);
+        _sandboxFactory = sandboxFactory;
         Directory.CreateDirectory(_root);
     }
 
-    public IInternalToolExecutor Create(string sessionId) =>
-        new AgentWorkspaceToolExecutor(Path.Combine(_root, ValidateSessionId(sessionId)));
+    public IInternalToolExecutor Create(string sessionId)
+    {
+        sessionId = ValidateSessionId(sessionId);
+        return _executors.GetOrAdd(sessionId, id =>
+        {
+            var workspace = Path.Combine(_root, id);
+            return new AgentWorkspaceToolExecutor(workspace, _sandboxFactory?.Create(id, workspace));
+        });
+    }
 
     public void Delete(string sessionId)
     {
-        var path = Path.Combine(_root, ValidateSessionId(sessionId));
+        sessionId = ValidateSessionId(sessionId);
+        if (_executors.TryRemove(sessionId, out var executor)) executor.Dispose();
+        var path = Path.Combine(_root, sessionId);
         if (!Directory.Exists(path)) return;
         var directories = new List<string>();
         var files = new List<string>();
@@ -55,30 +68,36 @@ public sealed class AgentWorkspaceFactory : IAgentWorkspaceFactory
             : throw new ArgumentException("Invalid Agent session identifier.", nameof(value));
 }
 
-public sealed class AgentWorkspaceToolExecutor : IInternalToolExecutor
+public sealed class AgentWorkspaceToolExecutor : IInternalToolExecutor, IDisposable
 {
     private const int MaxFileBytes = 1_048_576;
     private const long MaxWorkspaceBytes = 10_485_760;
     private const int MaxListedFiles = 500;
     private readonly string _root;
     private readonly string _rootPrefix;
+    private readonly IAgentCodeSandbox? _sandbox;
 
-    public AgentWorkspaceToolExecutor(string root)
+    public AgentWorkspaceToolExecutor(string root, IAgentCodeSandbox? sandbox = null)
     {
         _root = Path.GetFullPath(root);
         Directory.CreateDirectory(_root);
         RejectReparsePoint(_root);
         _rootPrefix = _root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
             Path.DirectorySeparatorChar;
+        _sandbox = sandbox;
     }
 
     public bool IsKnownTool(string name) =>
-        name is "list_workspace_files" or "read_workspace_file" or "write_workspace_file";
+        name is "list_workspace_files" or "read_workspace_file" or "write_workspace_file" ||
+        (name == "run_python" && _sandbox?.Supports("python") == true) ||
+        (name == "run_node" && _sandbox?.Supports("node") == true);
 
-    public bool RequiresConfirmation(string name) => false;
+    public bool RequiresConfirmation(string name) => name is "run_python" or "run_node";
 
-    public IReadOnlyList<OfficeToolDescriptor> GetToolDescriptors() =>
-    [
+    public IReadOnlyList<OfficeToolDescriptor> GetToolDescriptors()
+    {
+        var tools = new List<OfficeToolDescriptor>
+        {
         new("list_workspace_files", "List files in this Agent session's isolated workspace.", false,
             JsonSerializer.SerializeToElement(new
             {
@@ -103,7 +122,25 @@ public sealed class AgentWorkspaceToolExecutor : IInternalToolExecutor
                 },
                 required = new[] { "path", "content" },
             })),
-    ];
+        };
+        if (_sandbox?.Supports("python") == true)
+            tools.Add(CodeTool("run_python", "Run Python code inside this session's isolated, network-disabled workspace."));
+        if (_sandbox?.Supports("node") == true)
+            tools.Add(CodeTool("run_node", "Run Node.js code inside this session's isolated, network-disabled workspace."));
+        return tools;
+    }
+
+    private static OfficeToolDescriptor CodeTool(string name, string description) =>
+        new(name, description, false, JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                code = new { type = "string" },
+                timeout_seconds = new { type = "integer", minimum = 1, maximum = 120 },
+            },
+            required = new[] { "code" },
+        }));
 
     public Task<string> ExecuteAsync(
         string name,
@@ -111,6 +148,8 @@ public sealed class AgentWorkspaceToolExecutor : IInternalToolExecutor
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (name is "run_python" or "run_node")
+            return RunCodeAsync(name == "run_python" ? "python" : "node", arguments, cancellationToken);
         return Task.FromResult(name switch
         {
             "list_workspace_files" => List(ReadString(arguments, "path", required: false)),
@@ -121,6 +160,31 @@ public sealed class AgentWorkspaceToolExecutor : IInternalToolExecutor
             _ => throw new InvalidOperationException($"Unknown workspace tool: {name}"),
         });
     }
+
+    private async Task<string> RunCodeAsync(
+        string runtime,
+        JsonElement arguments,
+        CancellationToken cancellationToken)
+    {
+        if (_sandbox is null || !_sandbox.Supports(runtime))
+            throw new InvalidOperationException($"The {runtime} sandbox is unavailable on this device.");
+        var code = ReadString(arguments, "code");
+        if (code.Length > 100_000) throw new InvalidOperationException("Sandbox code exceeds 100,000 characters.");
+        var timeoutSeconds = arguments.TryGetProperty("timeout_seconds", out var timeoutValue) &&
+            timeoutValue.TryGetInt32(out var requestedTimeout)
+                ? Math.Clamp(requestedTimeout, 1, 120)
+                : 30;
+        var result = await _sandbox.RunAsync(runtime, code, TimeSpan.FromSeconds(timeoutSeconds), cancellationToken);
+        return JsonSerializer.Serialize(new
+        {
+            result.ExitCode,
+            result.Stdout,
+            result.Stderr,
+            result.TimedOut,
+        });
+    }
+
+    public void Dispose() => _sandbox?.Dispose();
 
     private string List(string relativePath)
     {

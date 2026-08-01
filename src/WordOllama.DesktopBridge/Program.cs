@@ -98,6 +98,8 @@ var configuredPythonExecutable = builder.Configuration["Bridge:LocalTools:Python
 var pythonExecutable = string.IsNullOrWhiteSpace(configuredPythonExecutable)
     ? (OperatingSystem.IsWindows() ? "python" : "python3")
     : configuredPythonExecutable;
+var configuredNodeExecutable = builder.Configuration["Bridge:LocalTools:NodeExecutable"];
+var nodeExecutable = string.IsNullOrWhiteSpace(configuredNodeExecutable) ? "node" : configuredNodeExecutable;
 var allowHttpRequests = builder.Configuration.GetValue("Bridge:LocalTools:AllowHttpRequests", false);
 var modelProviderType = builder.Configuration["Bridge:ModelProvider:Type"] ?? "Ollama";
 var modelProviderEndpoint = builder.Configuration["Bridge:ModelProvider:Endpoint"]
@@ -246,8 +248,11 @@ builder.Services.AddSingleton<IModelProvider>(reloadableProvider);
 builder.Services.AddSingleton(mcpSettings);
 builder.Services.AddSingleton(reviewSettings);
 builder.Services.AddSingleton<IAgentRecoveryStore>(agentRecoveryStore);
-builder.Services.AddSingleton<IAgentWorkspaceFactory>(
-    new AgentWorkspaceFactory(Path.Combine(settingsRoot, "agent-workspaces")));
+builder.Services.AddSingleton<IAgentCodeSandboxFactory>(sp => new AgentCodeSandboxFactory(
+    sp.GetRequiredService<IProcessRunner>(), pythonExecutable, nodeExecutable));
+builder.Services.AddSingleton<IAgentWorkspaceFactory>(sp => new AgentWorkspaceFactory(
+    Path.Combine(settingsRoot, "agent-workspaces"),
+    sp.GetRequiredService<IAgentCodeSandboxFactory>()));
 builder.Services.AddSingleton<GoogleOAuthService>();
 builder.Services.AddSingleton(updateService);
 builder.Services.AddSingleton<IUpdateInstallerPlatform, SystemUpdateInstallerPlatform>();

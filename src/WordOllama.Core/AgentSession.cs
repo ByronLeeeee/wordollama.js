@@ -465,7 +465,8 @@ public sealed class AgentSession
 
         if (name.StartsWith("workspace_", StringComparison.OrdinalIgnoreCase) ||
             name.EndsWith("_workspace_file", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(name, "list_workspace_files", StringComparison.OrdinalIgnoreCase))
+            string.Equals(name, "list_workspace_files", StringComparison.OrdinalIgnoreCase) ||
+            name is "run_python" or "run_node")
         {
             return true;
         }
@@ -496,7 +497,8 @@ public sealed class AgentSession
             return !name.StartsWith("workspace_", StringComparison.OrdinalIgnoreCase) &&
                    !string.Equals(name, "list_workspace_files", StringComparison.OrdinalIgnoreCase) &&
                    !string.Equals(name, "read_workspace_file", StringComparison.OrdinalIgnoreCase) &&
-                   !string.Equals(name, "write_workspace_file", StringComparison.OrdinalIgnoreCase);
+                   !string.Equals(name, "write_workspace_file", StringComparison.OrdinalIgnoreCase) &&
+                   name is not "run_python" and not "run_node";
         }
         return toolDefault || string.Equals(name, "write_workspace_file", StringComparison.OrdinalIgnoreCase);
     }
