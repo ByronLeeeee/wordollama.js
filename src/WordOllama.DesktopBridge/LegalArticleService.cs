@@ -7,7 +7,10 @@ namespace WordOllama.DesktopBridge;
 public sealed class LegalArticleService : IDisposable
 {
     private const string ApiBase = "https://lawapi.lslby.com/api/v1/article";
-    private readonly HttpClient _httpClient = new()
+    private readonly HttpClient _httpClient = new(new SocketsHttpHandler
+    {
+        ConnectTimeout = TimeSpan.FromSeconds(5),
+    })
     {
         Timeout = TimeSpan.FromSeconds(30),
     };

@@ -39,7 +39,7 @@ public sealed class GeminiProvider : IModelProvider
         }
         _defaultModel = defaultModel;
         _httpClient = messageHandler is null
-            ? new HttpClient()
+            ? new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(5) })
             : new HttpClient(messageHandler, disposeHandler: true);
         _httpClient.BaseAddress = new Uri(NormalizeBaseUrl(endpoint), UriKind.Absolute);
         _httpClient.Timeout = timeout ?? TimeSpan.FromMinutes(10);

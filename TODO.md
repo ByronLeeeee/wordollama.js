@@ -174,10 +174,10 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
   不删除 Ollama 或其模型。
 - [x] 检测 Ollama 是否已安装/运行；不可用时给出本地化安装指引、官方链接和重新
   检测按钮，不在 WordOllama.JS 中提供 Ollama 服务级设置。
-- [ ] 确认内置 Skills、MCP 配置和用户设置全部位于 `WordOllama.JS` 独立目录。
+- [x] 确认内置 Skills、MCP 配置和用户设置全部位于 `WordOllama.JS` 独立目录。
 - [ ] 验证完全断网时前端、设置、Word 工具、本地 Agent 和本地 MCP 可运行。
-- [ ] 云 Provider 在离线时快速失败，不阻塞本地功能。
-- [ ] 明确桌面离线版不支持 Word 网页版。
+- [x] 云 Provider 在离线时快速失败，不阻塞本地功能。
+- [x] 明确桌面离线版不支持 Word 网页版。
 
 ## P1：Agent 扩展能力
 

@@ -33,7 +33,7 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
         _defaultModel = defaultModel;
         _nativeOpenAiEndpoint = IsNativeOpenAiEndpoint(endpoint);
         _httpClient = httpMessageHandler is null
-            ? new HttpClient()
+            ? new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(5) })
             : new HttpClient(httpMessageHandler);
         _httpClient.BaseAddress = new Uri(NormalizeBaseUrl(endpoint), UriKind.Absolute);
         _httpClient.Timeout = timeout ?? TimeSpan.FromMinutes(10);

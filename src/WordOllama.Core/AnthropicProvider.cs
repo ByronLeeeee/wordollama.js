@@ -21,7 +21,7 @@ public sealed class AnthropicProvider : IModelProvider
     {
         ProviderType = "Claude";
         _defaultModel = defaultModel;
-        _httpClient = new HttpClient
+        _httpClient = new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(5) })
         {
             BaseAddress = new Uri(NormalizeBaseUrl(endpoint), UriKind.Absolute),
             Timeout = timeout ?? TimeSpan.FromMinutes(10),
