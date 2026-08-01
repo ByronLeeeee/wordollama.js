@@ -48,6 +48,13 @@ pwsh ./packaging/package-unified-release.ps1 -Runtime win-x64 `
 
 需要正式签名候选包时，手动运行 `.github/workflows/officejs-signed-candidate.yml`。Windows runner 从 `WINDOWS_SIGNING_PFX_BASE64` / `WINDOWS_SIGNING_PFX_PASSWORD` 导入临时证书，签署 Bridge PE/ZIP 后继续生成并签署用户级 EXE；macOS runner 从 `MACOS_SIGNING_P12_BASE64` / `MACOS_SIGNING_P12_PASSWORD` 导入同时包含 Application/Installer 身份的临时 Keychain，分别使用 `MACOS_SIGNING_IDENTITY` 和 `MACOS_INSTALLER_IDENTITY`，并用 `APPLE_ID` / `APPLE_TEAM_ID` / `APPLE_APP_PASSWORD` 创建一次性 notarytool profile。临时 Keychain 路径会同时传给凭据存储、公证 ZIP 和公证 PKG。工作流会签名/公证 Bridge 更新 ZIP，继续构建、签名、公证、staple 和 Gatekeeper 验证用户级 `.pkg`，再启动候选 Bridge 执行实时 API 回归；最后删除临时凭据，只上传保留 14 天的 `signed-candidate` 和原始 unsigned descriptor。该候选仍为 `releaseReady: false`；必须在目标 Word 中生成同版本宿主证据并运行终审，不能直接作为 GA 发布。
 
+没有 Developer ID 时，可在 Apple Silicon Mac 上为 `sign-bridge-release.ps1` 传入
+`-LocalSelfSignedMacRelease`，并为 `package-macos-installer.ps1` 传入
+`-LocalSelfSignedRelease` 与 `-BridgeLocalSignatureEvidencePath`。证据会明确记录
+`notarized: false` 和 `explicitUserTrustRequired: true`，不会调用或伪造
+notarization/stapling。终审时必须传 `-MacLocalSelfSignedRelease`；用户须按
+`docs/USER_GUIDE.zh-CN.md` 显式信任，不能全局关闭 Gatekeeper。
+
 发布前可在当前 Windows 或 macOS 主机运行可重复归档回归；`-IncludeCrossBuilds` 还会验证另外两个 runtime 的编译、平台配置和“不生成 ZIP”约束：
 
 ```powershell
@@ -183,7 +190,7 @@ pwsh ./packaging/unregister-bridge-autostart.ps1 -InstallRoot <install-root>
 输出 ZIP 只是可复现的构建产物，不代表已经签名。正式发布前必须：
 
 - Windows 使用受信任证书签名安装器/可执行文件，并把 Bridge 配置为回环 HTTPS；
-- macOS 使用 Developer ID Application/Installer 双签名、notarization 和用户级 `.pkg` 安装流程；
+- macOS 使用 Developer ID Application/Installer 双签名和公证，或明确选择本地自签名模式并保留显式用户信任证据；
 - 将模型 API Key 放入平台密钥库，不把密钥写入 `appsettings.json`；
 - Bridge 已接入可读写平台密钥库：Windows 使用 Credential Manager 的 `WordOllama.JS/<name>`，macOS 使用当前账户 Keychain generic password 的同名 service；新命名空间缺失时会兼容读取并复制早期 Bridge 的 `WordOllama/<name>`，无法访问平台密钥库时才回退到 `WORDOLLAMA_OPENAI_API_KEY`、`WORDOLLAMA_ANTHROPIC_API_KEY`、`WORDOLLAMA_GEMINI_API_KEY` 或通用环境变量。卸载只删除 JS 版专用 HTTPS 项，不触及旧命名空间。
 - 通过 Office 管理中心或受信任目录部署 `officejs/apps/addin/manifest.xml`；
@@ -206,13 +213,15 @@ pwsh ./packaging/finalize-unified-release.ps1 `
   -ExpectedPublisherSubject "CN=Your Exact Publisher Subject"
 ```
 
-macOS 终审还必须传入签名阶段产生的
+Developer ID 模式的 macOS 终审还必须传入签名阶段产生的
 `-MacNotarizationEvidencePath ./artifacts/bridge/macos-arm64-notarization.json`、
 `-MacInstallerEvidencePath ./artifacts/bridge/WordOllama-Installer-1.2.3-osx-arm64.installer.json`
 和 `-ExpectedMacInstallerPublisherSubject "Developer ID Installer: Example (TEAMID)"`。
 终审会复核 submission ID、`Accepted` 状态、公证日志哈希、Application Authority、
 Hardened Runtime、安全时间戳、签名后 ZIP 哈希，以及 PKG 的 Developer ID Installer、
 stapled ticket 和安装类 Gatekeeper 评估；证据不能在不同版本或架构之间复用。
+本地自签名模式改传 `*.local-signature.json`、本地安装器证据、两个精确签名身份和
+`-MacLocalSelfSignedRelease`；该模式不会要求或生成 Apple 公证证据。
 
 Windows 终审必须传入
 `-WindowsInstallerEvidencePath ./artifacts/bridge/WordOllama-Installer-1.2.3-win-x64.installer.json`；

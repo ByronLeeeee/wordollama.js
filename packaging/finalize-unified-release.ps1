@@ -11,6 +11,7 @@ param(
     [string]$MacNotarizationEvidencePath = "",
     [string]$MacInstallerEvidencePath = "",
     [string]$ExpectedMacInstallerPublisherSubject = "",
+    [switch]$MacLocalSelfSignedRelease,
     [string]$OutputPath = ""
 )
 
@@ -206,8 +207,70 @@ try {
         }
         if ([string]::IsNullOrWhiteSpace($MacInstallerEvidencePath) -or
             [string]::IsNullOrWhiteSpace($ExpectedMacInstallerPublisherSubject)) {
-            throw "macOS release finalization requires installer evidence and its expected Developer ID Installer authority."
+            throw "macOS release finalization requires installer evidence and its exact installer authority."
         }
+        if ($MacLocalSelfSignedRelease) {
+            $notarizationRecord = Read-JsonFile -Path $MacNotarizationEvidencePath `
+                -Label "Apple local-signature evidence"
+            $notarization = $notarizationRecord.Value
+            if ($notarization.schemaVersion -ne 1 -or
+                $notarization.kind -ne "apple-local-signature" -or
+                $notarization.version -ne $version -or
+                $notarization.runtime -ne $descriptor.runtime -or
+                $notarization.archiveSha256 -ne $actualBridgeHash -or
+                $notarization.authority -ne $ExpectedPublisherSubject -or
+                $notarization.codeSignatureValid -ne $true -or
+                $notarization.notarized -ne $false -or
+                $notarization.explicitUserTrustRequired -ne $true) {
+                throw "Apple local-signature evidence does not match this Bridge archive."
+            }
+            Assert-AfterBuild -Timestamp $notarization.generatedAt `
+                -Label "Apple local-signature evidence" -BuildTime $buildTime
+
+            $installerRecord = Read-JsonFile -Path $MacInstallerEvidencePath `
+                -Label "Apple local installer evidence"
+            $installer = $installerRecord.Value
+            if ($installer.schemaVersion -ne 1 -or
+                $installer.kind -ne "apple-local-installer-package" -or
+                $installer.version -ne $version -or
+                $installer.runtime -ne $descriptor.runtime -or
+                $installer.installerAuthority -ne $ExpectedMacInstallerPublisherSubject -or
+                $installer.bridgeArchiveSha256 -ne $actualBridgeHash -or
+                $installer.bridgeSignatureAuthority -ne $ExpectedPublisherSubject -or
+                $installer.signatureValid -ne $true -or
+                $installer.notarized -ne $false -or
+                $installer.explicitUserTrustRequired -ne $true) {
+                throw "Apple local installer evidence does not match this Bridge release."
+            }
+            Assert-AfterBuild -Timestamp $installer.generatedAt `
+                -Label "Apple local installer evidence" -BuildTime $buildTime
+            $installerPackageCandidate = [string]$installer.packagePath
+            if (-not [IO.Path]::IsPathRooted($installerPackageCandidate)) {
+                $installerPackageCandidate = Join-Path `
+                    (Split-Path -Parent $installerRecord.Path) $installerPackageCandidate
+            }
+            $installerPackagePath = (Resolve-Path -LiteralPath $installerPackageCandidate).Path
+            if ((Get-FileHash -LiteralPath $installerPackagePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne
+                    $installer.packageSha256 -or
+                (Get-Item -LiteralPath $installerPackagePath).Length -ne [long]$installer.packageSizeBytes) {
+                throw "The local macOS installer no longer matches its evidence."
+            }
+            $installerSignature = & /usr/sbin/pkgutil --check-signature $installerPackagePath 2>&1
+            if ($LASTEXITCODE -ne 0 -or
+                -not (($installerSignature -join "`n").Contains(
+                    $ExpectedMacInstallerPublisherSubject, [StringComparison]::Ordinal))) {
+                throw "Local macOS installer signature authority does not match."
+            }
+            $binary = $bridgeBinaries[0].FullName
+            & /usr/bin/codesign --verify --deep --strict --verbose=2 $binary
+            if ($LASTEXITCODE -ne 0) { throw "Local macOS codesign verification failed." }
+            $signatureDetails = & /usr/bin/codesign -dv --verbose=4 $binary 2>&1
+            if (-not (($signatureDetails -join "`n").Contains(
+                "Authority=$ExpectedPublisherSubject", [StringComparison]::Ordinal))) {
+                throw "Local macOS publisher authority does not match '$ExpectedPublisherSubject'."
+            }
+        }
+        else {
         $notarizationRecord = Read-JsonFile -Path $MacNotarizationEvidencePath `
             -Label "Apple notarization evidence"
         $notarization = $notarizationRecord.Value
@@ -302,6 +365,7 @@ try {
             [StringComparison]::Ordinal))) {
             throw "macOS publisher authority does not match '$ExpectedPublisherSubject'."
         }
+        }
     }
 }
 finally {
@@ -391,11 +455,11 @@ $evidenceRecords = @(
 )
 if ($descriptor.runtime -like "osx-*") {
     $evidenceRecords += @{
-        kind = "apple-notarization"
+        kind = if ($MacLocalSelfSignedRelease) { "apple-local-signature" } else { "apple-notarization" }
         record = $notarizationRecord
     }
     $evidenceRecords += @{
-        kind = "apple-installer-package"
+        kind = if ($MacLocalSelfSignedRelease) { "apple-local-installer-package" } else { "apple-installer-package" }
         record = $installerRecord
     }
 }
@@ -454,6 +518,9 @@ $finalDescriptor = [ordered]@{
     generatedAt = $descriptor.generatedAt
     finalizedAt = [DateTimeOffset]::UtcNow.ToString("O")
     releaseReady = $true
+    distributionTrust = if ($descriptor.runtime -like "osx-*" -and $MacLocalSelfSignedRelease) {
+        "explicit-local-user-trust"
+    } else { "platform-trusted" }
     publisherSubject = $ExpectedPublisherSubject
     installerPublisherSubject = if ($descriptor.runtime -like "osx-*") {
         $ExpectedMacInstallerPublisherSubject

@@ -23,7 +23,8 @@ pwsh ./tools/unified-smoke-test.ps1 `
 
 当前接续重点：设置 UI 已统一为居中单列布局，小窗口使用折叠导航；模型管理、
 MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、Agent 目标和
-隔离文件工作区已经接通；本地 Python/Node 仍须等真正的操作系统级沙箱后开放。
+隔离文件工作区与操作系统级 Python/Node 沙箱已经接通；当前先完成可自动实现的功能，
+真实 Word、目标设备和正式签名验收统一留到功能冻结后执行。
 
 ## 已完成
 
@@ -150,7 +151,7 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 
 ## P0：目标平台发布验证
 
-- [x] 产品决策：首发支持 Windows x64、macOS arm64 和 macOS x64；只提供 stable
+- [x] 产品决策：首发支持 Windows x64 和 macOS arm64；只提供 stable
   更新通道。构建由 GitHub Actions 完成，安装包和签名更新索引发布到独立 HTTPS
   下载域名/对象存储，不让客户端依赖私有仓库鉴权。
 - [x] 产品决策：首期使用自签名，不购买商业代码签名证书。
@@ -162,7 +163,7 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 - [ ] 在真实 Windows Word 重新执行 36/36 工具、长文档和修订验收。
 - [ ] 在 Apple Silicon Mac 构建并使用自签名/本地信任方式验收 arm64 PKG。
 - [x] 产品支持范围确定为 Apple Silicon Mac；不构建或发布 Intel Mac 版本。
-- [ ] macOS 安装文档明确说明：没有 Apple Developer ID 时不能完成 Apple 公证和
+- [x] macOS 安装文档明确说明：没有 Apple Developer ID 时不能完成 Apple 公证和
   默认 Gatekeeper 无警告分发；安装器必须引导用户执行系统允许的显式信任步骤，
   不能伪造 notarization/stapling 通过状态。
 - [ ] 在真实 Mac Word 检查 16 个独立窗格、设置 Dialog、深浅主题和中英文。
@@ -231,7 +232,7 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 - [ ] 验证更新下载的大小、SHA-256、签名发布者和失败清理。
 - [ ] 验证设置页一键更新、版本回滚和旧版本保留策略。
 - [ ] 发布前递增四段 `ManifestVersion`，避免 Word 使用旧 Ribbon 缓存。
-- [ ] 准备最终用户安装、升级、卸载和离线使用文档。
+- [x] 准备最终用户安装、升级、卸载和离线使用文档。
 
 ## 每次提交前
 

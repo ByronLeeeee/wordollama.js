@@ -22,6 +22,9 @@ Office manifest 与当前用户登录自启。完成一次本地 HTTPS 信任配
 - `docs/`：迁移方案、UI 对照矩阵、安全说明和验收证据。
 - `TODO.md`：尚未完成的工作及换设备后的接续顺序。
 
+最终用户请从[中文用户指南](docs/USER_GUIDE.zh-CN.md)或
+[English user guide](docs/USER_GUIDE.en-US.md)开始。
+
 ## 环境要求
 
 - Node.js 24 或更新版本。
@@ -264,13 +267,35 @@ pwsh ./packaging/package-macos-installer.ps1 `
   -BridgeNotarizationEvidencePath ./artifacts/unified/bridge/macos-notarization.json
 ```
 
+没有 Developer ID 的 Apple Silicon 本地自签名发布使用显式模式；此模式不会运行或
+伪造 Apple 公证，最终用户必须按用户指南显式信任：
+
+```powershell
+pwsh ./packaging/sign-bridge-release.ps1 `
+  -Runtime osx-arm64 -ArtifactRoot ./artifacts/unified/bridge `
+  -Version 1.0.0 -MacSigningIdentity "WordOllama.JS Local Application" `
+  -LocalSelfSignedMacRelease
+
+pwsh ./packaging/package-macos-installer.ps1 `
+  -Runtime osx-arm64 -ArtifactRoot ./artifacts/unified/bridge `
+  -Version 1.0.0 -MacInstallerIdentity "WordOllama.JS Local Installer" `
+  -LocalSelfSignedRelease `
+  -BridgeLocalSignatureEvidencePath `
+  ./artifacts/unified/bridge/WordOllama-Bridge-1.0.0-osx-arm64.local-signature.json
+```
+
+终审本地自签名候选时，还要给 `finalize-unified-release.ps1` 传入上述本地签名证据、
+安装器证据、两个精确签名身份和 `-MacLocalSelfSignedRelease`。这只证明产物身份固定且
+可复现，不代表 Apple 已公证。
+
 完整签名、终审证据和更新索引流程见
 [`packaging/README.zh-CN.md`](packaging/README.zh-CN.md)。
 
 ## 打包后本机测试
 
-当前版本尚未自动修改操作系统证书信任库。安装 EXE/PKG 后，需要为当前用户准备一个
-受信任的 PFX，SAN 必须同时包含 `localhost` 和 `127.0.0.1`：
+正式安装器会先生成产品专用 localhost PFX，再显示用途、指纹和有效期；只有用户明确
+确认后才写入当前用户信任库。开发/离线 ZIP 也可手动提供 SAN 包含 `localhost`、
+`127.0.0.1` 和 `::1` 的 PFX：
 
 ```powershell
 # Windows

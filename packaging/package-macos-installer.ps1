@@ -12,26 +12,35 @@ param(
     [string]$MacNotaryProfile = "",
     [string]$MacNotaryKeychain = "",
     [string]$BridgeNotarizationEvidencePath = "",
+    [string]$BridgeLocalSignatureEvidencePath = "",
     [string]$OutputPath = "",
     [string]$EvidencePath = "",
     [string]$DryRunStagingPath = "",
     [switch]$BuildUnsignedForTests,
+    [switch]$LocalSelfSignedRelease,
     [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
 $allowUnsignedTest = $BuildUnsignedForTests -and
     $Version -match "(?i)(smoke|test)"
+$localSelfSigned = $LocalSelfSignedRelease -and -not $allowUnsignedTest
 if (-not $DryRun -and -not $IsMacOS) {
-    throw "The macOS Installer package must be built, signed, notarized, and assessed on macOS."
+    throw "The macOS installer must be built and signed on macOS; Developer ID mode also notarizes and assesses it there."
 }
-if (-not $allowUnsignedTest -and
+if ($localSelfSigned -and [string]::IsNullOrWhiteSpace($MacInstallerIdentity)) {
+    throw "A local self-signed macOS package requires -MacInstallerIdentity."
+}
+if ($localSelfSigned -and -not [string]::IsNullOrWhiteSpace($MacNotaryProfile)) {
+    throw "-LocalSelfSignedRelease cannot be combined with Apple notarization."
+}
+if (-not $allowUnsignedTest -and -not $localSelfSigned -and
     -not $MacInstallerIdentity.StartsWith(
         "Developer ID Installer:",
         [StringComparison]::Ordinal)) {
     throw "A production macOS package requires a 'Developer ID Installer:' identity."
 }
-if (-not $allowUnsignedTest -and
+if (-not $allowUnsignedTest -and -not $localSelfSigned -and
     [string]::IsNullOrWhiteSpace($MacNotaryProfile)) {
     throw "A production macOS package requires a notarytool keychain profile."
 }
@@ -48,7 +57,25 @@ foreach ($requiredPath in @($publishDirectory, $bridgeArchive, $bridgeBinary)) {
 
 $bridgeArchiveHash = (Get-FileHash -LiteralPath $bridgeArchive -Algorithm SHA256).Hash.ToLowerInvariant()
 $bridgeEvidenceRecord = $null
-if (-not $allowUnsignedTest) {
+if ($localSelfSigned) {
+    if ([string]::IsNullOrWhiteSpace($BridgeLocalSignatureEvidencePath)) {
+        throw "Local self-signed packaging requires -BridgeLocalSignatureEvidencePath."
+    }
+    $bridgeEvidenceRecord = Get-Content -LiteralPath `
+        (Resolve-Path -LiteralPath $BridgeLocalSignatureEvidencePath).Path -Raw |
+        ConvertFrom-Json
+    if ($bridgeEvidenceRecord.schemaVersion -ne 1 -or
+        $bridgeEvidenceRecord.kind -ne "apple-local-signature" -or
+        $bridgeEvidenceRecord.version -ne $Version -or
+        $bridgeEvidenceRecord.runtime -ne $Runtime -or
+        $bridgeEvidenceRecord.archiveSha256 -ne $bridgeArchiveHash -or
+        $bridgeEvidenceRecord.codeSignatureValid -ne $true -or
+        $bridgeEvidenceRecord.notarized -ne $false -or
+        $bridgeEvidenceRecord.explicitUserTrustRequired -ne $true) {
+        throw "Bridge local-signature evidence does not match the signed Bridge archive."
+    }
+}
+elseif (-not $allowUnsignedTest) {
     if ([string]::IsNullOrWhiteSpace($BridgeNotarizationEvidencePath)) {
         throw "Production macOS installer packaging requires Bridge notarization evidence."
     }
@@ -135,7 +162,13 @@ function Invoke-InstallerTool {
         [Parameter(Mandatory = $true)][string[]]$Arguments,
         [Parameter(Mandatory = $true)][string]$Label
     )
-    if ($DryRun) {
+    if ($DryRun -and $localSelfSigned) {
+        Invoke-InstallerTool -FileName "pkgutil" `
+            -Arguments @("--check-signature", $packagePath) `
+            -Label "local macOS installer signature verification" | Out-Null
+        return
+    }
+    if ($DryRun -and -not $localSelfSigned) {
         Write-Host "DRY RUN: $FileName $($Arguments -join ' ')"
         return @()
     }
@@ -536,6 +569,35 @@ fi
             $MacInstallerIdentity,
             [StringComparison]::Ordinal))) {
         throw "The signed package does not contain the expected installer identity."
+    }
+
+    if ($localSelfSigned) {
+        $installerEvidence = [ordered]@{
+            schemaVersion = 1
+            kind = "apple-local-installer-package"
+            product = "WordOllama.JS Desktop Bridge"
+            version = $Version
+            runtime = $Runtime
+            generatedAt = [DateTimeOffset]::UtcNow.ToString("O")
+            packagePath = [IO.Path]::GetFileName($packagePath)
+            packageSha256 = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            packageSizeBytes = (Get-Item -LiteralPath $packagePath).Length
+            installerAuthority = $MacInstallerIdentity
+            bridgeArchiveSha256 = $bridgeArchiveHash
+            bridgeSignatureAuthority = [string]$bridgeEvidenceRecord.authority
+            signatureValid = $true
+            notarized = $false
+            ticketStapled = $false
+            gatekeeperWarningExpected = $true
+            explicitUserTrustRequired = $true
+        }
+        $evidenceTemp = "$evidenceFullPath.$([Guid]::NewGuid().ToString('N')).tmp"
+        $installerEvidence | ConvertTo-Json -Depth 8 |
+            Set-Content -LiteralPath $evidenceTemp -Encoding utf8
+        Move-Item -LiteralPath $evidenceTemp -Destination $evidenceFullPath -Force
+        Write-Host "Created locally signed macOS installer $packagePath"
+        Write-Host "Created explicit-local-trust installer evidence $evidenceFullPath"
+        return
     }
 
     $notaryArguments = @(

@@ -16,6 +16,7 @@ param(
     [switch]$AllowUntimestampedTestSignature,
     [switch]$AllowSelfSignedTestCertificate,
     [switch]$AllowUnnotarizedMacTestSignature,
+    [switch]$LocalSelfSignedMacRelease,
     [switch]$DryRun
 )
 
@@ -128,11 +129,14 @@ else {
     }
     $allowUnnotarizedMac = $AllowUnnotarizedMacTestSignature -and
         $Version -match "(?i)(smoke|test)"
-    if (-not $DryRun -and -not $allowUnnotarizedMac -and
+    if ($LocalSelfSignedMacRelease -and -not [string]::IsNullOrWhiteSpace($MacNotaryProfile)) {
+        throw "-LocalSelfSignedMacRelease cannot be combined with Apple notarization."
+    }
+    if (-not $DryRun -and -not $allowUnnotarizedMac -and -not $LocalSelfSignedMacRelease -and
         -not $MacSigningIdentity.StartsWith("Developer ID Application:", [StringComparison]::Ordinal)) {
         throw "macOS production signing requires a 'Developer ID Application:' identity."
     }
-    if (-not $DryRun -and -not $allowUnnotarizedMac -and
+    if (-not $DryRun -and -not $allowUnnotarizedMac -and -not $LocalSelfSignedMacRelease -and
         [string]::IsNullOrWhiteSpace($MacNotaryProfile)) {
         throw "macOS production signing requires -MacNotaryProfile for notarization."
     }
@@ -149,10 +153,9 @@ else {
         Sort-Object { $_.FullName.Length } -Descending)
     $signTargets = @($nativeLibraries | ForEach-Object { $_.FullName }) + @($bridgeBinary)
     foreach ($signTarget in $signTargets) {
-        $signArguments = @(
-            "--force", "--options", "runtime", "--timestamp",
-            "--sign", $MacSigningIdentity, $signTarget
-        )
+        $signArguments = @("--force", "--options", "runtime")
+        $signArguments += if ($LocalSelfSignedMacRelease) { "--timestamp=none" } else { "--timestamp" }
+        $signArguments += @("--sign", $MacSigningIdentity, $signTarget)
         if ($PSCmdlet.ShouldProcess($signTarget, "codesign")) {
             Invoke-Tool -FileName "codesign" -Arguments $signArguments -Label "macOS code signing"
             Invoke-Tool -FileName "codesign" `
@@ -297,6 +300,45 @@ if (-not [string]::IsNullOrWhiteSpace($MacNotaryProfile)) {
 }
 elseif (-not [string]::IsNullOrWhiteSpace($MacNotaryKeychain)) {
     throw "-MacNotaryKeychain requires -MacNotaryProfile."
+}
+
+if ($LocalSelfSignedMacRelease -and -not $DryRun) {
+    if (-not $Runtime.StartsWith("osx-", [StringComparison]::Ordinal)) {
+        throw "-LocalSelfSignedMacRelease is valid only for macOS runtimes."
+    }
+    $bridgeBinary = Join-Path $publishDirectory "WordOllama.DesktopBridge"
+    $signatureDetails = @(& /usr/bin/codesign -dv --verbose=4 $bridgeBinary 2>&1)
+    if ($LASTEXITCODE -ne 0) { throw "Unable to read the locally signed macOS Bridge identity." }
+    $authorityLine = @($signatureDetails | Where-Object { $_ -like "Authority=*" } | Select-Object -First 1)
+    $authority = if ($authorityLine.Count -eq 1) {
+        ([string]$authorityLine[0]).Substring("Authority=".Length)
+    } else { "" }
+    if ($authority -ne $MacSigningIdentity) {
+        throw "The locally signed Bridge does not contain the expected identity."
+    }
+    $evidencePath = if ([string]::IsNullOrWhiteSpace($MacNotarizationEvidencePath)) {
+        Join-Path $root "WordOllama-Bridge-$Version-$Runtime.local-signature.json"
+    } else { [IO.Path]::GetFullPath($MacNotarizationEvidencePath) }
+    $evidenceDirectory = Split-Path -Parent $evidencePath
+    if (-not [string]::IsNullOrWhiteSpace($evidenceDirectory)) {
+        New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
+    }
+    $evidence = [ordered]@{
+        schemaVersion = 1
+        kind = "apple-local-signature"
+        product = "WordOllama.JS Desktop Bridge"
+        version = $Version
+        runtime = $Runtime
+        generatedAt = [DateTimeOffset]::UtcNow.ToString("O")
+        archivePath = [IO.Path]::GetFileName($archive)
+        archiveSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+        authority = $authority
+        codeSignatureValid = $true
+        notarized = $false
+        explicitUserTrustRequired = $true
+    }
+    $evidence | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $evidencePath -Encoding utf8
+    Write-Host "Created explicit-local-trust macOS signature evidence $evidencePath"
 }
 
 Write-Host "Signing workflow completed for ${Runtime}: $publishDirectory"
