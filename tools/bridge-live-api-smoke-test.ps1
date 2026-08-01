@@ -17,7 +17,8 @@ $smokeRoot = if ([string]::IsNullOrWhiteSpace($BuildRoot)) {
     [IO.Path]::GetFullPath($BuildRoot)
 }
 $origin = "https://localhost:3000"
-$node = (Get-Command node.exe -ErrorAction Stop).Source
+$nodeCommand = if ($IsWindows) { "node.exe" } else { "node" }
+$node = (Get-Command $nodeCommand -ErrorAction Stop).Source
 $dotnet = (Get-Command dotnet -ErrorAction Stop).Source
 $bridgeProcess = $null
 $providerProcess = $null
