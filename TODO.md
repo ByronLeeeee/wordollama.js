@@ -234,8 +234,10 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 - [ ] 配置正式下载域名和双平台 stable 更新索引。
 - [ ] 完成 Windows x64/macOS arm64 两个 runtime 的 `releaseReady: true` 终审描述文件。
 - [x] 验证更新下载的大小、SHA-256、签名发布者和失败清理。
-- [ ] 验证设置页一键更新、版本回滚和旧版本保留策略。
-- [ ] 发布前递增四段 `ManifestVersion`，避免 Word 使用旧 Ribbon 缓存。
+- [x] 验证设置页一键更新、版本回滚和旧版本保留策略：前端确认流、Bridge 下载/签名
+  门禁、两版本原子指针切换、上一版本保留、回滚和失败残留清理均已通过自动 smoke。
+- [x] 发布前将四段 `ManifestVersion` 从 `1.1.0.0` 递增到 `1.2.0.0`，避免 Word
+  使用旧 Ribbon 缓存；正式 CI 仍使用单调递增的 `1.2.<run>.<attempt>`。
 - [x] 准备最终用户安装、升级、卸载和离线使用文档。
 
 ## 每次提交前

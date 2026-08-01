@@ -33,7 +33,7 @@ Bridge 的 CORS allowlist。`UpdateIndexUrl` 留空表示不启用检查更新�
 
 ```powershell
 pwsh ./packaging/package-unified-release.ps1 -Runtime win-x64 `
-  -Version 0.1.0 -ManifestVersion 1.1.0.0 `
+  -Version 0.1.0 -ManifestVersion 1.2.0.0 `
   -BaseUrl https://localhost:37421 `
   -BridgeUrl https://localhost:37421 `
   -UpdateIndexUrl https://downloads.wordollama.com/update-index-0.1.0.json `

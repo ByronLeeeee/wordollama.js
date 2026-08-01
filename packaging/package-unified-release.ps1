@@ -6,7 +6,7 @@ param(
     [ValidatePattern("^[0-9A-Za-z][0-9A-Za-z._-]*$")]
     [string]$Version = "0.1.0",
     [ValidatePattern("^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$")]
-    [string]$ManifestVersion = "1.1.0.0",
+    [string]$ManifestVersion = "1.2.0.0",
     [string]$BaseUrl = "https://localhost:37421",
     [string]$BridgeUrl = "https://localhost:37421",
     [string]$UpdateIndexUrl = "",

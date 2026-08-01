@@ -179,7 +179,7 @@ pwsh ./packaging/package-unified-release.ps1 `
   -Runtime win-x64 `
   -Configuration Release `
   -Version desktop-smoke `
-  -ManifestVersion 1.1.0.1 `
+  -ManifestVersion 1.2.0.0 `
   -SkipManifestValidation
 ```
 
@@ -223,7 +223,7 @@ pwsh ./packaging/package-unified-release.ps1 `
   -Runtime osx-arm64 `
   -Configuration Release `
   -Version desktop-smoke `
-  -ManifestVersion 1.1.0.1 `
+  -ManifestVersion 1.2.0.0 `
   -SkipManifestValidation
 ```
 
