@@ -146,6 +146,33 @@ try {
         throw "Windows installer signature is invalid, untimestamped, or has the wrong publisher."
     }
 
+    $publisherCertificatePath = [IO.Path]::ChangeExtension(
+        $installerPath,
+        ".publisher.cer")
+    Export-Certificate -Cert $installerSignature.SignerCertificate `
+        -FilePath $publisherCertificatePath -Type CERT -Force | Out-Null
+    $exportedCertificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+        [IO.File]::ReadAllBytes($publisherCertificatePath))
+    if ($exportedCertificate.Thumbprint -ne $installerSignature.SignerCertificate.Thumbprint) {
+        throw "Exported publisher certificate does not match the installer signer."
+    }
+    $selfSignedPublisher = $exportedCertificate.Subject -eq $exportedCertificate.Issuer
+    if ($selfSignedPublisher) {
+        $basicConstraints = @($exportedCertificate.Extensions |
+            Where-Object { $_.Oid.Value -eq "2.5.29.19" } |
+            Select-Object -First 1)
+        $enhancedKeyUsage = @($exportedCertificate.Extensions |
+            Where-Object { $_.Oid.Value -eq "2.5.29.37" } |
+            Select-Object -First 1)
+        if ($basicConstraints.Count -ne 1 -or
+            ([Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]$basicConstraints[0]).CertificateAuthority -or
+            $enhancedKeyUsage.Count -ne 1 -or
+            -not ([Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]$enhancedKeyUsage[0]).EnhancedKeyUsages[
+                "1.3.6.1.5.5.7.3.3"]) {
+            throw "A self-signed publisher certificate must be a non-CA certificate restricted to code signing."
+        }
+    }
+
     $evidenceDirectory = Split-Path -Parent $evidenceFullPath
     if (-not [string]::IsNullOrWhiteSpace($evidenceDirectory)) {
         New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null
@@ -167,6 +194,10 @@ try {
             [Security.Cryptography.SHA256]::Create().ComputeHash(
                 $installerSignature.SignerCertificate.GetPublicKey())).Replace('-', '').ToLowerInvariant()
         timestampThumbprint = $installerSignature.TimeStamperCertificate.Thumbprint
+        publisherCertificatePath = [IO.Path]::GetFileName($publisherCertificatePath)
+        publisherCertificateSha256 = (Get-FileHash -LiteralPath $publisherCertificatePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        publisherCertificateSelfSigned = $selfSignedPublisher
+        publisherCertificateExplicitTrustRequired = $selfSignedPublisher
         authenticodeValid = $true
         rfc3161TimestampPresent = $true
         perUserInstall = $true

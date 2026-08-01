@@ -189,7 +189,8 @@ pwsh ./packaging/unregister-bridge-autostart.ps1 -InstallRoot <install-root>
 
 输出 ZIP 只是可复现的构建产物，不代表已经签名。正式发布前必须：
 
-- Windows 使用受信任证书签名安装器/可执行文件，并把 Bridge 配置为回环 HTTPS；
+- Windows 使用受信任证书签名安装器/可执行文件；打包流程同时导出受证据哈希保护的
+  `.publisher.cer`，由用户核对后显式加入当前用户信任，再把 Bridge 配置为回环 HTTPS；
 - macOS 使用 Developer ID Application/Installer 双签名和公证，或明确选择本地自签名模式并保留显式用户信任证据；
 - 将模型 API Key 放入平台密钥库，不把密钥写入 `appsettings.json`；
 - Bridge 已接入可读写平台密钥库：Windows 使用 Credential Manager 的 `WordOllama.JS/<name>`，macOS 使用当前账户 Keychain generic password 的同名 service；新命名空间缺失时会兼容读取并复制早期 Bridge 的 `WordOllama/<name>`，无法访问平台密钥库时才回退到 `WORDOLLAMA_OPENAI_API_KEY`、`WORDOLLAMA_ANTHROPIC_API_KEY`、`WORDOLLAMA_GEMINI_API_KEY` 或通用环境变量。卸载只删除 JS 版专用 HTTPS 项，不触及旧命名空间。

@@ -172,6 +172,8 @@ try {
             $installer.publisherSubject -ne $ExpectedPublisherSubject -or
             [string]::IsNullOrWhiteSpace([string]$installer.signerThumbprint) -or
             [string]::IsNullOrWhiteSpace([string]$installer.signerPublicKeySha256) -or
+            [string]::IsNullOrWhiteSpace([string]$installer.publisherCertificatePath) -or
+            [string]::IsNullOrWhiteSpace([string]$installer.publisherCertificateSha256) -or
             $installer.authenticodeValid -ne $true -or
             $installer.rfc3161TimestampPresent -ne $true -or
             $installer.perUserInstall -ne $true) {
@@ -190,6 +192,22 @@ try {
             (Get-Item -LiteralPath $installerPackagePath).Length -ne
                 [long]$installer.packageSizeBytes) {
             throw "The Windows installer no longer matches its evidence."
+        }
+        $publisherCertificateCandidate = [string]$installer.publisherCertificatePath
+        if (-not [IO.Path]::IsPathRooted($publisherCertificateCandidate)) {
+            $publisherCertificateCandidate = Join-Path `
+                (Split-Path -Parent $installerRecord.Path) $publisherCertificateCandidate
+        }
+        $publisherCertificatePath = (Resolve-Path -LiteralPath $publisherCertificateCandidate).Path
+        if ((Get-FileHash -LiteralPath $publisherCertificatePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne
+            $installer.publisherCertificateSha256) {
+            throw "The Windows publisher certificate no longer matches its evidence."
+        }
+        $publisherCertificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            [IO.File]::ReadAllBytes($publisherCertificatePath))
+        if ($publisherCertificate.Thumbprint -ne $installer.signerThumbprint -or
+            $publisherCertificate.Subject -ne $ExpectedPublisherSubject) {
+            throw "The exported Windows publisher certificate does not match the installer signer."
         }
         $installerSignature = Get-AuthenticodeSignature -LiteralPath $installerPackagePath
         if ($installerSignature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
@@ -497,6 +515,14 @@ else {
         path = $installerPackagePath
         sha256 = (Get-FileHash -LiteralPath $installerPackagePath -Algorithm SHA256).Hash.ToLowerInvariant()
         sizeBytes = (Get-Item -LiteralPath $installerPackagePath).Length
+    }
+}
+if ($descriptor.runtime -eq "win-x64") {
+    $finalArtifacts += [ordered]@{
+        kind = "publisher-certificate"
+        path = $publisherCertificatePath
+        sha256 = (Get-FileHash -LiteralPath $publisherCertificatePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        sizeBytes = (Get-Item -LiteralPath $publisherCertificatePath).Length
     }
 }
 $finalEvidence = @($evidenceRecords | ForEach-Object {

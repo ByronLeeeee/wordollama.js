@@ -37,7 +37,8 @@ Office manifest 与当前用户登录自启。完成一次本地 HTTPS 信任配
 正式打包还需要目标平台的签名环境。首期采用用户明确确认后安装到当前用户信任库的
 自签名证书；该方案不会获得 SmartScreen 或 Apple 公证的公共信誉：
 
-- Windows：Windows SDK `signtool.exe`；安装器负责产品专用证书的创建、固定和清理。
+- Windows：Windows SDK `signtool.exe`；打包流程导出与签名者一致的
+  `.publisher.cer`，用户核对指纹后显式信任，安装器不会静默写入发布者信任。
 - macOS：本地自签名和显式 Keychain 信任；若未来需要无警告公共分发，仍需
   Developer ID Application、Developer ID Installer 和 Apple 公证凭据。
 
