@@ -3,8 +3,10 @@ using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Win32;
 
 namespace WordOllama.WindowsInstaller;
@@ -87,11 +89,15 @@ internal static class Program
             }
 
             var noStart = options.ContainsKey("--no-start");
+            var trustLocalhostCertificate = options.ContainsKey(
+                "--trust-localhost-certificate") ||
+                (!quiet && ConfirmLocalhostCertificateTrust());
             Install(
                 installRoot,
                 startupRoot,
                 noStart,
-                skipRegistration);
+                skipRegistration,
+                trustLocalhostCertificate);
             Notify(InstallerText.Installed, quiet);
             return 0;
         }
@@ -118,7 +124,7 @@ internal static class Program
         {
             var argument = args[index];
             if (argument is "--quiet" or "--no-start" or "--uninstall" or
-                "--skip-registration")
+                "--skip-registration" or "--trust-localhost-certificate")
             {
                 result[argument] = null;
                 continue;
@@ -226,7 +232,8 @@ internal static class Program
         string installRoot,
         string startupRoot,
         bool noStart,
-        bool skipRegistration)
+        bool skipRegistration,
+        bool trustLocalhostCertificate)
     {
         var assembly = Assembly.GetExecutingAssembly();
         var metadata = ReadMetadata(assembly);
@@ -380,6 +387,11 @@ internal static class Program
                 metadata.Version,
                 checked((int)Math.Ceiling(
                     new FileInfo(uninstallPath).Length / 1024d)));
+        }
+
+        if (!skipRegistration && trustLocalhostCertificate)
+        {
+            ProvisionLocalhostCertificate(installRoot, target);
         }
 
         var certificatePath = Path.Combine(
@@ -561,6 +573,7 @@ internal static class Program
         StopOwnedBridgeProcesses(installRoot);
         if (!skipRegistration)
         {
+            DeleteOwnedLocalhostCertificate(installRoot);
             DeleteHttpsCredential();
             DeleteOfficeAddinRegistration(installRoot);
         }
@@ -652,6 +665,155 @@ internal static class Program
         {
             throw new InvalidOperationException(
                 $"Unable to remove the Bridge HTTPS credential ({error}).");
+        }
+    }
+
+    private static bool ConfirmLocalhostCertificateTrust() =>
+        MessageBoxW(
+            IntPtr.Zero,
+            InstallerText.CertificateTrustPrompt,
+            InstallerText.Title,
+            0x00000004 | 0x00000030) == 6;
+
+    private static void ProvisionLocalhostCertificate(
+        string installRoot,
+        string versionRoot)
+    {
+        var certsRoot = Path.Combine(installRoot, "certs");
+        Directory.CreateDirectory(certsRoot);
+        DeleteOwnedLocalhostCertificate(installRoot);
+
+        using var rsa = RSA.Create(3072);
+        var request = new CertificateRequest(
+            "CN=WordOllama.JS localhost",
+            rsa,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(
+            certificateAuthority: false,
+            hasPathLengthConstraint: false,
+            pathLengthConstraint: 0,
+            critical: true));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment,
+            critical: true));
+        var eku = new OidCollection { new("1.3.6.1.5.5.7.3.1") };
+        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(eku, true));
+        var san = new SubjectAlternativeNameBuilder();
+        san.AddDnsName("localhost");
+        san.AddIpAddress(System.Net.IPAddress.Loopback);
+        san.AddIpAddress(System.Net.IPAddress.IPv6Loopback);
+        request.CertificateExtensions.Add(san.Build(critical: true));
+
+        using var certificate = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddMinutes(-5),
+            DateTimeOffset.UtcNow.AddYears(2));
+        var password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var pfxPath = Path.Combine(certsRoot, "bridge.pfx");
+        File.WriteAllBytes(pfxPath, certificate.Export(X509ContentType.Pfx, password));
+        var ownershipPath = Path.Combine(certsRoot, "ownership.json");
+        WriteAtomic(
+            ownershipPath,
+            JsonSerializer.Serialize(new
+            {
+                schemaVersion = 1,
+                thumbprint = certificate.Thumbprint,
+                subject = certificate.Subject,
+                hosts = new[] { "localhost", "127.0.0.1", "::1" },
+                notAfter = certificate.NotAfter.ToUniversalTime().ToString("O"),
+            }, new JsonSerializerOptions { WriteIndented = true }),
+            new UTF8Encoding(false));
+        try
+        {
+            using (var rootStore = new X509Store(StoreName.Root, StoreLocation.CurrentUser))
+            {
+                rootStore.Open(OpenFlags.ReadWrite);
+                rootStore.Add(new X509Certificate2(certificate.Export(X509ContentType.Cert)));
+            }
+
+            StoreHttpsPassword(versionRoot, password);
+            ConfigureHttpsCertificate(versionRoot, pfxPath);
+        }
+        catch
+        {
+            DeleteOwnedLocalhostCertificate(installRoot);
+            if (File.Exists(pfxPath)) File.Delete(pfxPath);
+            if (File.Exists(ownershipPath)) File.Delete(ownershipPath);
+            throw;
+        }
+    }
+
+    private static void StoreHttpsPassword(string versionRoot, string password)
+    {
+        var executable = Path.Combine(versionRoot, "WordOllama.DesktopBridge.exe");
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            WorkingDirectory = versionRoot,
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        startInfo.ArgumentList.Add("https-certificate-secret");
+        startInfo.ArgumentList.Add("set");
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Unable to start HTTPS secret provisioning.");
+        process.StandardInput.WriteLine(password);
+        process.StandardInput.Close();
+        if (!process.WaitForExit(30_000) || process.ExitCode != 0)
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            throw new InvalidOperationException(
+                "Unable to store the HTTPS certificate password: " +
+                process.StandardError.ReadToEnd().Trim());
+        }
+    }
+
+    private static void ConfigureHttpsCertificate(string versionRoot, string pfxPath)
+    {
+        var settingsPath = Path.Combine(versionRoot, "appsettings.json");
+        var root = JsonNode.Parse(File.ReadAllText(settingsPath))?.AsObject()
+            ?? throw new InvalidDataException("Bridge appsettings.json is invalid.");
+        var bridge = root["Bridge"]?.AsObject()
+            ?? throw new InvalidDataException("Bridge settings are missing.");
+        var https = bridge["HttpsCertificate"]?.AsObject()
+            ?? throw new InvalidDataException("Bridge HTTPS settings are missing.");
+        https["Path"] = pfxPath.Replace('\\', '/');
+        https["Password"] = string.Empty;
+        WriteAtomic(
+            settingsPath,
+            root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
+            new UTF8Encoding(false));
+    }
+
+    private static void DeleteOwnedLocalhostCertificate(string installRoot)
+    {
+        var ownershipPath = Path.Combine(installRoot, "certs", "ownership.json");
+        if (!File.Exists(ownershipPath)) return;
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(ownershipPath));
+            var thumbprint = document.RootElement.GetProperty("thumbprint").GetString();
+            var subject = document.RootElement.GetProperty("subject").GetString();
+            if (string.IsNullOrWhiteSpace(thumbprint) ||
+                subject != "CN=WordOllama.JS localhost") return;
+            using var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadWrite);
+            foreach (var certificate in store.Certificates.Find(
+                         X509FindType.FindByThumbprint,
+                         thumbprint,
+                         validOnly: false))
+            {
+                if (certificate.Subject == subject) store.Remove(certificate);
+                certificate.Dispose();
+            }
+        }
+        catch (Exception exception) when (
+            exception is CryptographicException or IOException or
+            JsonException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            // An absent or unreadable owned certificate must not block uninstall.
         }
     }
 

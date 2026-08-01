@@ -97,12 +97,12 @@ MCP、Skills 和 Markdown 设置已完成新 UI。基础设置已拆分为结构
 
 - [x] 产品决策：安装器可以在用户明确确认后，为当前用户安装并信任本产品生成的
   localhost HTTPS 证书；不写入机器级信任库。
-- [ ] Windows 安装器生成每用户、仅限 `localhost/127.0.0.1` 的服务器叶证书。
+- [x] Windows 安装器生成每用户、仅限 `localhost/127.0.0.1` 的服务器叶证书。
 - [ ] 安装器在用户明确同意后写入“当前用户”信任库，并在界面显示用途、范围和
   证书指纹。
-- [ ] 证书必须包含 SAN：`localhost`、`127.0.0.1` 和 `::1`。
-- [ ] PFX 使用随机密码，密码只写入 Windows Credential Manager/macOS Keychain。
-- [ ] 记录证书指纹，升级时安全轮换，卸载时只删除本产品拥有的证书。
+- [x] 证书必须包含 SAN：`localhost`、`127.0.0.1` 和 `::1`。
+- [x] PFX 使用随机密码，密码只写入 Windows Credential Manager/macOS Keychain。
+- [x] 记录证书指纹，升级时安全轮换，卸载时只删除本产品拥有的证书。
 - [ ] macOS 设计一次明确的 Keychain 信任确认；不得绕过系统授权对话框。
 - [ ] 为证书创建、信任、轮换和卸载添加目标平台实机回归。
 

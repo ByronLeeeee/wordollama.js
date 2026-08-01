@@ -611,7 +611,7 @@ function Assert-WindowsInstallerLifecycle {
     $englishKeys = @($installerEnglish.root.data.name | Sort-Object)
     $chineseKeys = @($installerChinese.root.data.name | Sort-Object)
     if (($englishKeys -join ",") -ne ($chineseKeys -join ",") -or
-        $englishKeys.Count -ne 4) {
+        $englishKeys.Count -ne 5) {
         throw "Bridge package smoke: Windows installer locales are incomplete or mismatched."
     }
 
@@ -836,6 +836,13 @@ if ($hostRuntime -eq "win-x64") {
     $windowsInstallerSource = Get-Content -LiteralPath $windowsInstallerScript -Raw
     $windowsInstallerProgram = Get-Content -LiteralPath `
         (Join-Path $repoRoot "src/WordOllama.WindowsInstaller/Program.cs") -Raw
+    if ($windowsInstallerProgram -notmatch 'SubjectAlternativeNameBuilder' -or
+        $windowsInstallerProgram -notmatch 'IPAddress\.IPv6Loopback' -or
+        $windowsInstallerProgram -notmatch 'StoreName\.Root, StoreLocation\.CurrentUser' -or
+        $windowsInstallerProgram -notmatch 'ownership\.json' -or
+        $windowsInstallerProgram -notmatch 'https-certificate-secret') {
+        throw "Bridge package smoke: Windows installer lacks owned current-user localhost certificate provisioning."
+    }
     if ($installerSource -notmatch "TimeStamperCertificate" -or
         $finalizerSource -notmatch "TimeStamperCertificate") {
         throw "Bridge package smoke: production install/finalization does not require an Authenticode timestamp."
