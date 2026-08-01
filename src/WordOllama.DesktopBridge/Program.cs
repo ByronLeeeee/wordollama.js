@@ -1898,19 +1898,29 @@ public sealed class BridgeSessionStore
     public const string CookieName = "WordOllama.Session";
     private readonly string _pairingCode;
     private readonly string[] _allowedOrigins;
+    private readonly TimeProvider _timeProvider;
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<OfficeToolDescriptor>> _officeTools = new(StringComparer.Ordinal);
     private readonly object _gate = new();
 
     public BridgeSessionStore(IConfiguration configuration, IWebHostEnvironment environment)
+        : this(configuration, environment.IsDevelopment(), TimeProvider.System)
     {
+    }
+
+    public BridgeSessionStore(
+        IConfiguration configuration,
+        bool isDevelopment,
+        TimeProvider timeProvider)
+    {
+        _timeProvider = timeProvider;
         _pairingCode = configuration["Bridge:PairingCode"]
             ?? CreatePairingCode();
         _allowedOrigins = configuration.GetSection("Bridge:AllowedOrigins")
             .Get<string[]>()
             ?? ["https://localhost:3000", "https://localhost:5173"];
 
-        if (environment.IsDevelopment())
+        if (isDevelopment)
         {
             Console.WriteLine($"WordOllama Bridge development pairing code: {_pairingCode}");
         }
@@ -1926,7 +1936,7 @@ public sealed class BridgeSessionStore
 
     public Session Create(string origin)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _timeProvider.GetUtcNow();
         var session = new Session(
             Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
             Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
@@ -1963,7 +1973,7 @@ public sealed class BridgeSessionStore
         {
             if (token is not null &&
                 _sessions.TryGetValue(token, out session!) &&
-                session.ExpiresAt > DateTimeOffset.UtcNow &&
+                session.ExpiresAt > _timeProvider.GetUtcNow() &&
                 string.Equals(session.Origin, origin, StringComparison.OrdinalIgnoreCase))
             {
                 return true;

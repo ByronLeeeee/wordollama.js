@@ -4,11 +4,38 @@ using WordOllama.DesktopBridge;
 using WordOllama.Mcp;
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.Configuration;
 
 var root = Path.Combine(Path.GetTempPath(), "wordollama-mcp-settings-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 try
 {
+    var sessionConfiguration = new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Bridge:PairingCode"] = "session-smoke-code",
+            ["Bridge:AllowedOrigins:0"] = "https://localhost:37421",
+        })
+        .Build();
+    var sessionClock = new ManualTimeProvider(DateTimeOffset.Parse("2026-08-02T00:00:00Z"));
+    var sessionStore = new BridgeSessionStore(sessionConfiguration, isDevelopment: false, sessionClock);
+    Assert(!sessionStore.TryGet(null, "https://localhost:37421", out _),
+        "first install starts without an implicit authenticated session");
+    var sharedSession = sessionStore.Create("https://localhost:37421");
+    sessionStore.RegisterOfficeTools(sharedSession.Token, [new OfficeToolDescriptor(
+        "get_selection", "read", false, System.Text.Json.JsonSerializer.SerializeToElement(new { type = "object" }))]);
+    Assert(sessionStore.TryGet(sharedSession.Token, "https://localhost:37421", out var secondPaneSession) &&
+           secondPaneSession.CsrfToken == sharedSession.CsrfToken &&
+           sessionStore.GetOfficeTools(sharedSession.Token).Count == 1,
+        "multiple task panes share one authenticated session and Office tool catalog");
+    sessionClock.Advance(TimeSpan.FromHours(9));
+    Assert(!sessionStore.TryGet(sharedSession.Token, "https://localhost:37421", out _) &&
+           sessionStore.GetOfficeTools(sharedSession.Token).Count == 1,
+        "expired sessions are rejected before the next cleanup pass");
+    _ = sessionStore.Create("https://localhost:37421");
+    Assert(sessionStore.GetOfficeTools(sharedSession.Token).Count == 0,
+        "creating a fresh session cleans expired session capabilities");
+
     Assert(
         Path.GetFileName(PlatformPaths.GetSettingsRoot()) ==
             PlatformPaths.ProductDirectoryName &&
@@ -810,6 +837,13 @@ sealed class UpdateDownloadHandler(string indexJson, byte[] installer) : HttpMes
             RequestMessage = request,
         });
     }
+}
+
+sealed class ManualTimeProvider(DateTimeOffset current) : TimeProvider
+{
+    private DateTimeOffset _current = current;
+    public override DateTimeOffset GetUtcNow() => _current;
+    public void Advance(TimeSpan duration) => _current += duration;
 }
 
 sealed class RecordingUpdateInstallerPlatform : IUpdateInstallerPlatform

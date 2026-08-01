@@ -138,7 +138,7 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
   Content-Type 的 415。
 - [ ] 在不破坏 Office Dialog/Taskpane 的前提下验证 frame 限制；不能直接使用会阻断
   Office WebView 的通用 `frame-ancestors 'none'`。
-- [ ] 添加首次安装、会话过期、Bridge 重启和多任务窗格共享会话回归。
+- [x] 添加首次安装、会话过期、Bridge 重启和多任务窗格共享会话回归。
 
 ### 安装器体验
 

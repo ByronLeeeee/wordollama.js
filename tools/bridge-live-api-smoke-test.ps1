@@ -185,6 +185,13 @@ try {
     if (@($health.capabilities) -notcontains "encrypted-agent-recovery") {
         throw "Live Bridge did not enable encrypted Agent recovery."
     }
+    $healthResponse = Invoke-WebRequest -Uri "$baseUrl/health" -UseBasicParsing -TimeoutSec 5
+    $contentSecurityPolicy = [string]$healthResponse.Headers["Content-Security-Policy"]
+    if ($contentSecurityPolicy -notlike "*frame-ancestors 'self'*" -or
+        $contentSecurityPolicy -notlike "*https://*.office.com*" -or
+        $contentSecurityPolicy -like "*frame-ancestors 'none'*") {
+        throw "Live Bridge does not expose the Office-compatible frame-ancestors policy."
+    }
     $token = New-BridgeSession -BaseUrl $baseUrl
 
     $missingCsrfRejected = $false
@@ -313,11 +320,21 @@ try {
         throw "Live Agent did not persist its encrypted checkpoint."
     }
 
+    $preRestartToken = $token
     Stop-SmokeProcess -Process $bridgeProcess
     $bridgeProcess = $null
     $bridgeProcess = Start-IsolatedBridge -AssemblyPath $bridgeAssembly `
         -Port $bridgePort -ProviderPort $providerPort
     Wait-BridgeReady -BaseUrl $baseUrl | Out-Null
+    $restartInvalidatedSession = $false
+    try {
+        Invoke-Bridge -BaseUrl $baseUrl -Token $preRestartToken -Method Get `
+            -Path "/settings/providers" | Out-Null
+    }
+    catch { $restartInvalidatedSession = $_.Exception.Response.StatusCode.value__ -eq 401 }
+    if (-not $restartInvalidatedSession) {
+        throw "A bearer session from the previous Bridge process survived restart."
+    }
     $token = New-BridgeSession -BaseUrl $baseUrl
 
     $providers = Invoke-Bridge -BaseUrl $baseUrl -Token $token -Method Get `
@@ -366,7 +383,7 @@ try {
     Invoke-Bridge -BaseUrl $baseUrl -Token $token -Method Post `
         -Path "/agent/sessions/$sessionId/cancel" | Out-Null
 
-    Write-Host "Live Bridge API smoke passed: pairing, Provider, MCP, encrypted Agent recovery, and restart persistence."
+    Write-Host "Live Bridge API smoke passed: first-use auth, Office frame policy, restart invalidation, Provider, MCP, and encrypted Agent recovery."
 }
 finally {
     Stop-SmokeProcess -Process $bridgeProcess
