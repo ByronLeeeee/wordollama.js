@@ -61,10 +61,18 @@ $plainPassword = $null
 $certificate = $null
 try {
     $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
+    $keyStorageFlags = if ($IsWindows) {
+        [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+    } else {
+        # macOS does not implement EphemeralKeySet for PKCS#12 imports. The
+        # default importer creates a temporary key that is released with the
+        # certificate object; the PFX itself remains permission-restricted.
+        [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet
+    }
     $certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
         $sourceCertificate,
         $plainPassword,
-        [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet)
+        $keyStorageFlags)
     if (-not $certificate.HasPrivateKey) {
         throw "The HTTPS PFX does not contain a private key."
     }

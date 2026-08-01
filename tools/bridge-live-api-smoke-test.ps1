@@ -141,6 +141,11 @@ function Start-IsolatedBridge {
         "Bridge__AgentRecoveryPath" = (Join-Path $smokeRoot "agent-recovery.bin")
         "Bridge__OllamaServerSettingsPath" = (Join-Path $smokeRoot "ollama-server-settings.json")
         "Bridge__MigrateLegacyUserData" = "false"
+        # A packaged fixture carries a fake signed-update configuration. This
+        # live API test specifically exercises the fail-closed unconfigured
+        # installer path, so isolate it from package metadata.
+        "Bridge__Updates__IndexUrl" = ""
+        "Bridge__Updates__ExpectedPublisherSubject" = ""
         "Bridge__ModelProvider__Type" = "OpenAI"
         "Bridge__ModelProvider__Endpoint" = "http://127.0.0.1:$ProviderPort/v1"
         "Bridge__ModelProvider__Model" = "fake-openai"
