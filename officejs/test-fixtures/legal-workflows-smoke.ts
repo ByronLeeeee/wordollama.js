@@ -4,6 +4,7 @@ import {
   formatLawArticle,
   investigatePleading,
 } from "../apps/addin/src/legal-workflows.ts";
+import i18n from "../apps/addin/src/i18n.ts";
 import type { RuntimeClient } from "../apps/addin/src/runtime-client.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -11,6 +12,7 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 let captured = "";
+await i18n.changeLanguage("zh-CN");
 const runtime = {
   async *streamChat(messages: Array<{ content: string }>) {
     captured = messages.map((message) => message.content).join("\n");
