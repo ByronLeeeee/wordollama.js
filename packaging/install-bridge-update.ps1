@@ -73,9 +73,6 @@ try {
             if ($null -eq $signature.TimeStamperCertificate) {
                 throw "Bridge update Authenticode signature is missing its RFC 3161 timestamp."
             }
-            if ($signature.SignerCertificate.Subject -eq $signature.SignerCertificate.Issuer) {
-                throw "Bridge update Authenticode signer is self-signed instead of a CA-issued code-signing certificate."
-            }
             if (-not [string]::IsNullOrWhiteSpace($ExpectedPublisherSubject) -and
                 $signature.SignerCertificate.Subject -ne $ExpectedPublisherSubject) {
                 throw "Bridge update publisher mismatch. Expected '$ExpectedPublisherSubject', got '$($signature.SignerCertificate.Subject)'."

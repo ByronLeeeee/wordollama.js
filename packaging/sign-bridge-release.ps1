@@ -116,10 +116,8 @@ if ($Runtime -eq "win-x64") {
                     (-not $allowUntimestamped -and $null -eq $signature.TimeStamperCertificate)) {
                     throw "Windows Authenticode verification did not produce a valid signer and RFC 3161 timestamp for $($binary.Name)."
                 }
-                if (-not $allowSelfSigned -and
-                    $signature.SignerCertificate.Subject -eq $signature.SignerCertificate.Issuer) {
-                    throw "Windows production signing requires a CA-issued code-signing leaf certificate; self-signed certificates are allowed only for smoke/test versions with -AllowSelfSignedTestCertificate."
-                }
+                # Self-signed release certificates are supported. Runtime updates pin the exact
+                # signer thumbprint and public-key hash instead of expanding the OS trust store.
             }
         }
     }

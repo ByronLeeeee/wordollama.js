@@ -12,7 +12,9 @@ public sealed record UpdateArtifact(
     string Sha256,
     long SizeBytes,
     string? SignatureUrl,
-    string? PublisherSubject);
+    string? PublisherSubject,
+    string? SignerThumbprint,
+    string? SignerPublicKeySha256);
 
 public sealed record UpdateCheckResult(
     bool Configured,
@@ -30,7 +32,9 @@ internal sealed record UpdateIndexArtifact(
     string Sha256,
     long SizeBytes,
     string? SignatureUrl,
-    string? PublisherSubject);
+    string? PublisherSubject,
+    string? SignerThumbprint,
+    string? SignerPublicKeySha256);
 
 internal sealed record UpdateIndex(
     int SchemaVersion,
@@ -137,6 +141,9 @@ public sealed class UpdateIndexService
             {
                 throw new InvalidDataException("Update artifact publisher metadata is invalid.");
             }
+            if (!IsOptionalHex(selected.SignerThumbprint, 40, 128) ||
+                !IsOptionalHex(selected.SignerPublicKeySha256, 64, 64))
+                throw new InvalidDataException("Update artifact signer pin metadata is invalid.");
             artifact = new UpdateArtifact(
                 kind,
                 selected.Runtime,
@@ -144,7 +151,9 @@ public sealed class UpdateIndexService
                 selected.Sha256.ToLowerInvariant(),
                 selected.SizeBytes,
                 selected.SignatureUrl,
-                selected.PublisherSubject?.Trim());
+                selected.PublisherSubject?.Trim(),
+                NormalizeHex(selected.SignerThumbprint),
+                NormalizeHex(selected.SignerPublicKeySha256));
         }
 
         return new UpdateCheckResult(
@@ -207,6 +216,13 @@ public sealed class UpdateIndexService
         value.Length <= 64 &&
         Regex.IsMatch(value, "^[0-9A-Za-z][0-9A-Za-z._-]*$") &&
         TryParseVersion(value, out _, out _);
+
+    private static bool IsOptionalHex(string? value, int minimumLength, int maximumLength) =>
+        string.IsNullOrWhiteSpace(value) ||
+        (value.Length >= minimumLength && value.Length <= maximumLength && value.All(Uri.IsHexDigit));
+
+    private static string? NormalizeHex(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Replace(" ", string.Empty).ToLowerInvariant();
 
     private static bool TryParseVersion(string value, out Version version, out string? prerelease)
     {

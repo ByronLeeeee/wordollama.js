@@ -15,6 +15,8 @@ public interface IUpdateInstallerPlatform
     Task VerifyAsync(
         string installerPath,
         string expectedPublisherSubject,
+        string expectedSignerThumbprint,
+        string expectedPublicKeySha256,
         CancellationToken cancellationToken);
 
     void Launch(string installerPath);
@@ -28,6 +30,8 @@ public sealed class UpdateInstallerService
     private readonly IUpdateInstallerPlatform _platform;
     private readonly string _downloadRoot;
     private readonly string _expectedPublisherSubject;
+    private readonly string _expectedSignerThumbprint;
+    private readonly string _expectedPublicKeySha256;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public UpdateInstallerService(
@@ -35,13 +39,17 @@ public sealed class UpdateInstallerService
         UpdateIndexService updates,
         IUpdateInstallerPlatform platform,
         string downloadRoot,
-        string expectedPublisherSubject)
+        string expectedPublisherSubject,
+        string expectedSignerThumbprint,
+        string expectedPublicKeySha256)
     {
         _httpClient = httpClient;
         _updates = updates;
         _platform = platform;
         _downloadRoot = Path.GetFullPath(downloadRoot);
         _expectedPublisherSubject = expectedPublisherSubject.Trim();
+        _expectedSignerThumbprint = NormalizeHex(expectedSignerThumbprint);
+        _expectedPublicKeySha256 = NormalizeHex(expectedPublicKeySha256);
     }
 
     public async Task<UpdateInstallResult> DownloadVerifyAndLaunchAsync(
@@ -58,6 +66,7 @@ public sealed class UpdateInstallerService
         {
             var update = await _updates.CheckAsync(cancellationToken);
             var artifact = update.Artifact;
+            var requiresSignerPins = OperatingSystem.IsWindows();
             if (!update.Configured ||
                 !update.UpdateAvailable ||
                 string.IsNullOrWhiteSpace(update.LatestVersion) ||
@@ -65,10 +74,14 @@ public sealed class UpdateInstallerService
                 !string.Equals(artifact.Kind, "installer", StringComparison.Ordinal) ||
                 !IsValidPublisherSubject(artifact.PublisherSubject) ||
                 !IsValidPublisherSubject(_expectedPublisherSubject) ||
+                (requiresSignerPins && string.IsNullOrWhiteSpace(_expectedSignerThumbprint)) ||
+                (requiresSignerPins && string.IsNullOrWhiteSpace(_expectedPublicKeySha256)) ||
                 !string.Equals(
                     artifact.PublisherSubject,
                     _expectedPublisherSubject,
-                    StringComparison.Ordinal))
+                    StringComparison.Ordinal) ||
+                (requiresSignerPins && !string.Equals(NormalizeHex(artifact.SignerThumbprint), _expectedSignerThumbprint, StringComparison.Ordinal)) ||
+                (requiresSignerPins && !string.Equals(NormalizeHex(artifact.SignerPublicKeySha256), _expectedPublicKeySha256, StringComparison.Ordinal)))
             {
                 throw new UpdateInstallUnavailableException(
                     "A newer signed platform installer with pinned publisher metadata is not available.");
@@ -154,6 +167,8 @@ public sealed class UpdateInstallerService
             await _platform.VerifyAsync(
                 installerPath,
                 publisherSubject,
+                _expectedSignerThumbprint,
+                _expectedPublicKeySha256,
                 cancellationToken);
             _platform.Launch(installerPath);
             return new UpdateInstallResult(
@@ -198,6 +213,9 @@ public sealed class UpdateInstallerService
         value.Length <= 512 &&
         !value.Any(char.IsControl);
 
+    private static string NormalizeHex(string? value) =>
+        (value ?? string.Empty).Replace(" ", string.Empty).ToLowerInvariant();
+
     private static void DeleteIfPresent(string? path)
     {
         if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
@@ -222,6 +240,8 @@ public sealed class SystemUpdateInstallerPlatform : IUpdateInstallerPlatform
     public async Task VerifyAsync(
         string installerPath,
         string expectedPublisherSubject,
+        string expectedSignerThumbprint,
+        string expectedPublicKeySha256,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(expectedPublisherSubject))
@@ -230,7 +250,8 @@ public sealed class SystemUpdateInstallerPlatform : IUpdateInstallerPlatform
         }
         if (OperatingSystem.IsWindows())
         {
-            await VerifyWindowsAsync(installerPath, expectedPublisherSubject, cancellationToken);
+            await VerifyWindowsAsync(installerPath, expectedPublisherSubject,
+                expectedSignerThumbprint, expectedPublicKeySha256, cancellationToken);
             return;
         }
         if (OperatingSystem.IsMacOS())
@@ -266,6 +287,8 @@ public sealed class SystemUpdateInstallerPlatform : IUpdateInstallerPlatform
     private static async Task VerifyWindowsAsync(
         string installerPath,
         string expectedPublisherSubject,
+        string expectedSignerThumbprint,
+        string expectedPublicKeySha256,
         CancellationToken cancellationToken)
     {
         const string script = """
@@ -273,7 +296,10 @@ public sealed class SystemUpdateInstallerPlatform : IUpdateInstallerPlatform
             [pscustomobject]@{
               status = [string]$signature.Status
               subject = [string]$signature.SignerCertificate.Subject
-              issuer = [string]$signature.SignerCertificate.Issuer
+              thumbprint = [string]$signature.SignerCertificate.Thumbprint
+              publicKeySha256 = [BitConverter]::ToString(
+                [Security.Cryptography.SHA256]::Create().ComputeHash($signature.SignerCertificate.GetPublicKey())
+              ).Replace('-', '').ToLowerInvariant()
               hasTimestamp = $null -ne $signature.TimeStamperCertificate
             } | ConvertTo-Json -Compress
             """;
@@ -289,15 +315,17 @@ public sealed class SystemUpdateInstallerPlatform : IUpdateInstallerPlatform
         var root = document.RootElement;
         var status = root.GetProperty("status").GetString();
         var subject = root.GetProperty("subject").GetString();
-        var issuer = root.GetProperty("issuer").GetString();
+        var thumbprint = root.GetProperty("thumbprint").GetString();
+        var publicKeySha256 = root.GetProperty("publicKeySha256").GetString();
         var hasTimestamp = root.GetProperty("hasTimestamp").GetBoolean();
-        if (!string.Equals(status, "Valid", StringComparison.Ordinal) ||
+        if (status is not ("Valid" or "UnknownError") ||
             !string.Equals(subject, expectedPublisherSubject, StringComparison.Ordinal) ||
-            string.Equals(subject, issuer, StringComparison.Ordinal) ||
+            !string.Equals(NormalizeHex(thumbprint), NormalizeHex(expectedSignerThumbprint), StringComparison.Ordinal) ||
+            !string.Equals(NormalizeHex(publicKeySha256), NormalizeHex(expectedPublicKeySha256), StringComparison.Ordinal) ||
             !hasTimestamp)
         {
             throw new InvalidDataException(
-                "Windows installer signature, publisher, CA chain, or timestamp is invalid.");
+                "Windows installer signature, publisher, signer pin, or timestamp is invalid.");
         }
     }
 
@@ -363,4 +391,7 @@ public sealed class SystemUpdateInstallerPlatform : IUpdateInstallerPlatform
     }
 
     private sealed record ProcessResult(int ExitCode, string Output);
+
+    private static string NormalizeHex(string? value) =>
+        (value ?? string.Empty).Replace(" ", string.Empty).ToLowerInvariant();
 }

@@ -153,9 +153,8 @@ try {
             if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
                 $null -eq $signature.SignerCertificate -or
                 $null -eq $signature.TimeStamperCertificate -or
-                $signature.SignerCertificate.Subject -eq $signature.SignerCertificate.Issuer -or
                 $signature.SignerCertificate.Subject -ne $ExpectedPublisherSubject) {
-                throw "Authenticode verification failed for $($file.Name), its RFC 3161 timestamp is missing, its signer is self-signed, or its publisher does not match."
+                throw "Authenticode verification failed for $($file.Name), its RFC 3161 timestamp is missing, or its publisher does not match."
             }
         }
         if ([string]::IsNullOrWhiteSpace($WindowsInstallerEvidencePath)) {
@@ -170,6 +169,8 @@ try {
             $installer.runtime -ne "win-x64" -or
             $installer.bridgeArchiveSha256 -ne $actualBridgeHash -or
             $installer.publisherSubject -ne $ExpectedPublisherSubject -or
+            [string]::IsNullOrWhiteSpace([string]$installer.signerThumbprint) -or
+            [string]::IsNullOrWhiteSpace([string]$installer.signerPublicKeySha256) -or
             $installer.authenticodeValid -ne $true -or
             $installer.rfc3161TimestampPresent -ne $true -or
             $installer.perUserInstall -ne $true) {
@@ -457,6 +458,12 @@ $finalDescriptor = [ordered]@{
     installerPublisherSubject = if ($descriptor.runtime -like "osx-*") {
         $ExpectedMacInstallerPublisherSubject
     } else { $ExpectedPublisherSubject }
+    installerSignerThumbprint = if ($descriptor.runtime -eq "win-x64") {
+        [string]$installer.signerThumbprint
+    } else { "macos-authority-pinned" }
+    installerSignerPublicKeySha256 = if ($descriptor.runtime -eq "win-x64") {
+        [string]$installer.signerPublicKeySha256
+    } else { "macos-authority-pinned" }
     sourceDescriptorSha256 = (Get-FileHash -LiteralPath $descriptorRecord.Path -Algorithm SHA256).Hash.ToLowerInvariant()
     sourceArtifacts = @(
         [ordered]@{

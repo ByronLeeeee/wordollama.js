@@ -100,7 +100,7 @@ try {
             if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
                 $null -eq $signature.SignerCertificate -or
                 $null -eq $signature.TimeStamperCertificate -or
-                $signature.SignerCertificate.Subject -ne $ExpectedPublisherSubject) {
+            $signature.SignerCertificate.Subject -ne $ExpectedPublisherSubject) {
                 throw "Bridge payload signature, timestamp, or publisher is invalid for $($file.Name)."
             }
         }
@@ -142,10 +142,8 @@ try {
     if ($installerSignature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
         $null -eq $installerSignature.SignerCertificate -or
         $null -eq $installerSignature.TimeStamperCertificate -or
-        $installerSignature.SignerCertificate.Subject -ne $ExpectedPublisherSubject -or
-        $installerSignature.SignerCertificate.Subject -eq
-            $installerSignature.SignerCertificate.Issuer) {
-        throw "Windows installer signature is invalid, untimestamped, self-signed, or has the wrong publisher."
+        $installerSignature.SignerCertificate.Subject -ne $ExpectedPublisherSubject) {
+        throw "Windows installer signature is invalid, untimestamped, or has the wrong publisher."
     }
 
     $evidenceDirectory = Split-Path -Parent $evidenceFullPath
@@ -165,6 +163,9 @@ try {
         bridgeArchiveSha256 = $bridgeArchiveHash
         publisherSubject = $installerSignature.SignerCertificate.Subject
         signerThumbprint = $installerSignature.SignerCertificate.Thumbprint
+        signerPublicKeySha256 = [BitConverter]::ToString(
+            [Security.Cryptography.SHA256]::Create().ComputeHash(
+                $installerSignature.SignerCertificate.GetPublicKey())).Replace('-', '').ToLowerInvariant()
         timestampThumbprint = $installerSignature.TimeStamperCertificate.Thumbprint
         authenticodeValid = $true
         rfc3161TimestampPresent = $true

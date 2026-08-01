@@ -159,6 +159,10 @@ var bridgeVersion = typeof(Program).Assembly
 var updateIndexUrl = builder.Configuration["Bridge:Updates:IndexUrl"] ?? string.Empty;
 var expectedUpdatePublisherSubject =
     builder.Configuration["Bridge:Updates:ExpectedPublisherSubject"] ?? string.Empty;
+var expectedUpdateSignerThumbprint =
+    builder.Configuration["Bridge:Updates:ExpectedSignerThumbprint"] ?? string.Empty;
+var expectedUpdatePublicKeySha256 =
+    builder.Configuration["Bridge:Updates:ExpectedPublicKeySha256"] ?? string.Empty;
 var updateService = new UpdateIndexService(new HttpClient(), updateIndexUrl, bridgeVersion);
 var updateDownloadRoot = Path.Combine(settingsRoot, "updates");
 
@@ -261,7 +265,9 @@ builder.Services.AddSingleton(sp => new UpdateInstallerService(
     updateService,
     sp.GetRequiredService<IUpdateInstallerPlatform>(),
     updateDownloadRoot,
-    expectedUpdatePublisherSubject));
+    expectedUpdatePublisherSubject,
+    expectedUpdateSignerThumbprint,
+    expectedUpdatePublicKeySha256));
 builder.Services.AddSingleton<AgentSessionManager>();
 builder.Services.AddSingleton<IInternalToolExecutor, McpToolExecutor>();
 builder.Services.AddSingleton<McpManager>();

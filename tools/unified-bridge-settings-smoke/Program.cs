@@ -469,8 +469,10 @@ try
     var installerPayload = Encoding.UTF8.GetBytes("signed-installer-smoke-payload");
     var installerHash = Convert.ToHexString(
         System.Security.Cryptography.SHA256.HashData(installerPayload)).ToLowerInvariant();
+    var installerThumbprint = new string('c', 40);
+    var installerPublicKeySha256 = new string('d', 64);
     var updateIndex = $$"""
-        {"schemaVersion":1,"product":"WordOllama","version":"1.2.0","generatedAt":"2026-07-29T00:00:00Z","releaseNotes":"smoke","artifacts":[{"runtime":"{{updateRuntime}}","url":"https://updates.example.test/bridge.zip","sha256":"{{new string('a', 64)}}","sizeBytes":12345,"signatureUrl":"https://updates.example.test/bridge.sig"}],"installers":[{"runtime":"{{updateRuntime}}","url":"https://updates.example.test/WordOllama-Installer.{{installerExtension}}","sha256":"{{installerHash}}","sizeBytes":{{installerPayload.Length}},"publisherSubject":"{{installerPublisher}}"}]}
+        {"schemaVersion":1,"product":"WordOllama","version":"1.2.0","generatedAt":"2026-07-29T00:00:00Z","releaseNotes":"smoke","artifacts":[{"runtime":"{{updateRuntime}}","url":"https://updates.example.test/bridge.zip","sha256":"{{new string('a', 64)}}","sizeBytes":12345,"signatureUrl":"https://updates.example.test/bridge.sig"}],"installers":[{"runtime":"{{updateRuntime}}","url":"https://updates.example.test/WordOllama-Installer.{{installerExtension}}","sha256":"{{installerHash}}","sizeBytes":{{installerPayload.Length}},"publisherSubject":"{{installerPublisher}}","signerThumbprint":"{{installerThumbprint}}","signerPublicKeySha256":"{{installerPublicKeySha256}}"}]}
         """;
     var updateService = new UpdateIndexService(
         new HttpClient(new StaticJsonHandler(updateIndex)),
@@ -496,7 +498,9 @@ try
         installerIndexService,
         installerPlatform,
         installerDownloadRoot,
-        installerPublisher).DownloadVerifyAndLaunchAsync();
+        installerPublisher,
+        installerThumbprint,
+        installerPublicKeySha256).DownloadVerifyAndLaunchAsync();
     Assert(
         installResult.Status == "launched" &&
         installResult.Version == "1.2.0" &&
@@ -524,7 +528,9 @@ try
                 "1.1.0"),
             wrongHashPlatform,
             wrongHashRoot,
-            installerPublisher).DownloadVerifyAndLaunchAsync();
+            installerPublisher,
+            installerThumbprint,
+            installerPublicKeySha256).DownloadVerifyAndLaunchAsync();
     }
     catch (InvalidDataException)
     {
@@ -555,7 +561,9 @@ try
                 "1.1.0"),
             new RecordingUpdateInstallerPlatform(),
             Path.Combine(root, "updates-missing-publisher"),
-            installerPublisher)
+            installerPublisher,
+            installerThumbprint,
+            installerPublicKeySha256)
             .DownloadVerifyAndLaunchAsync();
     }
     catch (UpdateInstallUnavailableException)
@@ -579,7 +587,9 @@ try
                 "1.1.0"),
             new RecordingUpdateInstallerPlatform(),
             Path.Combine(root, "updates-mismatched-publisher"),
-            "CN=Different Pinned Publisher")
+            "CN=Different Pinned Publisher",
+            installerThumbprint,
+            installerPublicKeySha256)
             .DownloadVerifyAndLaunchAsync();
     }
     catch (UpdateInstallUnavailableException)
@@ -600,6 +610,8 @@ try
         await new SystemUpdateInstallerPlatform().VerifyAsync(
             unsignedInstallerPath,
             installerPublisher,
+            installerThumbprint,
+            installerPublicKeySha256,
             CancellationToken.None);
     }
     catch (InvalidDataException)
@@ -808,6 +820,8 @@ sealed class RecordingUpdateInstallerPlatform : IUpdateInstallerPlatform
     public Task VerifyAsync(
         string installerPath,
         string expectedPublisherSubject,
+        string expectedSignerThumbprint,
+        string expectedPublicKeySha256,
         CancellationToken cancellationToken)
     {
         if (!File.Exists(installerPath))

@@ -92,6 +92,12 @@ foreach ($runtime in $runtimes) {
             sha256 = $installerHash
             sizeBytes = $installerSize
             publisherSubject = [string]$verifiedDescriptors[$runtime].installerPublisherSubject
+            signerThumbprint = if ($runtime -eq "win-x64") {
+                [string]$verifiedDescriptors[$runtime].installerSignerThumbprint
+            } else { $null }
+            signerPublicKeySha256 = if ($runtime -eq "win-x64") {
+                [string]$verifiedDescriptors[$runtime].installerSignerPublicKeySha256
+            } else { $null }
         }
     }
     $artifacts += [pscustomobject]@{
