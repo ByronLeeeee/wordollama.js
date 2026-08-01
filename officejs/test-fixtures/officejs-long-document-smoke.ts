@@ -2,6 +2,9 @@ import {
   runLongDocumentMatrix,
   type LongDocumentHost,
 } from "../apps/addin/src/officejs-long-document-runner.ts";
+import i18n from "../apps/addin/src/i18n.ts";
+
+await i18n.changeLanguage("zh-CN");
 
 const prepared: number[] = [];
 const host: LongDocumentHost = {
