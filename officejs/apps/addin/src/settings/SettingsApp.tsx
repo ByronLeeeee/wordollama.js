@@ -1987,6 +1987,14 @@ function UpdatesPage() {
             <dl>
               <dt>{t("updates.publisher")}</dt>
               <dd>{update.artifact.publisherSubject}</dd>
+              {update.artifact.signerThumbprint ? <>
+                <dt>{t("updates.signerThumbprint")}</dt>
+                <dd className="break-all font-mono text-xs">{update.artifact.signerThumbprint}</dd>
+              </> : null}
+              {update.artifact.signerPublicKeySha256 ? <>
+                <dt>{t("updates.signerPublicKey")}</dt>
+                <dd className="break-all font-mono text-xs">{update.artifact.signerPublicKeySha256}</dd>
+              </> : null}
             </dl>
             <div className="settings-actions">
               <button

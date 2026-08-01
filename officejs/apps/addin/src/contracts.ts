@@ -45,6 +45,8 @@ export interface UpdateArtifact {
   sizeBytes: number;
   signatureUrl?: string;
   publisherSubject?: string;
+  signerThumbprint?: string;
+  signerPublicKeySha256?: string;
 }
 
 export interface UpdateCheckResult {

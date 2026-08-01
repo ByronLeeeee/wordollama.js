@@ -316,6 +316,8 @@
     "confirmInstall": "下载并打开安装器",
     "installConfirmation": "将下载版本 {{version}}，核对更新索引、SHA-256 和固定的平台发布者签名后再打开安装器。",
     "publisher": "发布者",
+    "signerThumbprint": "签名证书指纹",
+    "signerPublicKey": "签名公钥 SHA-256",
     "preparingInstaller": "正在验证安装器…",
     "installerLaunched": "已打开版本 {{version}} 的验证安装器",
     "installFailed": "无法验证或打开安装器",

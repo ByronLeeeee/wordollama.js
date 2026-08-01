@@ -316,6 +316,8 @@
     "confirmInstall": "Download and open installer",
     "installConfirmation": "Version {{version}} will be downloaded, checked against the update index, verified with the pinned platform publisher, and then opened.",
     "publisher": "Publisher",
+    "signerThumbprint": "Signing certificate thumbprint",
+    "signerPublicKey": "Signing public key SHA-256",
     "preparingInstaller": "Verifying installer…",
     "installerLaunched": "The verified installer for version {{version}} was opened",
     "installFailed": "The installer could not be verified or opened",
