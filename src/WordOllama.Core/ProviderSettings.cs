@@ -66,7 +66,7 @@ internal sealed record ProviderSettingsDocument(
 
 public sealed partial class ProviderSettingsStore
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
     private readonly string _path;
     private readonly IMutableSecretStore _secrets;
     private readonly object _gate = new();
@@ -79,11 +79,6 @@ public sealed partial class ProviderSettingsStore
     {
         _path = Path.GetFullPath(path);
         _secrets = secrets;
-        if (!string.IsNullOrEmpty(initialProvider.ApiKey) &&
-            string.IsNullOrEmpty(_secrets.Get(SecretName("default"))))
-        {
-            _secrets.Set(SecretName("default"), initialProvider.ApiKey);
-        }
         var loaded = LoadOrCreate(initialProvider);
         _document = loaded.Document;
         if (loaded.WasMigrated) Save();
@@ -99,29 +94,33 @@ public sealed partial class ProviderSettingsStore
         }
     }
 
-    public ModelProviderOptions GetActiveOptions()
-    {
-        lock (_gate)
-        {
-            var profile = _document.Profiles.First(profile =>
-                string.Equals(profile.Id, _document.ActiveProviderId, StringComparison.OrdinalIgnoreCase));
-            return ToOptions(profile);
-        }
-    }
-
-    public ProviderProfileView GetActiveProfile()
-    {
-        lock (_gate)
-        {
-            return ToView(GetActiveProfileUnsafe());
-        }
-    }
-
-    public ProviderChatRequest ApplyDefaults(ProviderChatRequest request)
+    public ModelProviderOptions? GetActiveOptions()
     {
         lock (_gate)
         {
             var profile = GetActiveProfileUnsafe();
+            return profile is null ? null : ToOptions(profile);
+        }
+    }
+
+    public ProviderProfileView? GetActiveProfile()
+    {
+        lock (_gate)
+        {
+            var profile = GetActiveProfileUnsafe();
+            return profile is null ? null : ToView(profile);
+        }
+    }
+
+    public ProviderChatRequest ApplyDefaults(ProviderChatRequest request, string? profileId = null)
+    {
+        lock (_gate)
+        {
+            var profile = string.IsNullOrWhiteSpace(profileId)
+                ? GetActiveProfileUnsafe() ?? throw new NoActiveModelException()
+                : _document.Profiles.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Id, profileId, StringComparison.OrdinalIgnoreCase))
+                  ?? throw new KeyNotFoundException($"Provider profile was not found: {profileId}");
             return request with
             {
                 Temperature = request.Temperature ?? profile.Temperature,
@@ -136,7 +135,7 @@ public sealed partial class ProviderSettingsStore
     {
         lock (_gate)
         {
-            var profile = GetActiveProfileUnsafe();
+            var profile = GetActiveProfileUnsafe() ?? throw new NoActiveModelException();
             return request with
             {
                 Temperature = request.Temperature ?? profile.Temperature,
@@ -181,17 +180,13 @@ public sealed partial class ProviderSettingsStore
     {
         lock (_gate)
         {
-            if (_document.Profiles.Count == 1)
-            {
-                throw new InvalidOperationException("At least one provider profile is required.");
-            }
             var removed = _document.Profiles.RemoveAll(profile =>
                 string.Equals(profile.Id, id, StringComparison.OrdinalIgnoreCase));
             if (removed == 0) throw new KeyNotFoundException($"Provider profile was not found: {id}");
             _secrets.Delete(SecretName(id));
             if (string.Equals(_document.ActiveProviderId, id, StringComparison.OrdinalIgnoreCase))
             {
-                _document = _document with { ActiveProviderId = _document.Profiles[0].Id };
+                _document = _document with { ActiveProviderId = string.Empty };
             }
             Save();
             return GetViewUnsafe();
@@ -251,9 +246,7 @@ public sealed partial class ProviderSettingsStore
                 var loaded = JsonSerializer.Deserialize<ProviderSettingsDocument>(
                     File.ReadAllText(_path),
                     JsonOptions);
-                if (loaded is { Profiles.Count: > 0 } &&
-                    loaded.Profiles.Any(profile =>
-                        string.Equals(profile.Id, loaded.ActiveProviderId, StringComparison.OrdinalIgnoreCase)))
+                if (loaded is not null)
                 {
                     var validated = loaded.Profiles.Select(profile => Validate(new ProviderProfileUpdate(
                         profile.Id, profile.Name, profile.Type, profile.Endpoint, profile.Model,
@@ -271,30 +264,29 @@ public sealed partial class ProviderSettingsStore
                     if (wasMigrated)
                     {
                         validated = validated
-                            .Select(profile => IsLegacyGeneratedDefault(profile)
-                                ? profile with { Model = string.Empty }
-                                : profile)
+                            .Where(profile => !IsLegacyGeneratedDefault(profile))
                             .ToList();
                     }
+                    var activeProviderId = validated.Any(profile =>
+                        string.Equals(profile.Id, loaded.ActiveProviderId, StringComparison.OrdinalIgnoreCase))
+                            ? loaded.ActiveProviderId
+                            : string.Empty;
                     return (
                         new ProviderSettingsDocument(
-                            loaded.ActiveProviderId,
+                            activeProviderId,
                             validated,
                             CurrentSchemaVersion),
                         wasMigrated);
                 }
-                throw new InvalidDataException("Provider settings must contain an active profile.");
+                throw new InvalidDataException("Provider settings document is invalid.");
             }
             catch (JsonException exception)
             {
                 throw new InvalidDataException("Provider settings JSON is invalid.", exception);
             }
         }
-        var profile = new ProviderProfileSettings(
-            "default", initial.Type, initial.Type, initial.Endpoint, initial.Model,
-            ApiMode: initial.ApiMode);
         return (
-            new ProviderSettingsDocument(profile.Id, [profile], CurrentSchemaVersion),
+            new ProviderSettingsDocument(string.Empty, [], CurrentSchemaVersion),
             false);
     }
 
@@ -318,8 +310,8 @@ public sealed partial class ProviderSettingsStore
     private ProviderSettingsView GetViewUnsafe() =>
         new(_document.ActiveProviderId, _document.Profiles.Select(ToView).ToArray());
 
-    private ProviderProfileSettings GetActiveProfileUnsafe() =>
-        _document.Profiles.First(profile =>
+    private ProviderProfileSettings? GetActiveProfileUnsafe() =>
+        _document.Profiles.FirstOrDefault(profile =>
             string.Equals(profile.Id, _document.ActiveProviderId, StringComparison.OrdinalIgnoreCase));
 
     private void Save()
@@ -336,7 +328,8 @@ public sealed partial class ProviderSettingsStore
         string.Equals(profile.Id, "default", StringComparison.OrdinalIgnoreCase) &&
         string.Equals(profile.Name, "Ollama", StringComparison.OrdinalIgnoreCase) &&
         string.Equals(profile.Type, "Ollama", StringComparison.OrdinalIgnoreCase) &&
-        string.Equals(profile.Model, "llama3.2", StringComparison.OrdinalIgnoreCase) &&
+        (string.IsNullOrWhiteSpace(profile.Model) ||
+         string.Equals(profile.Model, "llama3.2", StringComparison.OrdinalIgnoreCase)) &&
         string.Equals(
             profile.Endpoint.TrimEnd('/'),
             "http://127.0.0.1:11434",
@@ -413,31 +406,39 @@ public sealed partial class ProviderSettingsStore
     private static partial Regex KeepAlivePattern();
 }
 
+public sealed class NoActiveModelException : InvalidOperationException
+{
+    public NoActiveModelException() : base("No model is active.") { }
+}
+
 public sealed class ReloadableModelProvider : IModelProvider
 {
-    private IModelProvider _current;
+    private IModelProvider? _current;
 
-    public ReloadableModelProvider(ModelProviderOptions options)
+    public ReloadableModelProvider(ModelProviderOptions? options)
     {
-        _current = ModelProviderFactory.Create(options);
+        _current = options is null ? null : ModelProviderFactory.Create(options);
     }
 
-    public string ProviderType => Volatile.Read(ref _current).ProviderType;
+    public string ProviderType => Volatile.Read(ref _current)?.ProviderType ?? "None";
 
-    public void Reload(ModelProviderOptions options) =>
-        Interlocked.Exchange(ref _current, ModelProviderFactory.Create(options));
+    public void Reload(ModelProviderOptions? options) =>
+        Interlocked.Exchange(ref _current, options is null ? null : ModelProviderFactory.Create(options));
 
     public Task<ProviderChatResponse> ChatAsync(
         ProviderChatRequest request,
         CancellationToken cancellationToken = default) =>
-        Volatile.Read(ref _current).ChatAsync(request, cancellationToken);
+        Current().ChatAsync(request, cancellationToken);
 
     public Task<IReadOnlyList<string>> FetchModelsAsync(
         CancellationToken cancellationToken = default) =>
-        Volatile.Read(ref _current).FetchModelsAsync(cancellationToken);
+        Current().FetchModelsAsync(cancellationToken);
 
     public IAsyncEnumerable<ProviderChatChunk> ChatStreamAsync(
         ProviderChatRequest request,
         CancellationToken cancellationToken = default) =>
-        Volatile.Read(ref _current).ChatStreamAsync(request, cancellationToken);
+        Current().ChatStreamAsync(request, cancellationToken);
+
+    private IModelProvider Current() =>
+        Volatile.Read(ref _current) ?? throw new NoActiveModelException();
 }

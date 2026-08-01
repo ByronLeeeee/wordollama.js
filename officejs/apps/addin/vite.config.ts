@@ -11,15 +11,21 @@ const packageVersion = (
 ).version;
 
 async function getDevelopmentHttps() {
+  const certificateDirectory = join(homedir(), ".office-addin-dev-certs");
+  const certificatePath = join(certificateDirectory, "localhost.crt");
+  const keyPath = join(certificateDirectory, "localhost.key");
+  if (existsSync(certificatePath) && existsSync(keyPath)) {
+    return {
+      cert: readFileSync(certificatePath),
+      key: readFileSync(keyPath),
+    };
+  }
   try {
     return await getHttpsServerOptions();
   } catch (error) {
     // office-addin-dev-certs may fail while cleaning an existing certificate
     // under a locked-down Windows profile. Reuse the already-issued localhost
     // pair without attempting to write, replace, or trust another certificate.
-    const certificateDirectory = join(homedir(), ".office-addin-dev-certs");
-    const certificatePath = join(certificateDirectory, "localhost.crt");
-    const keyPath = join(certificateDirectory, "localhost.key");
     if (!existsSync(certificatePath) || !existsSync(keyPath)) {
       throw error;
     }

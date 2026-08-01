@@ -12,9 +12,7 @@ export interface MarkdownSettings extends MarkdownConversionOptions {
 }
 
 export const DEFAULT_MARKDOWN_SETTINGS: MarkdownSettings = {
-  tables: true,
-  code: true,
-  headings: true,
+  notePlacement: "footnote",
   h1: "Heading 1",
   h2: "Heading 2",
   h3: "Heading 3",

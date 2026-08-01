@@ -93,13 +93,13 @@ assert(
   "Agent runtime contains hard-coded CJK text",
 );
 const reviewRuntimeStart = taskpaneRuntime.indexOf("function paragraphSource");
-const reviewRuntimeEnd = taskpaneRuntime.indexOf("function updateCompareApplyState");
+const reviewRuntimeEnd = taskpaneRuntime.indexOf("const compareOriginalName");
 assert(reviewRuntimeStart > 0 && reviewRuntimeEnd > reviewRuntimeStart, "Review runtime boundaries changed");
 assert(
   !/[\u3400-\u9fff]/u.test(taskpaneRuntime.slice(reviewRuntimeStart, reviewRuntimeEnd)),
   "Review runtime contains hard-coded CJK text",
 );
-const utilityRuntimeStart = taskpaneRuntime.indexOf("function updateCompareApplyState");
+const utilityRuntimeStart = taskpaneRuntime.indexOf("const compareOriginalName");
 assert(utilityRuntimeStart > 0, "Utility runtime boundary changed");
 assert(
   !/[\u3400-\u9fff]/u.test(taskpaneRuntime.slice(utilityRuntimeStart)),

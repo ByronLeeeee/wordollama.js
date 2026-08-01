@@ -31,4 +31,5 @@
   <data name="OAuthTooManyHeaders" xml:space="preserve"><value>Google OAuth callback contains too many headers.</value></data>
   <data name="OAuthFailedTitle" xml:space="preserve"><value>Google OAuth failed</value></data>
   <data name="OllamaProviderRequired" xml:space="preserve"><value>The active provider is not Ollama, so local Ollama models cannot be managed.</value></data>
+  <data name="NoActiveModel" xml:space="preserve"><value>No model is active. Open Settings → Models and activate a model first.</value></data>
 </root>

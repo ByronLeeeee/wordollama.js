@@ -36,7 +36,7 @@ for (const baseline of [
   );
 }
 
-for (const group of ["CreateGroup", "EditGroup", "TranslateGroup", "LegalGroup", "SettingsGroup"]) {
+for (const group of ["CreateGroup", "EditGroup", "EditMoreGroup", "TranslateGroup", "LegalGroup", "SettingsGroup"]) {
   assert(manifest.includes(`WordOllama.JS.${group}`), `missing Ribbon group ${group}`);
 }
 
@@ -66,6 +66,12 @@ assert(
 for (const [resource, taskpane] of [
   ["Writing.Url", "WritingPane"],
   ["Modify.Url", "ModifyPane"],
+  ["Polish.Url", "PolishPane"],
+  ["Expand.Url", "ExpandPane"],
+  ["Simplify.Url", "SimplifyPane"],
+  ["Continue.Url", "ContinuePane"],
+  ["Summarize.Url", "SummarizePane"],
+  ["Fix.Url", "FixPane"],
   ["Image.Url", "ImagePane"],
   ["Table.Url", "TablePane"],
   ["Html.Url", "HtmlPane"],
@@ -73,8 +79,10 @@ for (const [resource, taskpane] of [
   ["Agent.Url", "AgentPane"],
   ["Compare.Url", "ComparePane"],
   ["Translate.Url", "TranslatePane"],
+  ["Risk.Url", "RiskPane"],
+  ["Fairness.Url", "FairnessPane"],
   ["MootCourt.Url", "MootCourtPane"],
-  ["ContractCompare.Url", "ComparePane"],
+  ["ContractCompare.Url", "ContractComparePane"],
   ["LawSearch.Url", "LawSearchPane"],
   ["Review.Url", "ReviewPane"],
   ["CustomPrompts.Url", "CustomPromptPane"],
@@ -110,7 +118,48 @@ assert(
     settingsRpc.includes("messageParent("),
   "Word-dependent settings actions must be proxied through the dialog parent runtime",
 );
-assert(main.includes("applyWorkflowRoute()"), "workflow router is not initialized");
+for (const control of ["Modify", "Polish", "Expand", "Simplify", "Continue", "Summarize", "Fix"]) {
+  assert(
+    compactManifest.includes(`<Controlxsi:type="Button"id="WordOllama.JS.${control}">`),
+    `${control} must be a direct Ribbon button`,
+  );
+}
+assert(!manifest.includes('id="WordOllama.JS.EditMenu"'), "editing commands must not be hidden in a menu");
+assert(!manifest.includes("WordOllama.JS.EditPane"), "editing workflows must not share one Word task pane");
+assert(
+  !manifest.includes('id="WordOllama.JS.CreateMore"') &&
+    !manifest.includes('id="WordOllama.JS.LegalMenu"'),
+  "creation and legal workflows must be direct Ribbon buttons instead of menus",
+);
+for (const control of ["Image", "Table", "Html", "Markdown", "Risk", "Fairness", "MootCourt", "ContractCompare", "Compare", "LawSearch"]) {
+  assert(
+    compactManifest.includes(`<Controlxsi:type="Button"id="WordOllama.JS.${control}">`) &&
+      compactManifest.includes(`resid="${control}.Icon16"`) &&
+      compactManifest.includes(`resid="${control}.Icon32"`) &&
+      compactManifest.includes(`resid="${control}.Icon80"`),
+    `${control} must be a direct Ribbon button with its own icon set`,
+  );
+}
+const legalGroupMarkup = manifest.slice(
+  manifest.indexOf('<Group id="WordOllama.JS.LegalGroup">'),
+  manifest.indexOf('<Group id="WordOllama.JS.SettingsGroup">'),
+);
+assert(
+  legalGroupMarkup.includes('id="WordOllama.JS.Compare"'),
+  "document comparison must be placed in the legal group",
+);
+assert(
+  commands.includes('request.method === "settings.close"') &&
+    commands.includes("dialog?.close()") &&
+    settingsRpc.includes('method: "settings.close"'),
+  "the Ribbon command host must close the settings Office Dialog when requested by the child window",
+);
+assert(main.includes("initializeWorkflowRoute()"), "workflow router is not initialized");
+assert(
+  main.includes('dataset.routePending = "true"') &&
+    main.includes("delete document.documentElement.dataset.routePending"),
+  "deep-linked workflows must hide the Agent shell until their route is ready",
+);
 assert(main.includes("activeSurface"), "focused task-pane surface router is not initialized");
 assert(!manifest.includes('<Items>\n                    <Control'), "menu children must use schema-valid Item elements");
 
@@ -128,9 +177,14 @@ const chineseOverrides = Array.from(
   (match) => match[1],
 );
 assert(
-  chineseOverrides.length === 33 &&
+  chineseOverrides.length === 34 &&
     chineseOverrides.every((value) => /[\u3400-\u9fff]/u.test(value)),
   "all localized Ribbon labels and descriptions must provide zh-CN overrides",
+);
+assert(
+  manifest.includes('id="CustomPrompts.Label" DefaultValue="My Commands"') &&
+    manifest.includes('Locale="zh-CN" Value="我的指令"'),
+  "the reusable command launcher must use the My Commands Ribbon label",
 );
 
 console.log("Office.js Ribbon parity smoke passed (creation, editing, translation, legal and settings routes).");

@@ -116,6 +116,7 @@ function Invoke-Bridge {
         $parameters.ContentType = "application/json"
         $parameters.Body = $Body | ConvertTo-Json -Depth 12
     }
+    Write-Verbose "Bridge request: $Method $Path"
     return Invoke-RestMethod @parameters
 }
 
@@ -220,7 +221,7 @@ try {
         throw "Live Provider profile was not activated."
     }
     $providerTest = Invoke-Bridge -BaseUrl $baseUrl -Token $token -Method Post `
-        -Path "/settings/providers/test" -Body $profile
+        -Path "/settings/providers/models" -Body $profile
     if ($providerTest.provider -ne "OpenAI" -or @($providerTest.models) -notcontains "fake-openai") {
         throw "Live Provider test did not reach the controlled OpenAI-compatible server."
     }

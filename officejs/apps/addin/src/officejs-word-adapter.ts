@@ -5,6 +5,7 @@ import {
 } from "./review-anchor.ts";
 import type { DocumentDiff } from "./contracts.ts";
 import i18n from "./i18n.ts";
+import { buildTextRevisionHunks, occurrenceBefore } from "./text-revision-diff.ts";
 
 export interface WordSelection {
   text: string;
@@ -75,6 +76,16 @@ export function resolveBuiltInStyleName(styleName: string): Word.BuiltInStyleNam
   const headingMatch = /^(?:heading|标题)([1-9])$/.exec(normalized);
   if (headingMatch) return `Heading${headingMatch[1]}` as Word.BuiltInStyleName;
   return BUILT_IN_STYLE_ALIASES[normalized];
+}
+
+function markdownNoteToPlainText(value: string): string {
+  return value
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|mailto:[^)\s]+)\)/giu, "$1 ($2)")
+    .replace(/`([^`\n]+)`/gu, "$1")
+    .replace(/\*\*([^*\n]+)\*\*/gu, "$1")
+    .replace(/~~([^~\n]+)~~/gu, "$1")
+    .replace(/\*([^*\n]+)\*/gu, "$1")
+    .trim();
 }
 
 export class OfficeJsWordAdapter {
@@ -259,6 +270,57 @@ export class OfficeJsWordAdapter {
       selection.insertText(text, Word.InsertLocation.replace);
       await context.sync();
     });
+  }
+
+  async applyPreciseRevision(original: string, revised: string): Promise<boolean> {
+    const hunks = buildTextRevisionHunks(original, revised);
+    if (!hunks.length) return true;
+    const previousTrackingMode = await this.beginTrackedChanges();
+    if (previousTrackingMode === null) {
+      await this.replaceSelection(revised);
+      return false;
+    }
+    try {
+      const precise = await Word.run(async (context) => {
+        const selection = context.document.getSelection();
+        const targets = hunks.map((hunk) => {
+          const needle = hunk.originalText || hunk.rightAnchor || hunk.leftAnchor;
+          const location = hunk.originalText || hunk.rightAnchor ? "replace-or-before" : "after";
+          const needleStart = hunk.originalText
+            ? hunk.originalStart
+            : hunk.rightAnchor
+              ? hunk.originalStart
+              : hunk.originalStart - hunk.leftAnchor.length;
+          if (!needle || needle.length > 200) return null;
+          const matches = selection.search(needle, {
+            matchCase: true,
+            matchWholeWord: false,
+            matchWildcards: false,
+          });
+          matches.load("items/text");
+          return { hunk, matches, location, occurrence: occurrenceBefore(original, needle, needleStart) };
+        });
+        await context.sync();
+        if (targets.some((target) => !target || !target.matches.items[target.occurrence])) return false;
+        for (const target of [...targets].reverse()) {
+          if (!target) return false;
+          const range = target.matches.items[target.occurrence];
+          if (target.hunk.originalText) {
+            range.insertText(target.hunk.revisedText, Word.InsertLocation.replace);
+          } else if (target.location === "replace-or-before") {
+            range.insertText(target.hunk.revisedText, Word.InsertLocation.before);
+          } else {
+            range.insertText(target.hunk.revisedText, Word.InsertLocation.after);
+          }
+        }
+        await context.sync();
+        return true;
+      });
+      if (!precise) await this.replaceSelection(revised);
+      return precise;
+    } finally {
+      await this.restoreTrackedChanges(previousTrackingMode);
+    }
   }
 
   async searchText(keyword: string): Promise<SearchResult> {
@@ -883,10 +945,19 @@ export class OfficeJsWordAdapter {
   }
 
   async insertStyledHtmlBlocksAtSelection(
-    blocks: Array<{ kind: string; html: string }>,
+    blocks: Array<{
+      kind: string;
+      html: string;
+      notes?: Array<{ marker: string; text: string }>;
+    }>,
     styleMappings: Record<string, string>,
+    notePlacement: "footnote" | "endnote" = "footnote",
   ): Promise<void> {
     if (!blocks.length) throw new Error("Markdown blocks must not be empty");
+    if (blocks.some((block) => block.notes?.length) &&
+        !Office.context?.requirements?.isSetSupported?.("WordApi", "1.5")) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.markdownNotesUnsupported"));
+    }
     await Word.run(async (context) => {
       let anchor = context.document.getSelection();
       for (let index = 0; index < blocks.length; index += 1) {
@@ -902,6 +973,27 @@ export class OfficeJsWordAdapter {
             inserted.styleBuiltIn = builtInStyle;
           } else {
             inserted.style = styleName;
+          }
+        }
+        const noteSearches = (block.notes ?? []).map((note) => {
+          const matches = inserted.search(note.marker, {
+            matchCase: true,
+            matchWholeWord: false,
+          });
+          matches.load("items");
+          return { note, matches };
+        });
+        if (noteSearches.length) {
+          await context.sync();
+          for (const { note, matches } of noteSearches) {
+            if (matches.items.length !== 1) {
+              throw new Error(i18n.t("taskpane.wordAdapter.errors.markdownNoteAnchorLost"));
+            }
+            const reference = matches.items[0];
+            const text = markdownNoteToPlainText(note.text);
+            if (notePlacement === "endnote") reference.insertEndnote(text);
+            else reference.insertFootnote(text);
+            reference.delete();
           }
         }
         anchor = inserted;

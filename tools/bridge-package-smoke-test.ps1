@@ -500,6 +500,9 @@ function Assert-MacInstallerDryRun {
     $runtime = "osx-arm64"
     $fixtureVersion = "mac-installer-smoke"
     $fixtureDirectory = Join-Path $buildRootFullPath "$fixtureVersion-$runtime"
+    if (Test-Path -LiteralPath $fixtureDirectory) {
+        Remove-Item -LiteralPath $fixtureDirectory -Recurse -Force
+    }
     New-Item -ItemType Directory -Force -Path $fixtureDirectory | Out-Null
     Set-Content -LiteralPath (Join-Path $fixtureDirectory "WordOllama.DesktopBridge") `
         -Value "signed macOS Bridge fixture" -Encoding utf8NoBOM

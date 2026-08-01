@@ -7,6 +7,17 @@ import { applyOutputLanguage } from "../apps/addin/src/output-language.ts";
 import { selectProviderForAiMode } from "../apps/addin/src/provider-mode.ts";
 import type { ChatMessage } from "../apps/addin/src/contracts.ts";
 import i18n from "../apps/addin/src/i18n.ts";
+import { buildTextRevisionHunks } from "../apps/addin/src/text-revision-diff.ts";
+import {
+  createTextPromptPreset,
+  loadTextPromptPresets,
+  saveTextPromptPresets,
+} from "../apps/addin/src/text-prompt-presets.ts";
+import {
+  loadTextWorkflowPreferences,
+  saveTextWorkflowPreferences,
+  workflowPreference,
+} from "../apps/addin/src/text-workflow-preferences.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Text workflow smoke failed: ${message}`);
@@ -22,8 +33,17 @@ for (const key of [
 }
 assert(TEXT_WORKFLOWS.writing.defaultScope === "none", "writing starts without destructive source");
 assert(TEXT_WORKFLOWS.polish.defaultScope === "selection", "polish targets selection");
-assert(TEXT_WORKFLOWS.summarize.defaultScope === "document", "summarize can load document");
+assert(TEXT_WORKFLOWS.summarize.defaultScope === "selection", "editing workflows start from the selection");
+assert(TEXT_WORKFLOWS.continue.preferredAction === "insert", "continue auto-apply inserts generated text");
+assert(TEXT_WORKFLOWS.summarize.preferredAction === "replace", "summary auto-apply revises the selected source");
+assert(TEXT_WORKFLOWS.fairness.preferredAction === "replace", "fairness auto-apply revises the selected clause");
 assert(TEXT_WORKFLOWS.risk.preferredAction === "comment", "legal risk output must default to a Word comment");
+for (const key of ["modify", "polish", "expand", "simplify", "continue", "summarize", "fix", "fairness", "risk"]) {
+  assert(TEXT_WORKFLOWS[key].supportsAutoApply, `${key} should support automatic document modification`);
+}
+for (const key of ["writing", "translate", "translate-zh", "translate-en"]) {
+  assert(!TEXT_WORKFLOWS[key].supportsAutoApply, `${key} must require an explicit document action`);
+}
 assert(resolveTextWorkflowOutputMode("Auto", TEXT_WORKFLOWS.polish, "短文本") === "InsertBelow",
   "short auto output inserts below");
 assert(resolveTextWorkflowOutputMode("Auto", TEXT_WORKFLOWS.polish, "一\n二\n三\n四\n五\n六\n七\n八") === "ReviewPane",
@@ -112,6 +132,36 @@ assert(runtime.messages[0].content.includes("强制中文"), "language preferenc
 assert(runtime.messages[1].content.includes("正式一些") && runtime.messages[1].content.includes("简洁、专业"),
   "instruction and writing profile applied");
 assert(runtime.signal === controller.signal, "cancellation signal reaches Provider");
+
+const revisionHunks = buildTextRevisionHunks("合同应当立即履行。违约金为十万元。", "合同应当按期履行。违约金为五万元。");
+assert(revisionHunks.length === 2, "precise revisions preserve separate edits");
+assert(revisionHunks[0].originalText.includes("立即") && revisionHunks[1].revisedText.includes("五"),
+  "precise revision hunks retain the changed text");
+
+let promptStorage = "";
+const storage = {
+  getItem: () => promptStorage || null,
+  setItem: (_key: string, value: string) => { promptStorage = value; },
+};
+const savedPreset = createTextPromptPreset("polish", "法律文风", "保持法律术语准确");
+saveTextPromptPresets(storage, [savedPreset]);
+assert(loadTextPromptPresets(storage)[0]?.instruction === "保持法律术语准确",
+  "multiple text tools can persist their own prompt presets");
+let preferenceStorage = "";
+const preferencesStorage = {
+  getItem: () => preferenceStorage || null,
+  setItem: (_key: string, value: string) => { preferenceStorage = value; },
+};
+saveTextWorkflowPreferences(preferencesStorage, {
+  polish: { defaultPresetId: savedPreset.id, autoApply: true },
+});
+const preferences = loadTextWorkflowPreferences(preferencesStorage);
+assert(workflowPreference(preferences, "polish").defaultPresetId === savedPreset.id,
+  "each editing workflow persists its own default prompt");
+assert(workflowPreference(preferences, "polish").autoApply,
+  "each editing workflow persists its automatic apply preference");
+assert(!workflowPreference(preferences, "expand").autoApply,
+  "automatic apply is opt-in per workflow");
 
 await generateTextWorkflow(
   runtime as never,

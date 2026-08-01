@@ -6,7 +6,8 @@ type DialogCommandEvent = {
 
 type DialogRequest =
   | { id: string; method: "word.listStyles" }
-  | { id: string; method: "word.createParagraphStyle"; name: string };
+  | { id: string; method: "word.createParagraphStyle"; name: string }
+  | { id: string; method: "settings.close" };
 
 type DialogResponse = {
   id: string;
@@ -32,6 +33,13 @@ async function handleDialogMessage(event: { message: string }): Promise<void> {
   try {
     request = JSON.parse(event.message) as DialogRequest;
   } catch {
+    return;
+  }
+
+  if (request.method === "settings.close") {
+    const dialog = settingsDialog;
+    settingsDialog = null;
+    dialog?.close();
     return;
   }
 

@@ -29,7 +29,9 @@ public sealed class AgentSession
     private readonly bool _requirePlanConfirmation;
     private readonly int _maxIterations;
     private readonly string _executionMode;
-    private readonly bool _allowExternalTools;
+    private readonly bool _allowLocalTools;
+    private readonly bool _allowNetworkTools;
+    private readonly bool _allowMcpTools;
     private readonly double? _temperature;
     private readonly int? _maxTokens;
     private readonly int? _contextWindow;
@@ -64,7 +66,11 @@ public sealed class AgentSession
         _requirePlanConfirmation = request.RequirePlanConfirmation;
         _maxIterations = request.MaxIterations <= 0 ? int.MaxValue : Math.Clamp(request.MaxIterations, 1, 1000);
         _executionMode = NormalizeExecutionMode(request.ExecutionMode);
-        _allowExternalTools = request.AllowExternalTools;
+        // The legacy aggregate switch remains a compatibility fallback for
+        // settings written before permissions were split by capability.
+        _allowLocalTools = request.AllowLocalTools ?? request.AllowExternalTools;
+        _allowNetworkTools = request.AllowNetworkTools ?? request.AllowExternalTools;
+        _allowMcpTools = request.AllowMcpTools ?? request.AllowExternalTools;
         _temperature = request.Temperature;
         _maxTokens = request.MaxTokens;
         _contextWindow = request.ContextWindow;
@@ -78,7 +84,7 @@ public sealed class AgentSession
         _advertisedTools = _tools
             .Where(tool => (_executionMode == "TrackedChanges" || !tool.IsWriteOperation) &&
                 (!internalToolNames.Contains(tool.Name) ||
-                 _allowExternalTools ||
+                 IsInternalToolAllowed(tool.Name) ||
                  string.Equals(tool.Name, "read_skill", StringComparison.OrdinalIgnoreCase)))
             .ToArray();
         if (!_requirePlanConfirmation || _isRecovered)
@@ -296,7 +302,7 @@ public sealed class AgentSession
                     var internalTool = _internalTools.FirstOrDefault(tool => tool.IsKnownTool(call.Name));
                     if (internalTool is not null)
                     {
-                        if (!_allowExternalTools && !string.Equals(call.Name, "read_skill", StringComparison.OrdinalIgnoreCase))
+                        if (!IsInternalToolAllowed(call.Name))
                         {
                             var blocked = Localize("AgentExternalToolDisabled", call.Name);
                             _messages.Add(new ChatMessage("tool", JsonSerializer.Serialize(new { error = blocked }),
@@ -448,6 +454,26 @@ public sealed class AgentSession
             Publish(new RuntimeEvent("failed", Message: exception.Message));
             Complete(deleteRecovery: false);
         }
+    }
+
+    private bool IsInternalToolAllowed(string name)
+    {
+        if (string.Equals(name, "read_skill", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (name.StartsWith("mcp__", StringComparison.OrdinalIgnoreCase))
+        {
+            return _allowMcpTools;
+        }
+
+        if (string.Equals(name, "http_request", StringComparison.OrdinalIgnoreCase))
+        {
+            return _allowNetworkTools;
+        }
+
+        return _allowLocalTools;
     }
 
     private static string NormalizeExecutionMode(string? value) =>

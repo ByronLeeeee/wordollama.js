@@ -261,6 +261,9 @@ export interface AgentStartOptions {
   maxIterations: number;
   executionMode: "ViewOnly" | "ProposeChanges" | "TrackedChanges";
   allowExternalTools: boolean;
+  allowLocalTools: boolean;
+  allowNetworkTools: boolean;
+  allowMcpTools: boolean;
   languageMode: "auto" | "zh" | "en" | "source";
   uiLocale: "en-US" | "zh-CN";
 }

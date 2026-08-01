@@ -9,6 +9,7 @@ export interface TextWorkflowDefinition {
   defaultInstruction: string;
   systemPrompt: string;
   defaultScope: "selection" | "document" | "none";
+  supportsAutoApply: boolean;
   preferredAction?: "replace" | "insert" | "comment";
 }
 
@@ -57,6 +58,7 @@ function localizedWorkflow(
   key: string,
   resourceKey: string,
   defaultScope: TextWorkflowDefinition["defaultScope"],
+  supportsAutoApply = false,
   preferredAction?: TextWorkflowDefinition["preferredAction"],
 ): TextWorkflowDefinition {
   const path = `taskpane.workflows.${resourceKey}`;
@@ -67,24 +69,25 @@ function localizedWorkflow(
     get defaultInstruction() { return i18n.t(`${path}.defaultInstruction`); },
     get systemPrompt() { return i18n.t(`${path}.systemPrompt`); },
     defaultScope,
+    supportsAutoApply,
     preferredAction,
   };
 }
 
 export const TEXT_WORKFLOWS: Record<string, TextWorkflowDefinition> = {
   writing: localizedWorkflow("writing", "writing", "none"),
-  modify: localizedWorkflow("modify", "modify", "selection"),
-  polish: localizedWorkflow("polish", "polish", "selection"),
-  expand: localizedWorkflow("expand", "expand", "selection"),
-  simplify: localizedWorkflow("simplify", "simplify", "selection"),
-  continue: localizedWorkflow("continue", "continue", "selection"),
-  summarize: localizedWorkflow("summarize", "summarize", "document"),
-  fix: localizedWorkflow("fix", "fix", "selection"),
+  modify: localizedWorkflow("modify", "modify", "selection", true),
+  polish: localizedWorkflow("polish", "polish", "selection", true),
+  expand: localizedWorkflow("expand", "expand", "selection", true),
+  simplify: localizedWorkflow("simplify", "simplify", "selection", true),
+  continue: localizedWorkflow("continue", "continue", "selection", true, "insert"),
+  summarize: localizedWorkflow("summarize", "summarize", "selection", true, "replace"),
+  fix: localizedWorkflow("fix", "fix", "selection", true),
   translate: localizedWorkflow("translate", "translate", "selection"),
   "translate-zh": localizedWorkflow("translate-zh", "translateZh", "selection"),
   "translate-en": localizedWorkflow("translate-en", "translateEn", "selection"),
-  fairness: localizedWorkflow("fairness", "fairness", "selection"),
-  risk: localizedWorkflow("risk", "risk", "selection", "comment"),
+  fairness: localizedWorkflow("fairness", "fairness", "selection", true, "replace"),
+  risk: localizedWorkflow("risk", "risk", "selection", true, "comment"),
 };
 
 export async function generateTextWorkflow(

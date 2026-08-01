@@ -39,6 +39,15 @@ import i18n from "./i18n";
 
 const tr = (key: string, values?: Record<string, unknown>): string =>
   i18n.t(key, values);
+
+async function responseError(response: Response, fallback: string): Promise<Error> {
+  try {
+    const payload = await response.json() as { error?: string; detail?: string };
+    return new Error(payload.error ?? payload.detail ?? fallback);
+  } catch {
+    return new Error(fallback);
+  }
+}
 import {
   applyOutputLanguage,
   type OutputLanguageMode,
@@ -197,7 +206,12 @@ export class RuntimeClient {
     return response.json() as Promise<ToolCatalogResponse>;
   }
 
-  async chat(messages: ChatMessage[], model?: string, signal?: AbortSignal): Promise<ProviderChatResponse> {
+  async chat(
+    messages: ChatMessage[],
+    model?: string,
+    signal?: AbortSignal,
+    providerProfileId?: string,
+  ): Promise<ProviderChatResponse> {
     if (!this.sessionToken) {
       throw new Error(tr("runtime.pairFirst"));
     }
@@ -211,12 +225,13 @@ export class RuntimeClient {
       body: JSON.stringify({
         messages: applyOutputLanguage(messages, this.outputLanguage),
         model,
+        providerProfileId,
       }),
       signal,
     });
 
     if (!response.ok) {
-      throw new Error(tr("runtime.providerRequestFailed", { status: response.status }));
+      throw await responseError(response, tr("runtime.providerRequestFailed", { status: response.status }));
     }
     return response.json() as Promise<ProviderChatResponse>;
   }
@@ -243,7 +258,7 @@ export class RuntimeClient {
       signal,
     });
     if (!response.ok || !response.body) {
-      throw new Error(tr("runtime.providerStreamFailed", { status: response.status }));
+      throw await responseError(response, tr("runtime.providerStreamFailed", { status: response.status }));
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -302,7 +317,7 @@ export class RuntimeClient {
     });
 
     if (!response.ok) {
-      throw new Error(tr("runtime.agentStartFailed", { status: response.status }));
+      throw await responseError(response, tr("runtime.agentStartFailed", { status: response.status }));
     }
     return response.json() as Promise<AgentStartResponse>;
   }

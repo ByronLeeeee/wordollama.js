@@ -25,6 +25,14 @@ Agent checkpoint 会以 AES-256-GCM 加密写入用户配置目录，随机加�
 
 本地能力已加入 Bridge：`/local/execute-command`、`/local/run-python`、`/local/grep`、`/skills` 和 `/skills/read`。命令使用结构化参数、可执行文件白名单和授权根目录；路径会检查实际文件/目录链接，越界 grep 实测返回 403。高风险 `http_request` 只有在 `Bridge:LocalTools:AllowHttpRequests=true` 时才会注册，并且只允许 HTTPS。
 
+Agent 权限按能力独立控制：本地代码与进程、直接 HTTPS 请求、已授权 MCP 工具
+分别有自己的设置开关。旧版 `allowExternalTools` 数据会在读取时迁移，但新会话会
+把三类权限分别发送给 Bridge；`read_skill` 始终只读可用，本地执行和 HTTP 请求仍
+需要逐次确认。当前执行器不会调用 Shell 解析器，也没有通用文件写入工具：可以运行
+白名单中的 Python/.NET 或 Skill 已带的脚本，但不能默认创建任意脚本、使用管道或
+执行 PowerShell/CMD。需要稳定自动化时优先封装为 Skill/MCP；临时代码工作区方案见
+仓库根目录 `TODO.md`。
+
 文档对比提供 `/documents/compare` 跨平台 v2 引擎：先按正文段落、标题样式和表格单元格进行 LCS/唯一锚点对齐，避免中间插入造成后续级联误报，再为修改块返回词级位置、原/新段落索引、OOXML 位置和结构摘要。任务窗格支持选择两份 DOCX、预览并复制完整 JSON；结果继续明确标记 `isApproximate`，不冒充 Word 原生修订文档。
 
 Agent 对本地工具采用 Bridge 内部执行，事件中标记 `execution: "bridge"`，Office.js 不会重复执行；假 Ollama 实测 `execute_command` 调用、结果回传和 Agent 完成事件均正常。
@@ -55,8 +63,8 @@ Gemini Provider 保留 OAuth 登录能力，但不会复制 VSTO 版把短期 ac
 
 2026-07-29 已在 Windows Word 16.0.20228.20110（zh-CN）通过 36/36 真实宿主金样本，报告位于 `../docs/evidence/windows-word-16.0.20228.20110-golden-2026-07-29.json`。同一真实宿主还通过 1,000/5,000 段长文档验收，覆盖全文读取、末端分块、语义映射和模拟共同编辑后的稳定锚点重定位；原始报告位于 `../docs/evidence/windows-word-16.0.20228.20110-long-document-2026-07-29.json`。`WordApiDesktop 1.4` 修订运行器也已通过读取、定位、单项接受/拒绝和全部接受，报告位于 `../docs/evidence/windows-word-16.0.20228.20110-revisions-2026-07-29.json`；缺少相应要求集的旧宿主由自动化回归验证明确降级。Word WebView2 不可靠支持原生 `window.confirm()`/`window.prompt()`，因此危险测试确认与 `ask_human` 均使用任务窗格内 HTML 交互。
 
-Ribbon 不再把所有命令复用到一个拥挤容器，也不再把 Office.js 命令混进“开始”页或现有 COM 页签。Manifest 建立独立的 `WordOllama.JS` 自定义页签，并以不同 `TaskpaneId` 建立 Agent、自由创作、按需修改、图片、表格、HTML、Markdown、编辑、翻译、文档比较、文档审阅、法律通用、模拟法庭、法律检索、自定义提示词、设置和诊断窗格。前端仍使用同一个 TypeScript bundle，通过 `surface` 与 `workflow` 路由显示对应工作区，因此 Windows/Mac 保持统一实现而不牺牲原 WordOllama 的多窗口结构。不同 `TaskpaneId` 的真实 Windows/Mac 并存行为仍须在发布宿主中逐项验收。
+Ribbon 不再把所有命令复用到一个拥挤容器，也不再把 Office.js 命令混进“开始”页或现有 COM 页签。Manifest 建立独立的 `WordOllama.JS` 自定义页签，并通过稳定的 `TaskpaneId` 打开 Agent、编辑、翻译、比较、审阅、法律工具和“我的指令”等工作区。用户自定义提示词统一收拢到“我的指令”：右侧快捷面板提供搜索、收藏、最近使用和管理，点击列表项后直接读取当前选区并流式执行；旧版 C1–C4 快捷槽会自动迁移为收藏。前端仍使用同一个 TypeScript bundle，通过 `surface` 与 `workflow` 路由显示对应工作区，Windows/Mac 保持统一实现。不同 `TaskpaneId` 的真实 Windows/Mac 并存行为仍须在发布宿主中逐项验收。
 
-基础设置不再只是浏览器偏好：AI 模式会切换 Desktop Bridge 的活动 Provider，输出语言会约束普通聊天、专用工作流和 Agent，默认输出模式会按选区稳定性安全选择插入、修订、替换、批注或交给独立审阅窗格。Agent 完成 Word 写操作后可按偏好提示审阅；支持 `WordApiDesktop 1.4` 的 Windows/Mac Word 可在“文档审阅”窗格读取、定位、逐项接受/拒绝或批量处理真实 Word 修订，旧宿主会明确降级。
+基础设置不再只是浏览器偏好：模型页管理可切换的 Provider/模型配置，基础页保存记忆和输出偏向，默认文档操作会按选区稳定性安全选择插入、修订、替换、批注或交给独立审阅窗格。Agent 完成 Word 写操作后可按偏好提示审阅；支持 `WordApiDesktop 1.4` 的 Windows/Mac Word 可在“文档审阅”窗格读取、定位、逐项接受/拒绝或批量处理真实 Word 修订，旧宿主会明确降级。
 
 设置使用独立 `settings.html` React 应用（React 19、TypeScript 7、Vite 8、Tailwind CSS 4、daisyUI 5、i18next），Skills 与 MCP 分页呈现。界面默认跟随 Office 显示语言，当前提供 `en-US` 与 `zh-CN`，并由 `test:settings-i18n` 强制校验资源键、翻译引用和“实现源码不得写死中文”。发布包必须包含 `settings.html`。

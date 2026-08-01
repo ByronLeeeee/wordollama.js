@@ -273,6 +273,35 @@ body {
   gap: 12px 18px;
 }
 
+.settings-single-column {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-markdown-note-placement {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--color-base-300);
+}
+
+.settings-markdown-note-label {
+  display: block;
+  color: color-mix(in srgb, var(--color-base-content) 76%, transparent);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.settings-markdown-note-placement > .select {
+  width: 100%;
+  min-width: 0;
+}
+
 .settings-markdown-style-field {
   min-width: 0;
   padding: 0;
@@ -287,15 +316,6 @@ body {
 
 .settings-markdown-style-field > .select {
   width: 100%;
-}
-
-.settings-style-create {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-base-300);
 }
 
 .settings-grid {
@@ -335,6 +355,13 @@ body {
 
 .settings-form-grid > .settings-row-wide {
   grid-column: 1 / -1;
+}
+
+.settings-form-grid > .settings-help {
+  margin: -3px 0 2px;
+  color: color-mix(in srgb, var(--color-base-content) 58%, transparent);
+  font-size: 10px;
+  line-height: 1.5;
 }
 
 .settings-grid .settings-form-grid,
@@ -453,7 +480,7 @@ body {
   background: var(--color-base-100);
 }
 
-.settings-saved-model-row > .settings-saved-model-mark {
+.settings-saved-model-row > .settings-provider-icon {
   grid-column: 1;
   grid-row: 1;
 }
@@ -473,7 +500,7 @@ body {
   background: color-mix(in srgb, var(--color-primary) 5%, var(--color-base-100));
 }
 
-.settings-saved-model-mark {
+.settings-provider-icon {
   display: grid;
   width: 32px;
   height: 32px;
@@ -481,13 +508,30 @@ body {
   border-radius: var(--radius-field);
   background: var(--color-base-200);
   color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
-  font-size: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-base-content) 10%, transparent);
+  font-size: 10px;
   font-weight: 750;
+  letter-spacing: -0.03em;
 }
 
-.settings-saved-model-row.active .settings-saved-model-mark {
-  background: var(--color-primary);
-  color: var(--color-primary-content);
+.settings-provider-icon[data-provider="ollama"] { background: #111827; color: #fff; }
+.settings-provider-icon[data-provider="openai"] { background: #0f766e; color: #fff; }
+.settings-provider-icon[data-provider="deepseek"] { background: #4d6bfe; color: #fff; }
+.settings-provider-icon[data-provider="qwen"] { background: #615ced; color: #fff; }
+.settings-provider-icon[data-provider="doubao"] { background: #2f6bff; color: #fff; }
+.settings-provider-icon[data-provider="zhipu"] { background: #2457d6; color: #fff; }
+.settings-provider-icon[data-provider="kimi"] { background: #111827; color: #fff; }
+.settings-provider-icon[data-provider="siliconflow"] { background: #0f9f6e; color: #fff; }
+.settings-provider-icon[data-provider="minimax"] { background: #ee3f58; color: #fff; }
+.settings-provider-icon[data-provider="claude"] { background: #d97757; color: #fff; }
+.settings-provider-icon[data-provider="gemini"] { background: #4f65d6; color: #fff; }
+.settings-provider-icon[data-provider="lm-studio"] { background: #111827; color: #fff; }
+.settings-provider-icon[data-provider="vllm"] { background: #7c3aed; color: #fff; }
+.settings-provider-icon[data-provider="llama-cpp"] { background: #374151; color: #fff; }
+
+.settings-saved-model-row.active .settings-provider-icon {
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
+  outline-offset: 2px;
 }
 
 .settings-saved-model-title {
@@ -502,6 +546,19 @@ body {
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: 12px;
+}
+
+.settings-switch-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.settings-switch-copy small {
+  color: color-mix(in oklab, var(--color-base-content) 58%, transparent);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
 }
 
 .settings-saved-model-meta {
@@ -720,6 +777,68 @@ body {
 
 .settings-skill-preview > :last-child {
   margin-bottom: 0;
+}
+
+.settings-skill-preview .markdown-frontmatter {
+  overflow: hidden;
+  margin: 0 0 20px;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-field);
+  background: color-mix(in srgb, var(--color-base-200) 58%, var(--color-base-100));
+}
+
+.settings-skill-preview .markdown-frontmatter-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(100px, 150px) minmax(0, 1fr);
+  gap: 14px;
+  padding: 7px 11px;
+  line-height: 1.5;
+}
+
+.settings-skill-preview .markdown-frontmatter-row + .markdown-frontmatter-row {
+  border-top: 1px solid var(--color-base-300);
+}
+
+.settings-skill-preview .markdown-frontmatter-key {
+  min-width: 0;
+  color: color-mix(in srgb, var(--color-base-content) 62%, transparent);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.settings-skill-preview .markdown-frontmatter-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-skill-preview .markdown-frontmatter-group {
+  background: color-mix(in srgb, var(--color-base-200) 82%, var(--color-base-100));
+}
+
+.settings-skill-preview .markdown-frontmatter-group .markdown-frontmatter-value {
+  display: none;
+}
+
+.settings-skill-preview .markdown-frontmatter-depth-1 .markdown-frontmatter-key {
+  padding-left: 12px;
+}
+
+.settings-skill-preview .markdown-frontmatter-depth-2 .markdown-frontmatter-key {
+  padding-left: 24px;
+}
+
+.settings-skill-preview .markdown-frontmatter-depth-3 .markdown-frontmatter-key,
+.settings-skill-preview .markdown-frontmatter-depth-4 .markdown-frontmatter-key {
+  padding-left: 36px;
+}
+
+.settings-skill-preview .markdown-frontmatter-continuation .markdown-frontmatter-value {
+  grid-column: 1 / -1;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  white-space: pre-wrap;
 }
 
 .settings-skill-preview h1,
@@ -995,6 +1114,57 @@ body {
   gap: 10px;
 }
 
+.settings-file-picker {
+  display: grid;
+  min-width: 0;
+  min-height: 34px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-field);
+  background: var(--color-base-100);
+  cursor: pointer;
+}
+
+.settings-file-picker:focus-within {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.settings-file-picker-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.settings-file-picker-button,
+.settings-file-picker-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: 0 11px;
+  font-size: 11px;
+}
+
+.settings-file-picker-button {
+  border-right: 1px solid var(--color-base-300);
+  background: var(--color-base-200);
+  color: var(--color-base-content);
+  font-weight: 650;
+}
+
+.settings-file-picker-name {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--color-base-content) 62%, transparent);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-about-copy {
   display: grid;
   gap: 12px;
@@ -1024,12 +1194,12 @@ body {
 
 .settings-section-stack {
   display: grid;
-  gap: 18px;
+  gap: 16px;
 }
 
 .settings-preference-section {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .settings-preference-section + .settings-preference-section,
@@ -1045,22 +1215,73 @@ body {
 }
 
 .settings-preference-section p {
-  margin: -6px 0 0;
+  margin: 2px 0 0;
   color: color-mix(in srgb, var(--color-base-content) 58%, transparent);
   font-size: 11px;
 }
 
+.settings-general-page .settings-card-header {
+  padding: 15px 20px 12px;
+}
+
+.settings-general-page .settings-card-body {
+  padding: 16px 20px 18px;
+}
+
+.settings-control-list {
+  overflow: hidden;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-field);
+  background: var(--color-base-100);
+}
+
+.settings-control-row {
+  display: grid;
+  min-height: 48px;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 280px);
+  align-items: center;
+  gap: 18px;
+  padding: 7px 12px;
+}
+
+.settings-control-row + .settings-control-row {
+  border-top: 1px solid var(--color-base-300);
+}
+
+.settings-control-label {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-control-row > .select {
+  width: 100%;
+}
+
+.settings-control-row > .toggle {
+  justify-self: end;
+}
+
+.settings-output-mode {
+  margin-top: 2px;
+}
+
 .settings-preference-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
 
-.settings-preference-heading .settings-switch-row {
+.settings-inline-toggle {
+  display: flex;
   min-height: 34px;
   flex: none;
-  padding: 5px 9px;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .settings-memory-toolbar,
@@ -1073,8 +1294,9 @@ body {
 }
 
 .settings-memory-toolbar {
-  min-height: 34px;
+  min-height: 32px;
   flex-wrap: wrap;
+  padding-bottom: 2px;
 }
 
 .settings-memory-select-all {
@@ -1085,6 +1307,12 @@ body {
 .settings-memory-list {
   display: grid;
   gap: 6px;
+}
+
+.settings-memory-list > .settings-list-empty {
+  min-height: 82px;
+  border-style: dashed;
+  background: color-mix(in srgb, var(--color-base-200) 48%, var(--color-base-100));
 }
 
 .settings-memory-row {
@@ -1108,6 +1336,10 @@ body {
 
 .settings-memory-add > .input {
   flex: 1;
+}
+
+.settings-memory-add > .btn {
+  min-width: 76px;
 }
 
 @media (max-width: 1080px) {
@@ -1139,12 +1371,29 @@ body {
 }
 
 @media (max-width: 760px) {
+  .settings-skill-preview .markdown-frontmatter-row {
+    grid-template-columns: minmax(82px, 112px) minmax(0, 1fr);
+    gap: 9px;
+  }
+
   .settings-preference-heading {
     display: grid;
   }
 
-  .settings-preference-heading .settings-switch-row {
+  .settings-inline-toggle {
     width: 100%;
+    justify-content: space-between;
+    padding-left: 0;
+  }
+
+  .settings-control-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+    padding: 10px 11px;
+  }
+
+  .settings-control-row > .toggle {
+    justify-self: start;
   }
 
   .settings-memory-row {
@@ -1207,10 +1456,6 @@ body {
   }
 
   .settings-markdown-style-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .settings-style-create {
     grid-template-columns: minmax(0, 1fr);
   }
 

@@ -38,10 +38,20 @@ import {
 } from "./review-workspace";
 import {
   generateTextWorkflow,
-  resolveTextWorkflowOutputMode,
   TEXT_WORKFLOWS,
   type TextWorkflowDefinition,
 } from "./text-workflow";
+import {
+  createTextPromptPreset,
+  loadTextPromptPresets,
+  saveTextPromptPresets,
+  type TextPromptPreset,
+} from "./text-prompt-presets";
+import {
+  loadTextWorkflowPreferences,
+  saveTextWorkflowPreferences,
+  workflowPreference,
+} from "./text-workflow-preferences";
 import {
   generateStructuredTable,
   type StructuredTable,
@@ -105,6 +115,28 @@ import {
   formatPermissionParams,
 } from "./permission-scope";
 
+type AddinSurface = "agent" | "create" | "edit" | "review" | "legal" | "settings" | "diagnostics" | "compare";
+
+const routeParams = new URLSearchParams(window.location.search);
+const requestedSurface = routeParams.get("surface");
+const requestedWorkflow = routeParams.get("workflow");
+const activeSurface: AddinSurface = (
+  requestedSurface === "create" ||
+  requestedSurface === "edit" ||
+  requestedSurface === "review" ||
+  requestedSurface === "legal" ||
+  requestedSurface === "settings" ||
+  requestedSurface === "diagnostics" ||
+  requestedSurface === "compare"
+) ? requestedSurface : "agent";
+document.documentElement.dataset.surface = activeSurface;
+if (requestedWorkflow && requestedWorkflow !== "agent") {
+  document.documentElement.dataset.routePending = "true";
+}
+if (activeSurface === "settings" || activeSurface === "diagnostics" || activeSurface === "compare") {
+  document.documentElement.dataset.standaloneDialog = "true";
+}
+
 mountTaskpaneApp();
 
 function localizeStaticDocument(): void {
@@ -129,27 +161,13 @@ function localizeStaticDocument(): void {
 localizeStaticDocument();
 i18n.on("languageChanged", () => {
   localizeStaticDocument();
+  if (activeTextWorkflow) {
+    renderWorkflowPromptSelect(required<HTMLSelectElement>("#workflow-prompt-select").value);
+    renderWorkflowPromptList();
+    syncTextWorkflowPreferenceUi();
+  }
   void refreshRuntimeStatus();
 });
-
-type AddinSurface = "agent" | "create" | "edit" | "review" | "legal" | "settings" | "diagnostics" | "compare";
-
-const routeParams = new URLSearchParams(window.location.search);
-const requestedSurface = routeParams.get("surface");
-const requestedWorkflow = routeParams.get("workflow");
-const activeSurface: AddinSurface = (
-  requestedSurface === "create" ||
-  requestedSurface === "edit" ||
-  requestedSurface === "review" ||
-  requestedSurface === "legal" ||
-  requestedSurface === "settings" ||
-  requestedSurface === "diagnostics" ||
-  requestedSurface === "compare"
-) ? requestedSurface : "agent";
-document.documentElement.dataset.surface = activeSurface;
-if (activeSurface === "settings" || activeSurface === "diagnostics" || activeSurface === "compare") {
-  document.documentElement.dataset.standaloneDialog = "true";
-}
 
 const word = new OfficeJsWordAdapter(requestHumanInput);
 const tools = new OfficeJsToolRegistry(word);
@@ -285,8 +303,11 @@ let currentReviewFingerprint = "";
 let activeTextWorkflow: TextWorkflowDefinition | null = null;
 let textWorkflowSource = "";
 let textWorkflowScope: "selection" | "document" | "none" = "none";
-let textWorkflowOriginalSelection = "";
+let textWorkflowSelectionBaseline = "";
 let textWorkflowAbortController: AbortController | null = null;
+let textWorkflowAutoApplyPending = false;
+let textPromptPresets: TextPromptPreset[] = loadTextPromptPresets(localStorage);
+let textWorkflowPreferences = loadTextWorkflowPreferences(localStorage);
 let generatedTable: StructuredTable | null = null;
 let tableAbortController: AbortController | null = null;
 let convertedMarkdownHtml = "";
@@ -628,12 +649,10 @@ function updateTextWorkflowActions(): void {
   const hasResult = textWorkflowAbortController === null && Boolean(resultValue);
   required<HTMLElement>("#workflow-output").hidden = !resultValue;
   const selectionTarget = textWorkflowScope === "selection";
-  const commentOnly = activeTextWorkflow?.preferredAction === "comment";
-  required<HTMLButtonElement>("#workflow-apply-default").disabled = !hasResult;
-  required<HTMLButtonElement>("#workflow-replace").disabled = !hasResult || !selectionTarget || commentOnly;
-  required<HTMLButtonElement>("#workflow-comment").disabled =
-    !hasResult || !selectionTarget || !word.supportsTool("add_comment");
-  required<HTMLButtonElement>("#workflow-insert").disabled = !hasResult || commentOnly;
+  required<HTMLButtonElement>("#workflow-retry").disabled = textWorkflowAbortController !== null;
+  required<HTMLButtonElement>("#workflow-replace").disabled = !hasResult || !selectionTarget;
+  required<HTMLButtonElement>("#workflow-precise-revision").disabled = !hasResult || !selectionTarget;
+  required<HTMLButtonElement>("#workflow-insert").disabled = !hasResult;
   required<HTMLButtonElement>("#workflow-copy").disabled = !hasResult;
 }
 
@@ -647,20 +666,6 @@ interface ReviewHandoff {
   createdAt: string;
 }
 
-function updateDefaultOutputButtonLabel(): void {
-  const settings = readLocalSettings("wordollama-general-settings", { outputMode: "Auto" });
-  const labels: Record<string, string> = {
-    Auto: i18n.t("taskpane.text.defaultAuto"),
-    InsertBelow: i18n.t("taskpane.text.defaultInsert"),
-    InsertBelowWithDiff: i18n.t("taskpane.text.defaultDiff"),
-    ReplaceOriginal: i18n.t("taskpane.text.defaultReplace"),
-    Comment: i18n.t("taskpane.text.defaultComment"),
-    ReviewPane: i18n.t("taskpane.text.sendToReview"),
-  };
-  required<HTMLButtonElement>("#workflow-apply-default").textContent =
-    labels[settings.outputMode] ?? labels.Auto;
-}
-
 function setTextWorkflowSource(
   scope: "selection" | "document" | "none",
   source: string,
@@ -668,18 +673,129 @@ function setTextWorkflowSource(
 ): void {
   textWorkflowScope = scope;
   textWorkflowSource = source;
-  if (scope !== "selection") textWorkflowOriginalSelection = "";
+  if (scope !== "selection") {
+    textWorkflowSelectionBaseline = "";
+  }
   required<HTMLElement>("#workflow-source-status").textContent = label;
-  const preview = required<HTMLElement>("#workflow-source-preview");
-  preview.hidden = !source;
-  preview.textContent = source.length > 800 ? `${source.slice(0, 800)}…` : source;
+  required<HTMLTextAreaElement>("#workflow-source-text").value = source;
   updateTextWorkflowActions();
+}
+
+function workflowPresets(): TextPromptPreset[] {
+  if (!activeTextWorkflow) return [];
+  return textPromptPresets.filter((preset) => preset.workflowKey === activeTextWorkflow!.key);
+}
+
+function renderWorkflowPromptSelect(selectedId = "builtin"): void {
+  if (!activeTextWorkflow) return;
+  const select = required<HTMLSelectElement>("#workflow-prompt-select");
+  select.replaceChildren();
+  const builtin = document.createElement("option");
+  builtin.value = "builtin";
+  builtin.textContent = i18n.t("taskpane.text.builtinPrompt");
+  select.appendChild(builtin);
+  for (const preset of workflowPresets()) {
+    const option = document.createElement("option");
+    option.value = preset.id;
+    option.textContent = preset.name;
+    select.appendChild(option);
+  }
+  select.value = Array.from(select.options).some((option) => option.value === selectedId)
+    ? selectedId
+    : "builtin";
+}
+
+function applySelectedWorkflowPrompt(): void {
+  if (!activeTextWorkflow) return;
+  const id = required<HTMLSelectElement>("#workflow-prompt-select").value;
+  const preset = textPromptPresets.find((item) => item.id === id);
+  required<HTMLTextAreaElement>("#workflow-instruction").value =
+    preset?.instruction ?? activeTextWorkflow.defaultInstruction;
+}
+
+function syncTextWorkflowPreferenceUi(): void {
+  if (!activeTextWorkflow) return;
+  const preference = workflowPreference(textWorkflowPreferences, activeTextWorkflow.key);
+  const selectedId = required<HTMLSelectElement>("#workflow-prompt-select").value;
+  const defaultButton = required<HTMLButtonElement>("#workflow-set-default-prompt");
+  const active = selectedId === preference.defaultPresetId;
+  defaultButton.classList.toggle("btn-primary", active);
+  defaultButton.classList.toggle("btn-ghost", !active);
+  defaultButton.textContent = i18n.t(active
+    ? "taskpane.text.defaultPromptActive"
+    : "taskpane.text.setDefaultPrompt");
+  const autoApply = required<HTMLInputElement>("#workflow-auto-apply");
+  const autoApplyOption = required<HTMLElement>(".workflow-auto-apply-option");
+  autoApplyOption.hidden = !activeTextWorkflow.supportsAutoApply;
+  autoApply.checked = activeTextWorkflow.supportsAutoApply && preference.autoApply;
+  autoApply.disabled = !activeTextWorkflow.supportsAutoApply;
+}
+
+function renderWorkflowPromptList(): void {
+  const list = required<HTMLUListElement>("#workflow-prompt-list");
+  list.replaceChildren();
+  const presets = workflowPresets();
+  if (!presets.length) {
+    const empty = document.createElement("li");
+    empty.className = "p-4 text-xs opacity-60 tracking-wide workflow-prompt-empty";
+    empty.textContent = i18n.t("taskpane.text.noSavedPrompts");
+    list.appendChild(empty);
+    return;
+  }
+  for (const preset of presets) {
+    const row = document.createElement("li");
+    row.className = "list-row workflow-prompt-row";
+    const content = document.createElement("div");
+    content.className = "list-col-grow workflow-prompt-row-main";
+    const title = document.createElement("div");
+    title.className = "font-semibold";
+    title.textContent = preset.name;
+    const detail = document.createElement("div");
+    detail.className = "text-xs opacity-60 workflow-prompt-detail";
+    detail.textContent = preset.instruction;
+    content.append(title, detail);
+    const edit = document.createElement("button");
+    edit.className = "btn btn-square btn-ghost btn-xs";
+    edit.type = "button";
+    edit.title = i18n.t("taskpane.common.edit");
+    edit.setAttribute("aria-label", edit.title);
+    edit.innerHTML = '<svg class="size-[1em]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+    edit.addEventListener("click", () => {
+      required<HTMLInputElement>("#workflow-prompt-name").value = preset.name;
+      required<HTMLTextAreaElement>("#workflow-prompt-content").value = preset.instruction;
+      required<HTMLButtonElement>("#workflow-prompt-create").dataset.editId = preset.id;
+    });
+    const remove = document.createElement("button");
+    remove.className = "btn btn-square btn-ghost btn-xs text-error";
+    remove.type = "button";
+    remove.title = i18n.t("taskpane.common.delete");
+    remove.setAttribute("aria-label", remove.title);
+    remove.innerHTML = '<svg class="size-[1em]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>';
+    remove.addEventListener("click", () => {
+      textPromptPresets = saveTextPromptPresets(localStorage, textPromptPresets.filter((item) => item.id !== preset.id));
+      renderWorkflowPromptSelect();
+      syncTextWorkflowPreferenceUi();
+      renderWorkflowPromptList();
+    });
+    row.append(content, edit, remove);
+    list.appendChild(row);
+  }
+}
+
+function openWorkflowPromptDialog(prefillCurrent = false): void {
+  const name = required<HTMLInputElement>("#workflow-prompt-name");
+  const content = required<HTMLTextAreaElement>("#workflow-prompt-content");
+  name.value = "";
+  content.value = prefillCurrent ? required<HTMLTextAreaElement>("#workflow-instruction").value : "";
+  delete required<HTMLButtonElement>("#workflow-prompt-create").dataset.editId;
+  renderWorkflowPromptList();
+  required<HTMLDialogElement>("#workflow-prompt-dialog").showModal();
 }
 
 async function loadTextWorkflowSelection(): Promise<void> {
   const selection = await word.getSelection();
   if (!selection.text.trim()) throw new Error(i18n.t("taskpane.errors.selectionEmpty"));
-  textWorkflowOriginalSelection = selection.text;
+  textWorkflowSelectionBaseline = selection.text;
   setTextWorkflowSource(
     "selection",
     selection.text,
@@ -710,13 +826,18 @@ async function loadTextWorkflowDocument(): Promise<void> {
 
 async function openTextWorkflow(definition: TextWorkflowDefinition): Promise<void> {
   activeTextWorkflow = definition;
+  textPromptPresets = loadTextPromptPresets(localStorage);
+  textWorkflowPreferences = loadTextWorkflowPreferences(localStorage);
   textWorkflowAbortController?.abort();
   required<HTMLElement>("#text-workflow-title").textContent = definition.title;
   required<HTMLTextAreaElement>("#workflow-instruction").value = definition.defaultInstruction;
   required<HTMLTextAreaElement>("#workflow-result").value = "";
+  const preference = workflowPreference(textWorkflowPreferences, definition.key);
+  renderWorkflowPromptSelect(preference.defaultPresetId);
+  applySelectedWorkflowPrompt();
+  syncTextWorkflowPreferenceUi();
   setTextWorkflowSource("none", "", "");
   setPrimaryWorkspace("text");
-  updateDefaultOutputButtonLabel();
   try {
     if (definition.defaultScope === "selection") await loadTextWorkflowSelection();
     else if (definition.defaultScope === "document") await loadTextWorkflowDocument();
@@ -727,6 +848,10 @@ async function openTextWorkflow(definition: TextWorkflowDefinition): Promise<voi
     required<HTMLElement>("#workflow-source-status").textContent =
       message === i18n.t("taskpane.errors.selectionEmpty") || isBrowserPreview ? "" : message;
   }
+  if (definition.supportsAutoApply && preference.autoApply && textWorkflowScope === "selection" && textWorkflowSource.trim()) {
+    textWorkflowAutoApplyPending = true;
+    queueMicrotask(() => required<HTMLButtonElement>("#workflow-generate").click());
+  }
 }
 
 async function assertTextWorkflowSelectionUnchanged(): Promise<void> {
@@ -735,7 +860,7 @@ async function assertTextWorkflowSelectionUnchanged(): Promise<void> {
   }
   const current = await word.getSelection();
   const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
-  if (normalize(current.text) !== normalize(textWorkflowOriginalSelection)) {
+  if (normalize(current.text) !== normalize(textWorkflowSelectionBaseline)) {
     throw new Error(i18n.t("taskpane.errors.selectionChanged"));
   }
 }
@@ -751,10 +876,100 @@ required<HTMLButtonElement>("#workflow-load-selection").addEventListener("click"
 required<HTMLButtonElement>("#workflow-load-document").addEventListener("click", async () => {
   try { clearError(); await loadTextWorkflowDocument(); } catch (error) { showError(error); }
 });
-required<HTMLButtonElement>("#workflow-clear-source").addEventListener("click", () => {
-  setTextWorkflowSource("none", "", i18n.t("taskpane.status.requirementOnly"));
+required<HTMLTextAreaElement>("#workflow-source-text").addEventListener("input", (event) => {
+  textWorkflowSource = (event.currentTarget as HTMLTextAreaElement).value;
 });
 required<HTMLTextAreaElement>("#workflow-result").addEventListener("input", updateTextWorkflowActions);
+required<HTMLSelectElement>("#workflow-prompt-select").addEventListener("change", (event) => {
+  if (!activeTextWorkflow) return;
+  void event;
+  applySelectedWorkflowPrompt();
+  syncTextWorkflowPreferenceUi();
+});
+required<HTMLButtonElement>("#workflow-set-default-prompt").addEventListener("click", () => {
+  if (!activeTextWorkflow) return;
+  const current = workflowPreference(textWorkflowPreferences, activeTextWorkflow.key);
+  textWorkflowPreferences[activeTextWorkflow.key] = {
+    ...current,
+    defaultPresetId: required<HTMLSelectElement>("#workflow-prompt-select").value,
+  };
+  saveTextWorkflowPreferences(localStorage, textWorkflowPreferences);
+  syncTextWorkflowPreferenceUi();
+});
+required<HTMLInputElement>("#workflow-auto-apply").addEventListener("change", (event) => {
+  if (!activeTextWorkflow) return;
+  const current = workflowPreference(textWorkflowPreferences, activeTextWorkflow.key);
+  textWorkflowPreferences[activeTextWorkflow.key] = {
+    ...current,
+    autoApply: (event.currentTarget as HTMLInputElement).checked,
+  };
+  saveTextWorkflowPreferences(localStorage, textWorkflowPreferences);
+  syncTextWorkflowPreferenceUi();
+});
+required<HTMLButtonElement>("#workflow-save-prompt").addEventListener("click", () => openWorkflowPromptDialog(true));
+required<HTMLButtonElement>("#workflow-manage-prompts").addEventListener("click", () => openWorkflowPromptDialog());
+required<HTMLButtonElement>("#workflow-prompt-close").addEventListener("click", () => {
+  required<HTMLDialogElement>("#workflow-prompt-dialog").close();
+});
+required<HTMLButtonElement>("#workflow-prompt-create").addEventListener("click", (event) => {
+  if (!activeTextWorkflow) return;
+  const button = event.currentTarget as HTMLButtonElement;
+  const name = required<HTMLInputElement>("#workflow-prompt-name").value.trim();
+  const instruction = required<HTMLTextAreaElement>("#workflow-prompt-content").value.trim();
+  if (!name || !instruction) {
+    showError(new Error(i18n.t("taskpane.text.promptRequired")));
+    return;
+  }
+  const editingId = button.dataset.editId;
+  let savedId = editingId;
+  if (editingId) {
+    textPromptPresets = textPromptPresets.map((preset) =>
+      preset.id === editingId ? { ...preset, name, instruction } : preset,
+    );
+  } else {
+    const preset = createTextPromptPreset(activeTextWorkflow.key, name, instruction);
+    textPromptPresets.push(preset);
+    savedId = preset.id;
+  }
+  textPromptPresets = saveTextPromptPresets(localStorage, textPromptPresets);
+  renderWorkflowPromptSelect(savedId);
+  required<HTMLTextAreaElement>("#workflow-instruction").value = instruction;
+  syncTextWorkflowPreferenceUi();
+  renderWorkflowPromptList();
+  required<HTMLInputElement>("#workflow-prompt-name").value = "";
+  required<HTMLTextAreaElement>("#workflow-prompt-content").value = "";
+  delete button.dataset.editId;
+});
+
+async function applyPreciseTextWorkflowResult(): Promise<void> {
+  await assertTextWorkflowSelectionUnchanged();
+  const result = required<HTMLTextAreaElement>("#workflow-result").value;
+  const precise = await word.applyPreciseRevision(textWorkflowSelectionBaseline, result);
+  textWorkflowSelectionBaseline = result;
+  required<HTMLElement>("#workflow-source-status").textContent = i18n.t(
+    precise ? "taskpane.status.preciseRevisionApplied" : "taskpane.status.trackedReplaceApplied",
+  );
+}
+
+async function applyAutomaticTextWorkflowResult(): Promise<void> {
+  if (!activeTextWorkflow) return;
+  await assertTextWorkflowSelectionUnchanged();
+  const result = required<HTMLTextAreaElement>("#workflow-result").value;
+  if (activeTextWorkflow.preferredAction === "comment") {
+    await word.addComment(result);
+    required<HTMLElement>("#workflow-source-status").textContent =
+      i18n.t("taskpane.status.defaultCommented");
+    return;
+  }
+  if (activeTextWorkflow.preferredAction === "insert") {
+    await word.insertAfterSelection(result);
+    required<HTMLElement>("#workflow-source-status").textContent =
+      i18n.t("taskpane.status.defaultInserted");
+    return;
+  }
+  await applyPreciseTextWorkflowResult();
+}
+
 required<HTMLButtonElement>("#workflow-generate").addEventListener("click", async () => {
   if (!activeTextWorkflow) return;
   const generate = required<HTMLButtonElement>("#workflow-generate");
@@ -788,10 +1003,15 @@ required<HTMLButtonElement>("#workflow-generate").addEventListener("click", asyn
       },
     );
     endStreamingText(result, finalResult);
+    if (textWorkflowAutoApplyPending) {
+      textWorkflowAutoApplyPending = false;
+      await applyAutomaticTextWorkflowResult();
+    }
   } catch (error) {
     endStreamingText(result);
     if ((error as { name?: string }).name !== "AbortError") showError(error);
   } finally {
+    textWorkflowAutoApplyPending = false;
     endStreamingText(result);
     textWorkflowAbortController = null;
     generate.disabled = false;
@@ -800,11 +1020,16 @@ required<HTMLButtonElement>("#workflow-generate").addEventListener("click", asyn
   }
 });
 required<HTMLButtonElement>("#workflow-cancel").addEventListener("click", () => textWorkflowAbortController?.abort());
+required<HTMLButtonElement>("#workflow-retry").addEventListener("click", () => {
+  required<HTMLButtonElement>("#workflow-generate").click();
+});
 required<HTMLButtonElement>("#workflow-replace").addEventListener("click", async () => {
   try {
     await assertTextWorkflowSelectionUnchanged();
-    await word.replaceSelection(required<HTMLTextAreaElement>("#workflow-result").value);
-    setTextWorkflowSource("none", "", i18n.t("taskpane.status.selectionReplaced"));
+    const result = required<HTMLTextAreaElement>("#workflow-result").value;
+    await word.replaceSelection(result);
+    textWorkflowSelectionBaseline = result;
+    required<HTMLElement>("#workflow-source-status").textContent = i18n.t("taskpane.status.selectionReplaced");
   } catch (error) { showError(error); }
 });
 required<HTMLButtonElement>("#workflow-insert").addEventListener("click", async () => {
@@ -818,77 +1043,15 @@ required<HTMLButtonElement>("#workflow-insert").addEventListener("click", async 
     }
   } catch (error) { showError(error); }
 });
-required<HTMLButtonElement>("#workflow-comment").addEventListener("click", async () => {
+required<HTMLButtonElement>("#workflow-precise-revision").addEventListener("click", async () => {
   try {
-    await assertTextWorkflowSelectionUnchanged();
-    await word.addComment(required<HTMLTextAreaElement>("#workflow-result").value);
+    await applyPreciseTextWorkflowResult();
   } catch (error) { showError(error); }
 });
 required<HTMLButtonElement>("#workflow-copy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(required<HTMLTextAreaElement>("#workflow-result").value); }
   catch (error) { showError(error); }
 });
-required<HTMLButtonElement>("#workflow-apply-default").addEventListener("click", async () => {
-  if (!activeTextWorkflow) return;
-  try {
-    const result = required<HTMLTextAreaElement>("#workflow-result").value.trim();
-    if (!result) throw new Error(i18n.t("taskpane.errors.noGeneratedResult"));
-    const settings = readLocalSettings("wordollama-general-settings", { outputMode: "Auto" });
-    const mode = resolveTextWorkflowOutputMode(
-      settings.outputMode,
-      activeTextWorkflow,
-      textWorkflowSource,
-      textWorkflowScope,
-    );
-    if (mode === "ReplaceOriginal") {
-      await assertTextWorkflowSelectionUnchanged();
-      await word.replaceSelection(result);
-      setTextWorkflowSource("none", "", i18n.t("taskpane.status.defaultReplaced"));
-    } else if (mode === "Comment") {
-      await assertTextWorkflowSelectionUnchanged();
-      await word.addComment(result);
-      required<HTMLElement>("#workflow-source-status").textContent =
-        i18n.t("taskpane.status.defaultCommented");
-    } else if (mode === "ReviewPane") {
-      await assertTextWorkflowSelectionUnchanged();
-      const fingerprint = await word.getReviewDocumentFingerprint();
-      writeLocalSettings(REVIEW_HANDOFF_KEY, {
-        fingerprint,
-        originalText: textWorkflowOriginalSelection,
-        suggestedText: result,
-        reason: i18n.t("taskpane.status.workflowResultReason", {
-          title: activeTextWorkflow.title,
-        }),
-        createdAt: new Date().toISOString(),
-      } satisfies ReviewHandoff);
-      required<HTMLElement>("#workflow-source-status").textContent =
-        i18n.t("taskpane.status.sentToReview");
-    } else {
-      if (textWorkflowScope === "selection") await assertTextWorkflowSelectionUnchanged();
-      let previousTrackingMode: string | null = null;
-      try {
-        if (mode === "InsertBelowWithDiff") {
-          previousTrackingMode = await word.beginTrackedChanges();
-        }
-        if (textWorkflowScope === "selection") await word.insertAfterSelection(result);
-        else await word.insertAtCursor(result);
-      } finally {
-        if (mode === "InsertBelowWithDiff") {
-          await word.restoreTrackedChanges(previousTrackingMode);
-        }
-      }
-      required<HTMLElement>("#workflow-source-status").textContent =
-        mode === "InsertBelowWithDiff"
-          ? previousTrackingMode === null
-            ? i18n.t("taskpane.status.trackingDegraded")
-            : i18n.t("taskpane.status.defaultInsertedTracked")
-          : i18n.t("taskpane.status.defaultInserted");
-    }
-  } catch (error) {
-    showError(error);
-  }
-});
-
 function renderStructuredTable(table: StructuredTable | null): void {
   const preview = required<HTMLDivElement>("#table-preview");
   const insert = required<HTMLButtonElement>("#table-insert");
@@ -1000,18 +1163,22 @@ required<HTMLButtonElement>("#table-insert").addEventListener("click", async () 
   } catch (error) { showError(error); }
 });
 
+function currentMarkdownSettings(): MarkdownSettings {
+  return {
+    ...DEFAULT_MARKDOWN_SETTINGS,
+    ...readLocalSettings<Partial<MarkdownSettings>>(
+      "wordollama-markdown-settings",
+      DEFAULT_MARKDOWN_SETTINGS,
+    ),
+  };
+}
+
 function currentMarkdownOptions(): MarkdownConversionOptions {
-  return readLocalSettings<MarkdownSettings>(
-    "wordollama-markdown-settings",
-    DEFAULT_MARKDOWN_SETTINGS,
-  );
+  return currentMarkdownSettings();
 }
 
 function currentMarkdownStyleMappings(): Record<string, string> {
-  return buildMarkdownStyleMappings(readLocalSettings<MarkdownSettings>(
-    "wordollama-markdown-settings",
-    DEFAULT_MARKDOWN_SETTINGS,
-  ));
+  return buildMarkdownStyleMappings(currentMarkdownSettings());
 }
 
 function updateMarkdownPreview(): void {
@@ -1072,6 +1239,7 @@ required<HTMLButtonElement>("#markdown-insert").addEventListener("click", async 
     await word.insertStyledHtmlBlocksAtSelection(
       markdownToBlocks(markdown, currentMarkdownOptions()),
       currentMarkdownStyleMappings(),
+      currentMarkdownOptions().notePlacement,
     );
     required<HTMLElement>("#markdown-preview-status").textContent =
       i18n.t("taskpane.status.insertedWord");
@@ -1466,59 +1634,180 @@ required<HTMLButtonElement>("#moot-insert").addEventListener("click", async () =
   catch (error) { showError(error); }
 });
 
+const selectedCustomPromptIds = new Set<string>();
+
+function customPromptOutputLabel(mode: CustomPromptOutputMode): string {
+  if (mode === "TrackedChanges") return i18n.t("taskpane.prompts.trackedReplace");
+  if (mode === "Comment") return i18n.t("taskpane.prompts.comment");
+  return i18n.t("taskpane.text.insertBelow");
+}
+
+function showCustomPromptView(view: "launcher" | "manager" | "runner"): void {
+  required<HTMLElement>("#custom-prompt-launcher").hidden = view !== "launcher";
+  required<HTMLElement>("#custom-prompt-manager").hidden = view !== "manager";
+  required<HTMLElement>("#custom-prompt-runner").hidden = view !== "runner";
+}
+
+function createPromptRow(prompt: CustomPromptDefinition, management = false): HTMLElement {
+  const row = document.createElement("div");
+  row.className = management ? "prompt-manage-row" : "prompt-command-row";
+  row.dataset.promptId = prompt.id;
+
+  if (management) {
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "checkbox checkbox-primary checkbox-sm";
+    checkbox.checked = selectedCustomPromptIds.has(prompt.id);
+    checkbox.setAttribute("aria-label", i18n.t("taskpane.prompts.selectNamed", { name: prompt.name }));
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) selectedCustomPromptIds.add(prompt.id);
+      else selectedCustomPromptIds.delete(prompt.id);
+      updateCustomPromptManagerActions();
+    });
+    row.appendChild(checkbox);
+  }
+
+  const main = document.createElement("button");
+  main.type = "button";
+  main.className = management ? "prompt-manage-main" : "prompt-command-main";
+  const title = document.createElement("strong");
+  title.textContent = prompt.name;
+  const meta = document.createElement("span");
+  meta.className = "prompt-command-meta";
+  meta.textContent = customPromptOutputLabel(prompt.outputMode);
+  main.append(title, meta);
+  if (management) main.addEventListener("click", () => openCustomPromptEditor(prompt));
+  else main.addEventListener("click", () => void startCustomPrompt(prompt));
+  row.appendChild(main);
+
+  const favorite = document.createElement("button");
+  favorite.type = "button";
+  favorite.className = `btn btn-ghost btn-xs btn-square prompt-favorite${prompt.favorite ? " active" : ""}`;
+  favorite.textContent = prompt.favorite ? "★" : "☆";
+  favorite.title = prompt.favorite
+    ? i18n.t("taskpane.prompts.removeFavorite")
+    : i18n.t("taskpane.prompts.addFavorite");
+  favorite.setAttribute("aria-label", favorite.title);
+  favorite.addEventListener("click", () => {
+    customPrompts = customPrompts.map((candidate) => candidate.id === prompt.id
+      ? { ...candidate, favorite: !candidate.favorite, quickSlot: undefined }
+      : candidate);
+    saveCustomPrompts(localStorage, customPrompts);
+    renderCustomPromptList();
+    if (management) renderCustomPromptManager();
+  });
+  row.appendChild(favorite);
+
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.className = "btn btn-ghost btn-xs btn-square prompt-edit";
+  edit.textContent = "⋯";
+  edit.title = i18n.t("taskpane.common.edit");
+  edit.setAttribute("aria-label", i18n.t("taskpane.prompts.editNamed", { name: prompt.name }));
+  edit.addEventListener("click", () => openCustomPromptEditor(prompt));
+  row.appendChild(edit);
+  return row;
+}
+
+function appendPromptGroup(container: HTMLElement, title: string, prompts: CustomPromptDefinition[]): void {
+  if (!prompts.length) return;
+  const group = document.createElement("section");
+  group.className = "prompt-command-group";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  group.appendChild(heading);
+  prompts.forEach((prompt) => group.appendChild(createPromptRow(prompt)));
+  container.appendChild(group);
+}
+
 function renderCustomPromptList(): void {
-  const list = required<HTMLSelectElement>("#custom-prompt-list");
-  list.replaceChildren(new Option(i18n.t("taskpane.prompts.newPrompt"), ""));
-  customPrompts
-    .slice()
-    .sort((left, right) => (left.quickSlot ?? 99) - (right.quickSlot ?? 99) ||
-      left.name.localeCompare(right.name))
-    .forEach((prompt) => list.add(new Option(
-      `${prompt.quickSlot ? `C${prompt.quickSlot} · ` : ""}${prompt.name}`,
-      prompt.id,
-    )));
-  list.value = selectedCustomPromptId;
-  required<HTMLButtonElement>("#custom-prompt-delete").disabled = !selectedCustomPromptId;
+  const list = required<HTMLElement>("#custom-prompt-list");
+  const query = required<HTMLInputElement>("#custom-prompt-search").value.trim().toLocaleLowerCase();
+  list.replaceChildren();
+  const matches = customPrompts.filter((prompt) =>
+    [prompt.name, prompt.prompt].some((value) => value.toLocaleLowerCase().includes(query)),
+  );
+  if (query) {
+    appendPromptGroup(list, i18n.t("taskpane.prompts.searchResults"), matches);
+  } else {
+    const favorites = matches.filter((prompt) => prompt.favorite)
+      .sort((left, right) => left.name.localeCompare(right.name));
+    const recent = matches.filter((prompt) => !prompt.favorite && prompt.lastUsedAt)
+      .sort((left, right) => String(right.lastUsedAt).localeCompare(String(left.lastUsedAt))).slice(0, 6);
+    const shown = new Set([...favorites, ...recent].map((prompt) => prompt.id));
+    const remaining = matches.filter((prompt) => !shown.has(prompt.id))
+      .sort((left, right) => left.name.localeCompare(right.name));
+    appendPromptGroup(list, i18n.t("taskpane.prompts.favorites"), favorites);
+    appendPromptGroup(list, i18n.t("taskpane.prompts.recent"), recent);
+    appendPromptGroup(
+      list,
+      i18n.t(favorites.length || recent.length ? "taskpane.prompts.other" : "taskpane.prompts.all"),
+      remaining,
+    );
+  }
+  const empty = required<HTMLElement>("#custom-prompt-empty");
+  empty.hidden = matches.length > 0;
+  required<HTMLElement>("#custom-prompt-empty-title").textContent = i18n.t(
+    query ? "taskpane.prompts.noResultsTitle" : "taskpane.prompts.emptyTitle",
+  );
+  required<HTMLElement>("#custom-prompt-empty-hint").textContent = i18n.t(
+    query ? "taskpane.prompts.noResultsHint" : "taskpane.prompts.emptyHint",
+  );
+}
+
+function updateCustomPromptManagerActions(): void {
+  required<HTMLButtonElement>("#custom-prompt-delete-selected").disabled = selectedCustomPromptIds.size === 0;
+  const all = required<HTMLInputElement>("#custom-prompt-select-all");
+  all.checked = customPrompts.length > 0 && selectedCustomPromptIds.size === customPrompts.length;
+  all.indeterminate = selectedCustomPromptIds.size > 0 && selectedCustomPromptIds.size < customPrompts.length;
+}
+
+function renderCustomPromptManager(): void {
+  const list = required<HTMLElement>("#custom-prompt-manage-list");
+  list.replaceChildren();
+  customPrompts.slice().sort((left, right) => left.name.localeCompare(right.name))
+    .forEach((prompt) => list.appendChild(createPromptRow(prompt, true)));
+  updateCustomPromptManagerActions();
 }
 
 function setCustomPromptEditor(prompt?: CustomPromptDefinition): void {
   selectedCustomPromptId = prompt?.id ?? "";
+  required<HTMLElement>("#custom-prompt-editor-title").textContent = prompt
+    ? i18n.t("taskpane.prompts.edit")
+    : i18n.t("taskpane.prompts.new");
   required<HTMLInputElement>("#custom-prompt-name").value = prompt?.name ?? "";
-  required<HTMLSelectElement>("#custom-prompt-output").value = prompt?.outputMode ?? "Insert";
-  required<HTMLSelectElement>("#custom-prompt-slot").value = prompt?.quickSlot ? String(prompt.quickSlot) : "";
+  required<HTMLSelectElement>("#custom-prompt-output").value = prompt?.outputMode ?? "TrackedChanges";
   required<HTMLTextAreaElement>("#custom-prompt-text").value = prompt?.prompt ?? "";
-  required<HTMLTextAreaElement>("#custom-prompt-result").value = "";
-  renderCustomPromptList();
-  updateCustomPromptActions();
+  required<HTMLInputElement>("#custom-prompt-favorite").checked = prompt?.favorite === true;
 }
 
-function updateCustomPromptActions(): void {
-  const configured = Boolean(
-    required<HTMLInputElement>("#custom-prompt-name").value.trim() &&
-    required<HTMLTextAreaElement>("#custom-prompt-text").value.trim(),
-  );
-  const hasResult = Boolean(required<HTMLTextAreaElement>("#custom-prompt-result").value.trim());
-  const idle = customPromptAbortController === null;
-  required<HTMLButtonElement>("#custom-prompt-run").disabled = !configured || !customPromptSource || !idle;
-  required<HTMLButtonElement>("#custom-prompt-apply").disabled = !hasResult || !customPromptSource || !idle;
+function openCustomPromptEditor(prompt?: CustomPromptDefinition): void {
+  setCustomPromptEditor(prompt);
+  localizeStaticDocument();
+  required<HTMLDialogElement>("#custom-prompt-editor").showModal();
 }
 
 function collectCustomPromptDefinition(): CustomPromptDefinition {
-  const slotValue = Number(required<HTMLSelectElement>("#custom-prompt-slot").value);
+  const existing = customPrompts.find((prompt) => prompt.id === selectedCustomPromptId);
   return {
     id: selectedCustomPromptId || (globalThis.crypto?.randomUUID?.() ?? `prompt-${Date.now()}`),
     name: required<HTMLInputElement>("#custom-prompt-name").value.trim(),
     prompt: required<HTMLTextAreaElement>("#custom-prompt-text").value.trim(),
     outputMode: required<HTMLSelectElement>("#custom-prompt-output").value as CustomPromptOutputMode,
-    quickSlot: [1, 2, 3, 4].includes(slotValue) ? slotValue as 1 | 2 | 3 | 4 : undefined,
+    favorite: required<HTMLInputElement>("#custom-prompt-favorite").checked,
+    lastUsedAt: existing?.lastUsedAt,
   };
 }
 
 function openCustomPromptWorkspace(promptId = ""): void {
   customPrompts = loadCustomPrompts(localStorage);
-  const prompt = customPrompts.find((candidate) => candidate.id === promptId);
   setPrimaryWorkspace("custom");
-  setCustomPromptEditor(prompt);
+  showCustomPromptView("launcher");
+  renderCustomPromptList();
+  if (promptId) {
+    const prompt = customPrompts.find((candidate) => candidate.id === promptId);
+    if (prompt) void startCustomPrompt(prompt);
+  }
 }
 
 async function loadCustomPromptSelection(): Promise<void> {
@@ -1546,48 +1835,61 @@ required<HTMLButtonElement>("#close-custom-prompt").addEventListener("click", ()
   customPromptAbortController?.abort();
   setPrimaryWorkspace(null);
 });
-required<HTMLButtonElement>("#custom-prompt-new").addEventListener("click", () => setCustomPromptEditor());
-required<HTMLSelectElement>("#custom-prompt-list").addEventListener("change", (event) => {
-  const id = (event.currentTarget as HTMLSelectElement).value;
-  setCustomPromptEditor(customPrompts.find((prompt) => prompt.id === id));
-});
-for (const selector of ["#custom-prompt-name", "#custom-prompt-text"]) {
-  required<HTMLInputElement | HTMLTextAreaElement>(selector).addEventListener("input", updateCustomPromptActions);
+required<HTMLInputElement>("#custom-prompt-search").addEventListener("input", renderCustomPromptList);
+for (const selector of ["#custom-prompt-new", "#custom-prompt-empty-new", "#custom-prompt-manage-new"]) {
+  required<HTMLButtonElement>(selector).addEventListener("click", () => openCustomPromptEditor());
 }
-required<HTMLTextAreaElement>("#custom-prompt-result").addEventListener("input", updateCustomPromptActions);
+required<HTMLButtonElement>("#custom-prompt-manage").addEventListener("click", () => {
+  selectedCustomPromptIds.clear();
+  renderCustomPromptManager();
+  showCustomPromptView("manager");
+});
+required<HTMLButtonElement>("#custom-prompt-manage-back").addEventListener("click", () => {
+  renderCustomPromptList();
+  showCustomPromptView("launcher");
+});
+required<HTMLButtonElement>("#custom-prompt-runner-back").addEventListener("click", () => {
+  customPromptAbortController?.abort();
+  renderCustomPromptList();
+  showCustomPromptView("launcher");
+});
+required<HTMLButtonElement>("#custom-prompt-editor-cancel").addEventListener("click", () => {
+  required<HTMLDialogElement>("#custom-prompt-editor").close();
+});
 required<HTMLButtonElement>("#custom-prompt-save").addEventListener("click", () => {
   try {
     clearError();
     const prompt = collectCustomPromptDefinition();
     customPrompts = [prompt, ...customPrompts.filter((candidate) => candidate.id !== prompt.id)];
-    if (prompt.quickSlot) {
-      customPrompts = customPrompts.map((candidate) =>
-        candidate.id !== prompt.id && candidate.quickSlot === prompt.quickSlot
-          ? { ...candidate, quickSlot: undefined }
-          : candidate);
-    }
     saveCustomPrompts(localStorage, customPrompts);
-    selectedCustomPromptId = prompt.id;
+    required<HTMLDialogElement>("#custom-prompt-editor").close();
     renderCustomPromptList();
+    renderCustomPromptManager();
   } catch (error) { showError(error); }
 });
-required<HTMLButtonElement>("#custom-prompt-delete").addEventListener("click", async () => {
-  try {
-    const prompt = customPrompts.find((candidate) => candidate.id === selectedCustomPromptId);
-    if (!prompt) throw new Error(i18n.t("taskpane.errors.selectPrompt"));
-    if (!await requestConfirmation(
-      i18n.t("taskpane.confirm.deleteNamed", { name: prompt.name }),
-      i18n.t("taskpane.common.delete"),
-    )) return;
-    customPrompts = customPrompts.filter((candidate) => candidate.id !== prompt.id);
-    saveCustomPrompts(localStorage, customPrompts);
-    setCustomPromptEditor();
-  } catch (error) { showError(error); }
+required<HTMLInputElement>("#custom-prompt-select-all").addEventListener("change", (event) => {
+  selectedCustomPromptIds.clear();
+  if ((event.currentTarget as HTMLInputElement).checked) {
+    customPrompts.forEach((prompt) => selectedCustomPromptIds.add(prompt.id));
+  }
+  renderCustomPromptManager();
 });
-required<HTMLButtonElement>("#custom-prompt-load-selection").addEventListener("click", async () => {
-  try { clearError(); await loadCustomPromptSelection(); } catch (error) { showError(error); }
+required<HTMLButtonElement>("#custom-prompt-delete-selected").addEventListener("click", async () => {
+  if (!selectedCustomPromptIds.size) return;
+  if (!await requestConfirmation(
+    i18n.t("taskpane.prompts.confirmDelete", { count: selectedCustomPromptIds.size }),
+    i18n.t("taskpane.common.delete"),
+  )) return;
+  customPrompts = customPrompts.filter((prompt) => !selectedCustomPromptIds.has(prompt.id));
+  saveCustomPrompts(localStorage, customPrompts);
+  selectedCustomPromptIds.clear();
+  renderCustomPromptManager();
+  renderCustomPromptList();
 });
-required<HTMLButtonElement>("#custom-prompt-run").addEventListener("click", async () => {
+
+async function runSelectedCustomPrompt(): Promise<void> {
+  const definition = customPrompts.find((prompt) => prompt.id === selectedCustomPromptId);
+  if (!definition) return;
   const run = required<HTMLButtonElement>("#custom-prompt-run");
   const cancel = required<HTMLButtonElement>("#custom-prompt-cancel");
   const result = required<HTMLTextAreaElement>("#custom-prompt-result");
@@ -1600,7 +1902,7 @@ required<HTMLButtonElement>("#custom-prompt-run").addEventListener("click", asyn
   try {
     const finalResult = await runCustomPrompt(
       runtime,
-      collectCustomPromptDefinition(),
+      definition,
       customPromptSource,
       customPromptAbortController.signal,
       (content) => {
@@ -1609,6 +1911,10 @@ required<HTMLButtonElement>("#custom-prompt-run").addEventListener("click", asyn
       },
     );
     endStreamingText(result, finalResult);
+    customPrompts = customPrompts.map((prompt) => prompt.id === definition.id
+      ? { ...prompt, lastUsedAt: new Date().toISOString() }
+      : prompt);
+    saveCustomPrompts(localStorage, customPrompts);
   } catch (error) {
     endStreamingText(result);
     if ((error as { name?: string }).name !== "AbortError") showError(error);
@@ -1619,14 +1925,47 @@ required<HTMLButtonElement>("#custom-prompt-run").addEventListener("click", asyn
     cancel.disabled = true;
     updateCustomPromptActions();
   }
-});
+}
+
+async function startCustomPrompt(prompt: CustomPromptDefinition): Promise<void> {
+  clearError();
+  selectedCustomPromptId = prompt.id;
+  required<HTMLElement>("#custom-prompt-running-name").textContent = prompt.name;
+  required<HTMLTextAreaElement>("#custom-prompt-result").value = "";
+  customPromptSource = "";
+  customPromptOriginalSelection = "";
+  required<HTMLElement>("#custom-prompt-source-preview").hidden = true;
+  showCustomPromptView("runner");
+  try {
+    await loadCustomPromptSelection();
+    await runSelectedCustomPrompt();
+  } catch (error) {
+    if ((error as { name?: string }).name !== "AbortError") showError(error);
+    updateCustomPromptActions();
+  }
+}
+
+function updateCustomPromptActions(): void {
+  const hasResult = Boolean(required<HTMLTextAreaElement>("#custom-prompt-result").value.trim());
+  const idle = customPromptAbortController === null;
+  required<HTMLButtonElement>("#custom-prompt-run").disabled = !selectedCustomPromptId || !customPromptSource || !idle;
+  required<HTMLButtonElement>("#custom-prompt-apply").disabled = !hasResult || !customPromptSource || !idle;
+  required<HTMLButtonElement>("#custom-prompt-copy").disabled = !hasResult;
+}
+
+required<HTMLButtonElement>("#custom-prompt-run").addEventListener("click", () => void runSelectedCustomPrompt());
 required<HTMLButtonElement>("#custom-prompt-cancel").addEventListener("click", () => customPromptAbortController?.abort());
+required<HTMLButtonElement>("#custom-prompt-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(required<HTMLTextAreaElement>("#custom-prompt-result").value); }
+  catch (error) { showError(error); }
+});
 required<HTMLButtonElement>("#custom-prompt-apply").addEventListener("click", async () => {
   let previousTrackingMode: string | null = null;
   try {
     clearError();
     await assertCustomPromptSelectionUnchanged();
-    const definition = collectCustomPromptDefinition();
+    const definition = customPrompts.find((prompt) => prompt.id === selectedCustomPromptId);
+    if (!definition) throw new Error(i18n.t("taskpane.errors.selectPrompt"));
     const result = required<HTMLTextAreaElement>("#custom-prompt-result").value;
     if (definition.outputMode === "Comment") {
       await word.addComment(result);
@@ -1645,12 +1984,44 @@ required<HTMLButtonElement>("#custom-prompt-apply").addEventListener("click", as
   }
 });
 
-function applyWorkflowRoute(): void {
+required<HTMLButtonElement>("#custom-prompt-export").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(customPrompts, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "wordollama-commands.json";
+  link.click();
+  URL.revokeObjectURL(url);
+});
+required<HTMLButtonElement>("#custom-prompt-import").addEventListener("click", () => {
+  required<HTMLInputElement>("#custom-prompt-import-file").click();
+});
+required<HTMLInputElement>("#custom-prompt-import-file").addEventListener("change", async (event) => {
+  const input = event.currentTarget as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text()) as CustomPromptDefinition[];
+    if (!Array.isArray(parsed)) throw new Error(i18n.t("taskpane.prompts.errors.invalidImport"));
+    const incomingNames = new Set(parsed.map((prompt) => String(prompt.name ?? "").trim().toLocaleLowerCase()));
+    const incomingIds = new Set(parsed.map((prompt) => String(prompt.id ?? "")));
+    const merged = [...parsed, ...customPrompts.filter((prompt) =>
+      !incomingIds.has(prompt.id) && !incomingNames.has(prompt.name.trim().toLocaleLowerCase()),
+    )];
+    saveCustomPrompts(localStorage, merged);
+    customPrompts = loadCustomPrompts(localStorage);
+    renderCustomPromptManager();
+    renderCustomPromptList();
+  } catch (error) { showError(error); }
+  finally { input.value = ""; }
+});
+
+async function applyWorkflowRoute(): Promise<void> {
   const workflow = requestedWorkflow;
   if (!workflow || workflow === "agent") {
     if (activeSurface === "review") {
       activateTab("review");
-      void loadReviewSettings();
+      await loadReviewSettings();
     }
     return;
   }
@@ -1665,7 +2036,7 @@ function applyWorkflowRoute(): void {
   }
   if (workflow === "review") {
     activateTab("review");
-    void loadReviewSettings();
+    await loadReviewSettings();
     return;
   }
   if (workflow === "compare" || workflow === "contract-compare") {
@@ -1674,11 +2045,11 @@ function applyWorkflowRoute(): void {
     return;
   }
   if (workflow === "table") {
-    void openTableWorkflow();
+    await openTableWorkflow();
     return;
   }
   if (workflow === "markdown") {
-    void openMarkdownWorkflow();
+    await openMarkdownWorkflow();
     return;
   }
   if (workflow === "html") {
@@ -1694,7 +2065,7 @@ function applyWorkflowRoute(): void {
     return;
   }
   if (workflow === "moot-court") {
-    void openMootWorkflow();
+    await openMootWorkflow();
     return;
   }
   if (workflow === "custom-prompts") {
@@ -1702,12 +2073,12 @@ function applyWorkflowRoute(): void {
     return;
   }
   if (workflow === "translate") {
-    void translationWorkspace.open().catch(showError);
+    await translationWorkspace.open();
     return;
   }
   const textWorkflow = TEXT_WORKFLOWS[workflow];
   if (textWorkflow) {
-    void openTextWorkflow(textWorkflow);
+    await openTextWorkflow(textWorkflow);
     return;
   }
   const route = WORKFLOW_ROUTES[workflow];
@@ -2058,10 +2429,18 @@ function showCopyFallback(titleText: string, value: string): Promise<void> {
   });
 }
 
+function initializeWorkflowRoute(): void {
+  void applyWorkflowRoute()
+    .catch(showError)
+    .finally(() => {
+      delete document.documentElement.dataset.routePending;
+    });
+}
+
 if (typeof Office === "undefined") {
   hostStatus.textContent = "";
   void refreshRuntimeStatus();
-  applyWorkflowRoute();
+  initializeWorkflowRoute();
 } else {
   Office.onReady((info) => {
     officeReady = true;
@@ -2069,7 +2448,7 @@ if (typeof Office === "undefined") {
     hostStatus.title = info.host
       ? i18n.t("taskpane.agent.hostConnected", { host: info.host })
       : "";
-    applyWorkflowRoute();
+    initializeWorkflowRoute();
     void activateBridgeSession().catch((error) =>
       appendDiagnostic("bridge", `automatic pairing failed: ${error instanceof Error ? error.message : String(error)}`));
     if (activeSurface === "review") {
@@ -2281,14 +2660,23 @@ async function runAgent(requirement: string): Promise<void> {
       executionMode: "TrackedChanges" as const,
       unlimited: false,
       allowExternalTools: false,
+      allowLocalTools: false,
+      allowNetworkTools: false,
+      allowMcpTools: false,
+      // Compatibility aliases used by early settings builds.
+      iterations: undefined as number | undefined,
+      mode: undefined as string | undefined,
+      externalTools: undefined as boolean | undefined,
     });
     const currentGeneralSettings = readLocalSettings("wordollama-general-settings", {
       suppressPlan: false,
       suppressDiff: false,
     });
-    const executionMode = ["ViewOnly", "ProposeChanges", "TrackedChanges"].includes(currentAgentSettings.executionMode)
-      ? currentAgentSettings.executionMode as "ViewOnly" | "ProposeChanges" | "TrackedChanges"
+    const storedExecutionMode = currentAgentSettings.mode ?? currentAgentSettings.executionMode;
+    const executionMode = ["ViewOnly", "ProposeChanges", "TrackedChanges"].includes(storedExecutionMode)
+      ? storedExecutionMode as "ViewOnly" | "ProposeChanges" | "TrackedChanges"
       : "TrackedChanges";
+    const legacyExternalTools = currentAgentSettings.externalTools ?? currentAgentSettings.allowExternalTools;
     if (executionMode === "TrackedChanges") {
       previousTrackingMode = await word.beginTrackedChanges();
       if (previousTrackingMode === null) {
@@ -2300,9 +2688,12 @@ async function runAgent(requirement: string): Promise<void> {
       requirePlanConfirmation: !currentGeneralSettings.suppressPlan,
       maxIterations: currentAgentSettings.unlimited
         ? 0
-        : Math.max(1, Math.min(1000, Number(currentAgentSettings.maxIterations) || 20)),
+        : Math.max(1, Math.min(1000, Number(currentAgentSettings.iterations ?? currentAgentSettings.maxIterations) || 20)),
       executionMode,
-      allowExternalTools: currentAgentSettings.allowExternalTools,
+      allowExternalTools: legacyExternalTools,
+      allowLocalTools: currentAgentSettings.allowLocalTools || legacyExternalTools,
+      allowNetworkTools: currentAgentSettings.allowNetworkTools || legacyExternalTools,
+      allowMcpTools: currentAgentSettings.allowMcpTools || legacyExternalTools,
       languageMode: "auto",
       uiLocale: i18n.resolvedLanguage === "zh-CN" ? "zh-CN" : "en-US",
     });
@@ -2475,11 +2866,8 @@ function renderCommandMenu(): void {
     })),
     ...customPrompts.map((prompt) => ({
       label: `/prompt:${prompt.name}`,
-      hint: `${prompt.quickSlot ? `C${prompt.quickSlot} · ` : ""}${prompt.outputMode}`,
-      action: () => {
-        openCustomPromptWorkspace(prompt.id);
-        void loadCustomPromptSelection().catch(showError);
-      },
+      hint: customPromptOutputLabel(prompt.outputMode),
+      action: () => openCustomPromptWorkspace(prompt.id),
     })),
   ].filter((item) => item.label.toLocaleLowerCase().startsWith(normalized));
   commandMenuItems = commands;
@@ -2828,7 +3216,7 @@ async function runSilentLinter(): Promise<void> {
     silentLinterSnapshot = current;
     if (!changed.length) return;
     const settings = readLocalSettings("wordollama-linter-settings", {
-      enabled: false, model: "", intervalSeconds: 30,
+      enabled: false, profileId: "", intervalSeconds: 30,
     });
     const source = changed.map((paragraph) => `[P${paragraph.index}] ${paragraph.text}`).join("\n");
     appendDiagnostic("linter", `reviewing ${changed.length} changed paragraphs`);
@@ -2836,7 +3224,7 @@ async function runSilentLinter(): Promise<void> {
       runtime,
       source,
       i18n.t("taskpane.review.silentTitle", { count: changed.length }),
-      settings.model,
+      settings.profileId,
     );
     const issues = attachReviewAnchors(generatedIssues, documentSource.anchors);
     const stamp = Date.now();
@@ -2868,7 +3256,7 @@ function configureSilentLinter(): void {
   }
   silentLinterSnapshot = [];
   const settings = readLocalSettings("wordollama-linter-settings", {
-    enabled: false, model: "", intervalSeconds: 30,
+    enabled: false, profileId: "", intervalSeconds: 30,
   });
   if (!settings.enabled || !bridgePaired || typeof Office === "undefined") return;
   const seconds = Math.max(3, Math.min(3600, Number(settings.intervalSeconds) || 30));
@@ -2901,6 +3289,13 @@ async function loadReviewScope(
     if (kind === "selection") {
       const result = await word.getSelection();
       if (!result.text.trim()) throw new Error(i18n.t("taskpane.errors.selectionEmpty"));
+      const paragraphCount = result.text
+        .split(/[\r\n]+/)
+        .filter((paragraph) => paragraph.trim().length > 0)
+        .length;
+      if (paragraphCount < 3) {
+        throw new Error(i18n.t("taskpane.review.multiParagraphRequired"));
+      }
       reviewScope = `[P0] ${result.text.trim()}`;
       reviewScopeAnchors = new Map();
       reviewScopeChunks = [{ source: reviewScope, anchors: reviewScopeAnchors }];
@@ -2943,6 +3338,10 @@ async function loadReviewScope(
     reviewScopeStatus.textContent = i18n.t("taskpane.review.scopeLoaded", {
       scope: reviewScopeLabel,
     });
+    const documentScopeButton = required<HTMLButtonElement>("#load-review-document");
+    const selectionScopeButton = required<HTMLButtonElement>("#load-review-selection");
+    documentScopeButton.classList.toggle("btn-primary", kind === "document");
+    selectionScopeButton.classList.toggle("btn-primary", kind === "selection");
     suggestionList.hidden = true;
     suggestionList.replaceChildren();
   } catch (error) {
@@ -3053,25 +3452,17 @@ function renderIssues(): void {
   }
 }
 
-async function runIssueReview(kind: "selection" | "document"): Promise<void> {
+async function runIssueReview(): Promise<void> {
   clearError();
   activateTab("review");
-  const selectionButton = required<HTMLButtonElement>("#review-selection");
   const documentButton = required<HTMLButtonElement>("#review-document");
-  selectionButton.disabled = true;
   documentButton.disabled = true;
   required<HTMLElement>("#issue-summary").textContent = i18n.t("taskpane.issues.reviewing");
   try {
+    if (!reviewScope) await loadReviewScope("document");
+    if (!reviewScope) return;
     currentReviewFingerprint = await word.getReviewDocumentFingerprint();
-    if (kind === "selection") {
-      const selection = await word.getSelection();
-      if (!selection.text.trim()) throw new Error(i18n.t("taskpane.errors.selectionEmpty"));
-      reviewIssues = await generateReviewIssues(
-        runtime,
-        `[P0] ${selection.text.trim()}`,
-        i18n.t("taskpane.scope.selection"),
-      );
-    } else {
+    if (reviewScopeKind === "document") {
       const overview = await word.getDocumentOverview();
       const collected: ReviewIssue[] = [];
       for (let start = 1; start <= overview.paragraphCount; start += MAX_REVIEW_PARAGRAPHS) {
@@ -3110,6 +3501,16 @@ async function runIssueReview(kind: "selection" | "document"): Promise<void> {
         seen.add(key);
         return true;
       }).slice(0, 100);
+    } else {
+      const chunks = reviewScopeChunks.length
+        ? reviewScopeChunks
+        : [{ source: reviewScope, anchors: reviewScopeAnchors }];
+      const collected: ReviewIssue[] = [];
+      for (const chunk of chunks) {
+        const generated = await generateReviewIssues(runtime, chunk.source, reviewScopeLabel);
+        collected.push(...attachReviewAnchors(generated, chunk.anchors));
+      }
+      reviewIssues = collected.slice(0, 100);
     }
     persistReviewState();
     renderIssues();
@@ -3117,7 +3518,6 @@ async function runIssueReview(kind: "selection" | "document"): Promise<void> {
     required<HTMLElement>("#issue-summary").textContent = i18n.t("taskpane.issues.reviewFailed");
     showError(error);
   } finally {
-    selectionButton.disabled = false;
     documentButton.disabled = false;
   }
 }
@@ -3350,7 +3750,6 @@ async function applyAllSuggestions(action: "accept" | "insert" | "comment" | "sk
 }
 
 required<HTMLButtonElement>("#load-review-selection").addEventListener("click", () => void loadReviewScope("selection"));
-required<HTMLButtonElement>("#load-review-paragraphs").addEventListener("click", () => void loadReviewScope("paragraphs"));
 required<HTMLButtonElement>("#load-review-document").addEventListener("click", () => void loadReviewScope("document"));
 required<HTMLButtonElement>("#review-page-previous").addEventListener("click", () => {
   if (reviewScopeKind !== "paragraphs" && reviewScopeKind !== "document") return;
@@ -3380,9 +3779,17 @@ required<HTMLButtonElement>("#generate-review").addEventListener("click", async 
   suggestionList.className = "empty-panel";
   suggestionList.textContent = i18n.t("taskpane.review.generatingItems");
   try {
-    const chunks = reviewScopeChunks.length
+    let chunks = reviewScopeChunks.length
       ? reviewScopeChunks
       : [{ source: reviewScope, anchors: reviewScopeAnchors }];
+    if (reviewScopeKind === "document") {
+      chunks = [];
+      const overview = await word.getDocumentOverview();
+      for (let start = 1; start <= overview.paragraphCount; start += MAX_REVIEW_PARAGRAPHS) {
+        const documentSource = await readDocumentReviewSource(start);
+        chunks.push(...buildReviewChunks(documentSource.paragraphs, documentSource.start));
+      }
+    }
     const collected: ReviewSuggestion[] = [];
     for (let index = 0; index < chunks.length; index += 1) {
       const chunk = chunks[index];
@@ -3423,8 +3830,7 @@ required<HTMLButtonElement>("#generate-review").addEventListener("click", async 
   }
 });
 required<HTMLButtonElement>("#cancel-review").addEventListener("click", () => reviewAbortController?.abort());
-required<HTMLButtonElement>("#review-selection").addEventListener("click", () => void runIssueReview("selection"));
-required<HTMLButtonElement>("#review-document").addEventListener("click", () => void runIssueReview("document"));
+required<HTMLButtonElement>("#review-document").addEventListener("click", () => void runIssueReview());
 required<HTMLButtonElement>("#clear-issues").addEventListener("click", () => {
   reviewIssues = [];
   persistReviewState();

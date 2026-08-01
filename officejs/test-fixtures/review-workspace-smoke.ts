@@ -59,12 +59,19 @@ assert(invalidRejected, "non-JSON model output must fail clearly");
 
 class FakeRuntime {
   calls: ChatMessage[][] = [];
+  profileIds: Array<string | undefined> = [];
   private readonly responses: string[];
   constructor(responses: string[]) {
     this.responses = responses;
   }
-  async chat(messages: ChatMessage[]): Promise<ProviderChatResponse> {
+  async chat(
+    messages: ChatMessage[],
+    _model?: string,
+    _signal?: AbortSignal,
+    providerProfileId?: string,
+  ): Promise<ProviderChatResponse> {
     this.calls.push(messages);
+    this.profileIds.push(providerProfileId);
     return { provider: "fake", model: "fake", content: this.responses.shift() ?? "[]" };
   }
 }
@@ -73,10 +80,11 @@ const fake = new FakeRuntime([
   '{"issues":[{"category":"grammar","severity":"medium","paragraphIndex":1,"title":"语法","description":"问题","suggestion":"修复","excerpt":"原文"}]}',
   '{"suggestions":[{"paragraphIndex":1,"originalText":"原文","suggestedText":"新文","reason":"清晰"}]}',
 ]);
-const generatedIssues = await generateReviewIssues(fake as never, "[P1] 原文", "全文");
+const generatedIssues = await generateReviewIssues(fake as never, "[P1] 原文", "全文", "silent-review-model");
 const generatedSuggestions = await generateReviewSuggestions(fake as never, "[P1] 原文", "提升清晰度", "正式", undefined);
 assert(generatedIssues.length === 1 && generatedSuggestions.length === 1, "generation helpers parse provider responses");
 assert(fake.calls[0][0].content.includes("只返回 JSON"), "issue prompt requires strict JSON");
+assert(fake.profileIds[0] === "silent-review-model", "silent review must route through its saved provider profile");
 assert(fake.calls[1][1].content.includes("写作画像：正式"), "suggestion prompt carries writing profile");
 
 await i18n.changeLanguage("en-US");

@@ -114,7 +114,7 @@ for (const migratedContract of [
   'id="agent-stop"',
   'id="agent-output"',
   'id="agent-requirement"',
-  'id="workflow-apply-default"',
+  'id="workflow-source-text"',
   'id="issue-list"',
   'id="review-batch-actions"',
   'id="tracked-revision-panel"',
@@ -132,8 +132,13 @@ for (const migratedContract of [
   'id="text-workflow-workspace"',
   'id="workflow-load-selection"',
   'id="workflow-generate"',
+  'id="workflow-retry"',
   'id="workflow-replace"',
-  'id="workflow-comment"',
+  'id="workflow-precise-revision"',
+  'id="workflow-prompt-select"',
+  'id="workflow-prompt-dialog"',
+  'id="workflow-set-default-prompt"',
+  'id="workflow-auto-apply"',
   'id="table-workflow-workspace"',
   'id="table-preview"',
   'id="table-insert"',
@@ -188,6 +193,25 @@ for (const migratedContract of [
 ]) {
   assert(includesMigratedContract(migratedContract), `Office.js pane is missing ${migratedContract}`);
 }
+
+assert(
+  legalWorkflows.includes('className="fieldset"') &&
+    legalWorkflows.includes('className="fieldset-legend"') &&
+    legalWorkflows.includes('className="label prompt-favorite-option"') &&
+    legalWorkflows.includes('id="custom-prompt-manage" className="btn btn-outline btn-sm btn-square"') &&
+    legalWorkflows.includes('id="custom-prompt-delete-selected" className="btn btn-error btn-outline btn-xs"') &&
+    css.includes(":not(.checkbox):not(.toggle):not(.radio):not(.range)") &&
+    css.includes("#custom-prompt-search.prompt-search-field {") &&
+    css.includes("border: 0;") &&
+    css.includes("--border: 1px;") &&
+    css.includes("--line: #e4e4e7;") &&
+    !css.includes("--border: #e4e4e7;") &&
+    main.includes("setCustomPromptEditor(prompt);\n  localizeStaticDocument();") &&
+    legalWorkflows.includes('<span className="fieldset-legend" data-i18n="taskpane.prompts.name">') &&
+    !legalWorkflows.includes("custom-prompt-category") &&
+    !main.includes("prompt.category"),
+  "My Commands must use DaisyUI fieldsets without legacy input styles stretching nested inputs or checkboxes",
+);
 
 assert(
   !reviewWorkspace.includes('id="tab-issues"') &&
@@ -282,12 +306,19 @@ for (const independentPane of [
   "WordOllama.JS.TablePane",
   "WordOllama.JS.HtmlPane",
   "WordOllama.JS.MarkdownPane",
-  "WordOllama.JS.EditPane",
+  "WordOllama.JS.PolishPane",
+  "WordOllama.JS.ExpandPane",
+  "WordOllama.JS.SimplifyPane",
+  "WordOllama.JS.ContinuePane",
+  "WordOllama.JS.SummarizePane",
+  "WordOllama.JS.FixPane",
   "WordOllama.JS.TranslatePane",
   "WordOllama.JS.ComparePane",
   "WordOllama.JS.ReviewPane",
-  "WordOllama.JS.LegalPane",
+  "WordOllama.JS.RiskPane",
+  "WordOllama.JS.FairnessPane",
   "WordOllama.JS.MootCourtPane",
+  "WordOllama.JS.ContractComparePane",
   "WordOllama.JS.LawSearchPane",
   "WordOllama.JS.CustomPromptPane",
   "WordOllama.JS.DiagnosticsPane",
@@ -395,6 +426,11 @@ for (const translationControl of [
   'id="translation-swap-languages"',
   'id="translation-replace"',
   'id="translation-insert"',
+  'id="translation-retry"',
+  'id="translation-precise-revision"',
+  'id="translation-prompt-select"',
+  'id="translation-prompt-dialog"',
+  'id="translation-manage-prompts"',
 ]) {
   assert(
     taskpaneMarkup.includes(translationControl),
@@ -472,6 +508,16 @@ for (const styleContract of [
 }
 assert(!/body\s*\{[^}]*min-width:\s*320px/.test(css), "the real Word task pane must not force a 320px viewport");
 assert(
+  /body\s*\{[^}]*font-size:\s*12px[^}]*line-height:\s*1\.5/.test(css),
+  "task-pane DaisyUI controls must inherit the compact 12px Word UI type scale",
+);
+assert(
+  css.includes(".agent-shell .btn {") &&
+    css.includes(".agent-shell .btn-sm { font-size: 11px; }") &&
+    css.includes(".agent-shell .btn-xs { font-size: 10px; }"),
+  "task-pane DaisyUI buttons must follow the compact body, small, and extra-small type scale",
+);
+assert(
   /\.composer textarea\s*\{[^}]*min-width:\s*0/.test(css),
   "the Agent composer must shrink inside a narrow Word task pane",
 );
@@ -491,6 +537,14 @@ assert(
 assert(
   !css.includes("@media (prefers-color-scheme: dark)"),
   "the default pane must match the light VSTO baseline even when Office uses a dark shell",
+);
+assert(
+  css.includes(':root[data-theme="dark"]') &&
+    css.includes("--color-base-100: #1d1d1f;") &&
+    css.includes("--color-base-content: #f4f4f5;") &&
+    css.includes(':root[data-theme="dark"] button.secondary-button') &&
+    css.includes(':root[data-theme="dark"] button.danger-button'),
+  "dark task-pane controls must use the dark DaisyUI palette instead of light component defaults",
 );
 assert(
   css.includes("--accent: #185abd;") &&
@@ -557,15 +611,19 @@ for (const interactionContract of [
   "restoreReviewState(",
   "buildReviewChunks(",
   "runtime.listSkills(",
-  "word.beginTrackedChanges(",
-  "word.restoreTrackedChanges(",
-  "resolveTextWorkflowOutputMode(",
+  "word.applyPreciseRevision(",
+  "loadTextPromptPresets(",
+  "saveTextPromptPresets(",
   'activeSurface === "review"',
   "wordollama-review-handoff-v1",
   "allowExternalTools:",
+  "allowLocalTools:",
+  "allowNetworkTools:",
+  "allowMcpTools:",
   "openTextWorkflow(",
   "generateTextWorkflow(",
   "assertTextWorkflowSelectionUnchanged(",
+  "applyAutomaticTextWorkflowResult(",
   "generateStructuredTable(",
   "word.insertStructuredTable(",
   "markdownToHtml(",
@@ -615,8 +673,6 @@ for (const settingsInteractionContract of [
   "runtime.connectMcpServer(",
   "runtime.disconnectMcpServer(",
   "runtime.saveMcpPermissions(",
-  "runtime.getOllamaServerSettings(",
-  "runtime.saveOllamaServerSettings(",
   "runtime.authorizeGoogleProvider(",
   "runtime.checkForUpdates(",
   "runtime.installUpdate(",
@@ -627,11 +683,42 @@ for (const settingsInteractionContract of [
   );
 }
 assert(
+  !taskpaneMarkup.includes('id="translation-save-prompt"') &&
+    !taskpaneMarkup.includes('id="translation-set-default-prompt"') &&
+    !taskpaneMarkup.includes('id="translation-auto-apply"'),
+  "translation prompt management must not expose quick-save, default-prompt, or automatic document modification controls",
+);
+assert(
+  !settingsApp.includes("getOllamaServerSettings") &&
+    !settingsApp.includes("saveOllamaServerSettings") &&
+    !settingsApp.includes('t("advanced.ollama")'),
+  "the add-in must leave Ollama server configuration to Ollama instead of exposing it in settings",
+);
+assert(
   settingsApp.includes('t("skills.preview")') &&
     settingsApp.includes("settings-skill-preview-modal") &&
     settingsApp.includes("markdownToHtml(preview.content") &&
+    settingsApp.includes("renderFrontMatter: true") &&
+    settingsCss.includes(".settings-skill-preview .markdown-frontmatter") &&
     runtimeClient.includes('"/skills/read"'),
-  "installed Skills must expose a full rendered SKILL.md preview",
+  "installed Skills must expose a full rendered SKILL.md preview with YAML front matter",
+);
+assert(
+  settingsApp.includes("const changeLocale = async") &&
+    settingsApp.includes("await setUiLocalePreference(value)") &&
+    settingsApp.includes("void changeLocale(value)") &&
+    settingsChinese.includes('"uiLanguage": "界面语言 / Language"') &&
+    settingsEnglish.includes('"uiLanguage": "Language / 界面语言"'),
+  "the settings language selector must switch immediately and remain identifiable bilingually",
+);
+assert(
+  settingsApp.includes("function FilePicker(") &&
+    settingsApp.includes('t("common.chooseFile")') &&
+    settingsApp.includes('t("common.noFileChosen")') &&
+    settingsApp.includes("translatedStatus(fallbackKey, undefined, true)") &&
+    settingsCss.includes(".settings-file-picker-input") &&
+    settingsEnglish.includes('"chooseFile": "Choose file"'),
+  "settings file inputs and persistent statuses must follow the selected UI language",
 );
 assert(
   !settingsApp.includes("runtime.pullOllamaModel(") &&
@@ -666,8 +753,8 @@ for (const providerBase of [
 assert(
   updateStatus.includes("!result.configured") &&
     updateStatus.includes("result.updateAvailable && !result.artifact") &&
-    settingsApp.includes('t("updates.notConfigured")') &&
-    settingsApp.includes('t("updates.noArtifact")'),
+    settingsApp.includes('"updates.notConfigured"') &&
+    settingsApp.includes('"updates.noArtifact"'),
   "the update page must distinguish an unconfigured source and a missing platform installer",
 );
 assert(
@@ -680,11 +767,15 @@ assert(
 assert(
   settingsApp.includes('["unorderedList", "unorderedList"]') &&
     settingsApp.includes('["orderedList", "orderedList"]') &&
+    settingsApp.includes('value="footnote"') &&
+    settingsApp.includes('value="endnote"') &&
+    !settingsApp.includes('t("markdown.conversion")') &&
+    !settingsApp.includes("createWordParagraphStyle") &&
     zhLocale.markdown?.unorderedList === "无序列表" &&
     zhLocale.markdown?.orderedList === "有序列表" &&
     enLocale.markdown?.unorderedList === "Bulleted list" &&
     enLocale.markdown?.orderedList === "Numbered list",
-  "Markdown settings must expose separate ordered and unordered list style controls",
+  "Markdown settings must keep list style mappings, native note placement, and no conversion toggles or style creator",
 );
 
 assert(wordAdapter.includes("async insertAfterSelection("), "selection suggestions need a safe insert-after implementation");

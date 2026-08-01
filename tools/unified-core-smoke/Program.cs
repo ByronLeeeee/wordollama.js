@@ -161,7 +161,7 @@ try
         Temperature: 0.7,
         MaxTokens: 8192,
         ApiMode: "Responses"));
-    Assert(view.Profiles.Count == 2 &&
+    Assert(view.Profiles.Count >= 1 &&
            view.Profiles.Single(profile => profile.Id == "cloud").HasApiKey &&
            view.Profiles.Single(profile => profile.Id == "cloud").ApiMode == "Responses",
         "provider profile, protocol, and secret presence are exposed without the secret");
@@ -179,7 +179,9 @@ try
         "active provider resolves its protocol and secret from the vault");
     var reloadable = new ReloadableModelProvider(providerSettings.GetActiveOptions());
     Assert(reloadable.ProviderType == "OpenAI", "reloadable provider uses active profile");
-    providerSettings.Activate("default");
+    providerSettings.Upsert(new ProviderProfileUpdate(
+        "local", "Local", "Ollama", "http://127.0.0.1:11434", "test-model"));
+    providerSettings.Activate("local");
     reloadable.Reload(providerSettings.GetActiveOptions());
     Assert(reloadable.ProviderType == "Ollama", "provider hot reload changes runtime provider");
     providerSettings.Upsert(new ProviderProfileUpdate(
@@ -241,8 +243,8 @@ try
         new ModelProviderOptions("Ollama", "http://127.0.0.1:11434", "", ""),
         secretStore);
     Assert(
-        migratedDefaults.GetActiveProfile().Model == "" &&
-        File.ReadAllText(legacyDefaultPath).Contains("\"schemaVersion\": 1", StringComparison.Ordinal) &&
+        migratedDefaults.GetActiveProfile() is null &&
+        File.ReadAllText(legacyDefaultPath).Contains("\"schemaVersion\": 2", StringComparison.Ordinal) &&
         !File.ReadAllText(legacyDefaultPath).Contains("\"model\": \"llama3.2\"", StringComparison.Ordinal),
         "legacy generated llama3.2 default is removed exactly once");
     providerSettings.Delete("cloud");
@@ -389,6 +391,32 @@ Assert(agentProvider.LastRequest?.Messages.Any(message =>
            message.Role == "system" &&
            message.Content.Contains("Simplified Chinese", StringComparison.Ordinal)) == true,
     "Agent applies the configured output language to every provider iteration");
+
+var granularProvider = new CapturingProvider([
+    new ProviderChatResponse("fake", "fake", "done"),
+]);
+var granularAgent = new AgentSession(
+    "granular-permissions-smoke",
+    "https://localhost:3000",
+    new AgentStartRequest(
+        "inspect",
+        Tools: [readTool, .. fakeInternalTools.GetToolDescriptors()],
+        AllowLocalTools: false,
+        AllowNetworkTools: true,
+        AllowMcpTools: true),
+    granularProvider,
+    [fakeInternalTools]);
+granularAgent.Start();
+await foreach (var runtimeEvent in granularAgent.ReadEventsAsync())
+{
+    if (runtimeEvent.Type == "completed") break;
+}
+var granularNames = granularProvider.LastRequest?.Tools?.Select(tool => tool.Name).ToArray() ?? [];
+Assert(granularNames.Contains("read_skill") &&
+       granularNames.Contains("http_request") &&
+       granularNames.Contains("mcp__fake__lookup") &&
+       !granularNames.Contains("execute_command"),
+    "Agent independently filters local, network, and MCP tools");
 
 var englishPlanMessages = await CapturePlanMessagesAsync("en-US");
 var chinesePlanMessages = await CapturePlanMessagesAsync("zh-CN");
@@ -670,8 +698,11 @@ sealed class FakeInternalTools : IInternalToolExecutor
     [
         new("read_skill", "read skill", false, Schema),
         new("execute_command", "execute", false, Schema),
+        new("http_request", "request", false, Schema),
+        new("mcp__fake__lookup", "lookup", false, Schema),
     ];
-    public bool IsKnownTool(string name) => name is "read_skill" or "execute_command";
+    public bool IsKnownTool(string name) =>
+        name is "read_skill" or "execute_command" or "http_request" or "mcp__fake__lookup";
     public Task<string> ExecuteAsync(string name, JsonElement arguments, CancellationToken cancellationToken = default) =>
         Task.FromResult("ok");
 }

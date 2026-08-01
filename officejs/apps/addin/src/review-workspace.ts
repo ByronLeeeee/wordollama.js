@@ -144,7 +144,7 @@ export async function generateReviewIssues(
   runtime: RuntimeClient,
   source: string,
   scopeLabel: string,
-  model?: string,
+  providerProfileId?: string,
   signal?: AbortSignal,
 ): Promise<ReviewIssue[]> {
   const response = await runtime.chat([
@@ -160,7 +160,7 @@ export async function generateReviewIssues(
         interpolation: { escapeValue: false },
       }),
     },
-  ], model || undefined, signal);
+  ], undefined, signal, providerProfileId || undefined);
   return parseReviewIssues(response.content);
 }
 

@@ -77,6 +77,45 @@ try
         "legacy data migration is idempotent and never removes COM-era sources");
 
     var secrets = new MemorySecretStore();
+    var providerSettingsPath = Path.Combine(root, "model-profiles.json");
+    var providerSettings = new ProviderSettingsStore(
+        providerSettingsPath,
+        new ModelProviderOptions(
+            "Ollama",
+            "http://127.0.0.1:11434",
+            string.Empty,
+            "llama3.2"),
+        secrets);
+    Assert(
+        providerSettings.GetView() is { ActiveProviderId: "", Profiles.Count: 0 } &&
+        providerSettings.GetActiveOptions() is null,
+        "a fresh install has no implicit Ollama model or active model");
+    providerSettings.Upsert(new ProviderProfileUpdate(
+        "deepseek-v4-flash",
+        "DeepSeek",
+        "OpenAI",
+        "https://api.deepseek.com",
+        "deepseek-v4-flash"));
+    providerSettings.Upsert(new ProviderProfileUpdate(
+        "deepseek-reasoner",
+        "DeepSeek",
+        "OpenAI",
+        "https://api.deepseek.com",
+        "deepseek-reasoner"));
+    Assert(
+        providerSettings.GetView() is { ActiveProviderId: "", Profiles.Count: 2 },
+        "multiple models from one provider can be saved without implicit activation");
+    providerSettings.Activate("deepseek-v4-flash");
+    var afterActiveDelete = providerSettings.Delete("deepseek-v4-flash");
+    Assert(
+        afterActiveDelete is { ActiveProviderId: "", Profiles.Count: 1 } &&
+        providerSettings.GetActiveOptions() is null,
+        "deleting the active model does not silently activate another model");
+    var afterLastDelete = providerSettings.Delete("deepseek-reasoner");
+    Assert(
+        afterLastDelete is { ActiveProviderId: "", Profiles.Count: 0 },
+        "the saved model list can be emptied completely");
+
     var secretOutput = new StringWriter();
     var secretError = new StringWriter();
     Assert(HttpsCertificateSecretCommand.IsRequested(["https-certificate-secret", "invalid"]) &&

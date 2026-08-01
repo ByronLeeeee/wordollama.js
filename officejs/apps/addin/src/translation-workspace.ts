@@ -15,10 +15,16 @@ import {
   endStreamingText,
   updateStreamingText,
 } from "./streaming-ui";
+import {
+  createTextPromptPreset,
+  loadTextPromptPresets,
+  saveTextPromptPresets,
+  type TextPromptPreset,
+} from "./text-prompt-presets";
 
 type TranslationWordAdapter = Pick<
   OfficeJsWordAdapter,
-  "getSelection" | "replaceSelection" | "insertAfterSelection" | "insertAtCursor"
+  "getSelection" | "replaceSelection" | "insertAfterSelection" | "insertAtCursor" | "applyPreciseRevision"
 >;
 
 export interface TranslationWorkspaceController {
@@ -83,10 +89,90 @@ export function initializeTranslationWorkspace(
   const cancelButton = element<HTMLButtonElement>("#translation-cancel");
   const replaceButton = element<HTMLButtonElement>("#translation-replace");
   const insertButton = element<HTMLButtonElement>("#translation-insert");
+  const retryButton = element<HTMLButtonElement>("#translation-retry");
+  const preciseButton = element<HTMLButtonElement>("#translation-precise-revision");
   const copyButton = element<HTMLButtonElement>("#translation-copy");
+  const promptSelect = element<HTMLSelectElement>("#translation-prompt-select");
   let linkedSelection = "";
   let abortController: AbortController | null = null;
   let recentLanguages = readRecentLanguages();
+  let promptPresets: TextPromptPreset[] = loadTextPromptPresets(localStorage);
+
+  const translationPrompts = () => promptPresets.filter((preset) => preset.workflowKey === "translate");
+  const renderPromptSelect = (selectedId = "builtin") => {
+    promptSelect.replaceChildren();
+    const builtin = document.createElement("option");
+    builtin.value = "builtin";
+    builtin.textContent = i18n.t("taskpane.text.builtinPrompt");
+    promptSelect.appendChild(builtin);
+    for (const preset of translationPrompts()) {
+      const option = document.createElement("option");
+      option.value = preset.id;
+      option.textContent = preset.name;
+      promptSelect.appendChild(option);
+    }
+    promptSelect.value = Array.from(promptSelect.options).some((option) => option.value === selectedId)
+      ? selectedId : "builtin";
+  };
+  const applySelectedPrompt = () => {
+    instructions.value = promptPresets.find((preset) => preset.id === promptSelect.value)?.instruction ?? "";
+  };
+  const renderPromptList = () => {
+    const list = element<HTMLUListElement>("#translation-prompt-list");
+    list.replaceChildren();
+    const presets = translationPrompts();
+    if (!presets.length) {
+      const empty = document.createElement("li");
+      empty.className = "p-4 text-xs opacity-60 tracking-wide workflow-prompt-empty";
+      empty.textContent = i18n.t("taskpane.text.noSavedPrompts");
+      list.appendChild(empty);
+      return;
+    }
+    for (const preset of presets) {
+      const row = document.createElement("li");
+      row.className = "list-row workflow-prompt-row";
+      const content = document.createElement("div");
+      content.className = "list-col-grow workflow-prompt-row-main";
+      const title = document.createElement("strong");
+      title.className = "font-semibold";
+      title.textContent = preset.name;
+      const detail = document.createElement("span");
+      detail.className = "text-xs opacity-60 workflow-prompt-detail";
+      detail.textContent = preset.instruction;
+      content.append(title, detail);
+      const edit = document.createElement("button");
+      edit.className = "btn btn-square btn-ghost btn-xs";
+      edit.type = "button";
+      edit.title = i18n.t("taskpane.common.edit");
+      edit.setAttribute("aria-label", edit.title);
+      edit.innerHTML = '<svg class="size-[1em]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+      edit.addEventListener("click", () => {
+        element<HTMLInputElement>("#translation-prompt-name").value = preset.name;
+        element<HTMLTextAreaElement>("#translation-prompt-content").value = preset.instruction;
+        element<HTMLButtonElement>("#translation-prompt-create").dataset.editId = preset.id;
+      });
+      const remove = document.createElement("button");
+      remove.className = "btn btn-square btn-ghost btn-xs text-error";
+      remove.type = "button";
+      remove.title = i18n.t("taskpane.common.delete");
+      remove.setAttribute("aria-label", remove.title);
+      remove.innerHTML = '<svg class="size-[1em]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>';
+      remove.addEventListener("click", () => {
+        promptPresets = saveTextPromptPresets(localStorage, promptPresets.filter((item) => item.id !== preset.id));
+        renderPromptSelect();
+        renderPromptList();
+      });
+      row.append(content, edit, remove);
+      list.appendChild(row);
+    }
+  };
+  const openPromptDialog = () => {
+    element<HTMLInputElement>("#translation-prompt-name").value = "";
+    element<HTMLTextAreaElement>("#translation-prompt-content").value = "";
+    delete element<HTMLButtonElement>("#translation-prompt-create").dataset.editId;
+    renderPromptList();
+    element<HTMLDialogElement>("#translation-prompt-dialog").showModal();
+  };
 
   const getSourceLanguage = (): SourceLanguageCode | null =>
     resolveLanguageCode(sourceLanguage.value, true);
@@ -140,7 +226,9 @@ export function initializeTranslationWorkspace(
     const hasResult = Boolean(result.value.trim()) && abortController === null;
     runButton.disabled = !hasSource || !hasLanguages || abortController !== null;
     replaceButton.disabled = !hasResult || !linkedSelection;
+    preciseButton.disabled = !hasResult || !linkedSelection;
     insertButton.disabled = !hasResult;
+    retryButton.disabled = !hasSource || !hasLanguages || abortController !== null || !result.value.trim();
     copyButton.disabled = !hasResult;
   };
 
@@ -181,6 +269,8 @@ export function initializeTranslationWorkspace(
   };
 
   renderLanguageOptions();
+  renderPromptSelect();
+  applySelectedPrompt();
   setLanguage(sourceLanguage, "auto");
   setLanguage(targetLanguage, i18n.resolvedLanguage === "zh-CN" ? "en" : "zh-CN");
 
@@ -225,6 +315,45 @@ export function initializeTranslationWorkspace(
   }
   source.addEventListener("input", updateState);
   result.addEventListener("input", updateState);
+  promptSelect.addEventListener("change", () => {
+    applySelectedPrompt();
+  });
+  element<HTMLButtonElement>("#translation-manage-prompts").addEventListener("click", () => openPromptDialog());
+  element<HTMLButtonElement>("#translation-prompt-close").addEventListener("click", () => element<HTMLDialogElement>("#translation-prompt-dialog").close());
+  element<HTMLButtonElement>("#translation-prompt-create").addEventListener("click", (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    const name = element<HTMLInputElement>("#translation-prompt-name").value.trim();
+    const instruction = element<HTMLTextAreaElement>("#translation-prompt-content").value.trim();
+    if (!name || !instruction) {
+      dependencies.showError(new Error(i18n.t("taskpane.text.promptRequired")));
+      return;
+    }
+    const editingId = button.dataset.editId;
+    let savedId = editingId;
+    if (editingId) {
+      promptPresets = promptPresets.map((preset) => preset.id === editingId ? { ...preset, name, instruction } : preset);
+    } else {
+      const preset = createTextPromptPreset("translate", name, instruction);
+      promptPresets.push(preset);
+      savedId = preset.id;
+    }
+    promptPresets = saveTextPromptPresets(localStorage, promptPresets);
+    renderPromptSelect(savedId);
+    instructions.value = instruction;
+    renderPromptList();
+    element<HTMLInputElement>("#translation-prompt-name").value = "";
+    element<HTMLTextAreaElement>("#translation-prompt-content").value = "";
+    delete button.dataset.editId;
+  });
+
+  const applyPreciseTranslation = async () => {
+    await assertSelectionUnchanged();
+    const precise = await dependencies.word.applyPreciseRevision(linkedSelection, result.value);
+    setLinkedSelection(result.value);
+    actionStatus.textContent = i18n.t(precise
+      ? "taskpane.status.preciseRevisionApplied"
+      : "taskpane.status.trackedReplaceApplied");
+  };
 
   runButton.addEventListener("click", async () => {
     const sourceLanguageValue = getSourceLanguage();
@@ -269,6 +398,7 @@ export function initializeTranslationWorkspace(
     }
   });
   cancelButton.addEventListener("click", () => abortController?.abort());
+  retryButton.addEventListener("click", () => runButton.click());
   copyButton.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(result.value);
@@ -282,7 +412,7 @@ export function initializeTranslationWorkspace(
       await assertSelectionUnchanged();
       await dependencies.word.replaceSelection(result.value);
       actionStatus.textContent = i18n.t("taskpane.translation.replaced");
-      setLinkedSelection("");
+      setLinkedSelection(result.value);
     } catch (error) {
       dependencies.showError(error);
     }
@@ -300,6 +430,13 @@ export function initializeTranslationWorkspace(
       dependencies.showError(error);
     }
   });
+  preciseButton.addEventListener("click", async () => {
+    try {
+      await applyPreciseTranslation();
+    } catch (error) {
+      dependencies.showError(error);
+    }
+  });
   element<HTMLButtonElement>("#close-translation-workspace").addEventListener("click", () => {
     abortController?.abort();
     dependencies.closeWorkspace();
@@ -309,6 +446,8 @@ export function initializeTranslationWorkspace(
     const targetCode = getTargetLanguage() ??
       (i18n.resolvedLanguage === "zh-CN" ? "en" : "zh-CN");
     renderLanguageOptions();
+    renderPromptSelect(promptSelect.value);
+    renderPromptList();
     setLanguage(sourceLanguage, sourceCode);
     setLanguage(targetLanguage, targetCode);
     updateState();
@@ -319,6 +458,9 @@ export function initializeTranslationWorkspace(
   return {
     async open() {
       abortController?.abort();
+      promptPresets = loadTextPromptPresets(localStorage);
+      renderPromptSelect();
+      applySelectedPrompt();
       result.value = "";
       actionStatus.textContent = "";
       setLanguage(sourceLanguage, "auto");

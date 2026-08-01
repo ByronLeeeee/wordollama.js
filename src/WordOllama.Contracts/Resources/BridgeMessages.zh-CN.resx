@@ -31,4 +31,5 @@
   <data name="OAuthTooManyHeaders" xml:space="preserve"><value>Google OAuth 回调包含过多请求头。</value></data>
   <data name="OAuthFailedTitle" xml:space="preserve"><value>Google OAuth 失败</value></data>
   <data name="OllamaProviderRequired" xml:space="preserve"><value>当前提供商不是 Ollama，无法管理本机 Ollama 模型。</value></data>
+  <data name="NoActiveModel" xml:space="preserve"><value>尚未激活模型，请先在“设置 → 模型”中激活一个模型。</value></data>
 </root>

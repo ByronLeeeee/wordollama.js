@@ -21,7 +21,11 @@ const prompts: CustomPromptDefinition[] = [
   { id: "more", name: "提示风险", prompt: "指出风险", outputMode: "Comment" },
 ];
 await i18n.changeLanguage("en-US");
-saveCustomPrompts(storage, prompts);
+storage.setItem("wordollama-custom-prompts", JSON.stringify(prompts));
+const loadedPrompts = loadCustomPrompts(storage);
+assert(loadedPrompts.length === 2, "prompt library did not load");
+assert(loadedPrompts[0]?.favorite === true, "legacy quick slot was not migrated to a favorite");
+saveCustomPrompts(storage, loadedPrompts);
 assert(loadCustomPrompts(storage).length === 2, "prompt library did not round-trip");
 
 let duplicateRejected = false;
@@ -55,4 +59,4 @@ try {
 }
 assert(localizedError === "请先在 Word 中选择文本", "Chinese runtime error was not localized");
 
-console.log("Office.js custom prompt and quick-slot smoke passed.");
+console.log("Office.js My Commands storage and streaming smoke passed.");

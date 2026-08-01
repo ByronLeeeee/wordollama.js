@@ -9,6 +9,9 @@ export interface CustomPromptDefinition {
   name: string;
   prompt: string;
   outputMode: CustomPromptOutputMode;
+  favorite?: boolean;
+  lastUsedAt?: string;
+  /** Kept for migration from the former fixed Ribbon shortcut slots. */
   quickSlot?: 1 | 2 | 3 | 4;
 }
 
@@ -27,7 +30,14 @@ export function loadCustomPrompts(storage: Storage): CustomPromptDefinition[] {
         typeof prompt.name === "string" &&
         typeof prompt.prompt === "string" &&
         ["Insert", "TrackedChanges", "Comment"].includes(prompt.outputMode);
-    }).slice(0, MAX_PROMPTS);
+    }).slice(0, MAX_PROMPTS).map((prompt) => ({
+      id: prompt.id,
+      name: prompt.name,
+      prompt: prompt.prompt,
+      outputMode: prompt.outputMode,
+      favorite: prompt.favorite === true || Boolean(prompt.quickSlot),
+      lastUsedAt: typeof prompt.lastUsedAt === "string" ? prompt.lastUsedAt : undefined,
+    }));
   } catch {
     return [];
   }
@@ -38,8 +48,12 @@ export function saveCustomPrompts(storage: Storage, prompts: CustomPromptDefinit
     throw new Error(i18n.t("taskpane.prompts.errors.maxCount", { count: MAX_PROMPTS }));
   }
   const names = new Set<string>();
-  const slots = new Set<number>();
   for (const prompt of prompts) {
+    if (!prompt || typeof prompt !== "object" || typeof prompt.id !== "string" ||
+      typeof prompt.name !== "string" || typeof prompt.prompt !== "string" ||
+      !["Insert", "TrackedChanges", "Comment"].includes(prompt.outputMode)) {
+      throw new Error(i18n.t("taskpane.prompts.errors.invalidImport"));
+    }
     const normalizedName = prompt.name.trim().toLocaleLowerCase();
     if (!normalizedName || prompt.name.length > 80) {
       throw new Error(i18n.t("taskpane.prompts.errors.invalidName"));
@@ -54,14 +68,15 @@ export function saveCustomPrompts(storage: Storage, prompts: CustomPromptDefinit
         max: MAX_PROMPT_LENGTH,
       }));
     }
-    if (prompt.quickSlot) {
-      if (slots.has(prompt.quickSlot)) {
-        throw new Error(i18n.t("taskpane.prompts.errors.duplicateSlot", { slot: prompt.quickSlot }));
-      }
-      slots.add(prompt.quickSlot);
-    }
   }
-  storage.setItem(STORAGE_KEY, JSON.stringify(prompts));
+  storage.setItem(STORAGE_KEY, JSON.stringify(prompts.map((prompt) => ({
+    id: prompt.id,
+    name: prompt.name,
+    prompt: prompt.prompt,
+    outputMode: prompt.outputMode,
+    favorite: prompt.favorite === true,
+    lastUsedAt: prompt.lastUsedAt,
+  }))));
 }
 
 export async function runCustomPrompt(

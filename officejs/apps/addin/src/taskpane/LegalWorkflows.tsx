@@ -1,4 +1,4 @@
-import { Gavel, Search, WandSparkles } from "lucide-react";
+import { ArrowLeft, Gavel, Plus, Search, Settings2, WandSparkles } from "lucide-react";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
 function LawWorkflow() {
@@ -183,160 +183,100 @@ function CustomPromptWorkflow() {
     <section id="custom-prompt-workspace" className="text-workflow-workspace task-workspace" hidden>
       <WorkspaceHeader
         closeId="close-custom-prompt"
-        title={<span className="task-title"><WandSparkles size={18} aria-hidden="true" /><h2 data-i18n="taskpane.prompts.title">Custom prompts</h2></span>}
+        title={<span className="task-title"><WandSparkles size={18} aria-hidden="true" /><h2 data-i18n="taskpane.prompts.title">My commands</h2></span>}
       />
-      <details className="collapse collapse-arrow task-options">
-        <summary className="collapse-title" data-i18n="taskpane.prompts.saved">Saved prompts</summary>
-        <div className="collapse-content task-options-body">
-      <div className="form-group">
-        <label htmlFor="custom-prompt-list" data-i18n="taskpane.prompts.saved">
-          Saved prompts
-        </label>
-        <select id="custom-prompt-list" className="select select-sm">
-          <option value="" data-i18n="taskpane.prompts.newPrompt">
-            New prompt…
-          </option>
-        </select>
-      </div>
-      <div className="action-row wrap">
-        <button
-          id="custom-prompt-new"
-          className="btn btn-sm secondary-button"
-          type="button"
-          data-i18n="taskpane.common.new"
-        >
-          New
-        </button>
-        <button
-          id="custom-prompt-delete"
-          className="btn btn-ghost btn-xs text-button"
-          type="button"
-          disabled
-          data-i18n="taskpane.common.delete"
-        >
-          Delete
-        </button>
-      </div>
-      <div className="form-group">
-        <label htmlFor="custom-prompt-name" data-i18n="taskpane.prompts.name">
-          Action name
-        </label>
-        <input
-          id="custom-prompt-name"
-          className="input input-sm"
-          maxLength={80}
-          placeholder="For example: Convert to contract language"
-          data-i18n-placeholder="taskpane.prompts.namePlaceholder"
-        />
-      </div>
-      <div className="form-group">
-        <label htmlFor="custom-prompt-output" data-i18n="taskpane.prompts.outputMode">
-          Output mode
-        </label>
-        <select id="custom-prompt-output" className="select select-sm">
-          <option value="Insert" data-i18n="taskpane.text.insertBelow">
-            Insert below
-          </option>
-          <option value="TrackedChanges" data-i18n="taskpane.prompts.trackedReplace">
-            Replace with tracked changes
-          </option>
-          <option value="Comment" data-i18n="taskpane.prompts.comment">
-            Comment
-          </option>
-        </select>
-      </div>
-      <div className="form-group">
-        <label htmlFor="custom-prompt-slot" data-i18n="taskpane.prompts.ribbonSlot">
-          Ribbon shortcut slot
-        </label>
-        <select id="custom-prompt-slot" className="select select-sm">
-          <option value="" data-i18n="taskpane.prompts.unassigned">
-            Unassigned
-          </option>
-          <option value="1">C1</option>
-          <option value="2">C2</option>
-          <option value="3">C3</option>
-          <option value="4">C4</option>
-        </select>
-      </div>
-      <div className="form-group">
-        <label htmlFor="custom-prompt-text" data-i18n="taskpane.prompts.prompt">
-          Prompt
-        </label>
-        <textarea
-          id="custom-prompt-text"
-          className="textarea"
-          rows={6}
-          maxLength={20_000}
-          placeholder="Describe how to process the current selection…"
-          data-i18n-placeholder="taskpane.prompts.promptPlaceholder"
-        />
-      </div>
-      <button
-        id="custom-prompt-save"
-        className="btn btn-primary btn-sm"
-        type="button"
-        data-i18n="taskpane.prompts.save"
-      >
-        Save configuration
-      </button>
-        </div>
-      </details>
-      <div className="card card-border task-panel">
-      <div className="task-panel-heading">
-        <button
-          id="custom-prompt-load-selection"
-          className="btn btn-sm secondary-button"
-          type="button"
-          data-i18n="taskpane.common.loadSelection"
-        >
-          Load selection
-        </button>
-        <span id="custom-prompt-source-status" className="muted" />
-      </div>
-      <blockquote
-        id="custom-prompt-source-preview"
-        className="workflow-source-preview"
-        hidden
-      />
-      </div>
-      <div className="task-primary-actions">
-        <button
-          id="custom-prompt-run"
-          className="btn btn-primary btn-sm"
-          type="button"
-          disabled
-          data-i18n="taskpane.prompts.run"
-        >
-          Run prompt
-        </button>
-        <button
-          id="custom-prompt-cancel"
-          className="btn btn-sm secondary-button"
-          type="button"
-          disabled
-          data-i18n="taskpane.common.cancel"
-        >
-          Cancel
-        </button>
-      </div>
-      <div className="card card-border form-group task-panel task-output-panel">
-        <div className="task-panel-heading">
-          <label htmlFor="custom-prompt-result" data-i18n="taskpane.common.generatedResult">
-          Generated result
+
+      <div id="custom-prompt-launcher" className="prompt-launcher">
+        <div className="prompt-toolbar">
+          <label className="input input-sm prompt-search">
+            <Search size={15} aria-hidden="true" />
+            <input
+              id="custom-prompt-search"
+              className="prompt-search-field"
+              type="search"
+              placeholder="Search commands…"
+              data-i18n-placeholder="taskpane.prompts.searchPlaceholder"
+            />
           </label>
+          <button id="custom-prompt-new" className="btn btn-primary btn-sm btn-square" type="button" aria-label="New command" title="New command" data-i18n-aria-label="taskpane.prompts.new" data-i18n-title="taskpane.prompts.new">
+            <Plus size={17} aria-hidden="true" />
+          </button>
+          <button id="custom-prompt-manage" className="btn btn-outline btn-sm btn-square" type="button" aria-label="Manage commands" title="Manage commands" data-i18n-aria-label="taskpane.prompts.manage" data-i18n-title="taskpane.prompts.manage">
+            <Settings2 size={17} aria-hidden="true" />
+          </button>
         </div>
-        <textarea id="custom-prompt-result" className="textarea" rows={8} />
-      <button
-        id="custom-prompt-apply"
-        className="btn btn-primary btn-sm"
-        type="button"
-        disabled
-        data-i18n="taskpane.prompts.apply"
-      >
-        Apply to Word using configuration
-      </button>
+        <div id="custom-prompt-list" className="prompt-command-list" role="list" />
+        <div id="custom-prompt-empty" className="prompt-empty" hidden>
+          <WandSparkles size={24} aria-hidden="true" />
+          <strong id="custom-prompt-empty-title" data-i18n="taskpane.prompts.emptyTitle">No commands yet</strong>
+          <span id="custom-prompt-empty-hint" data-i18n="taskpane.prompts.emptyHint">Create a command to process selected text with one click.</span>
+          <button id="custom-prompt-empty-new" className="btn btn-primary btn-sm" type="button" data-i18n="taskpane.prompts.new">New command</button>
+        </div>
       </div>
+
+      <div id="custom-prompt-manager" className="prompt-manager" hidden>
+        <div className="prompt-view-heading">
+          <button id="custom-prompt-manage-back" className="btn btn-ghost btn-sm btn-square" type="button" aria-label="Back" data-i18n-aria-label="taskpane.common.back">
+            <ArrowLeft size={18} aria-hidden="true" />
+          </button>
+          <h3 data-i18n="taskpane.prompts.manage">Manage commands</h3>
+          <button id="custom-prompt-manage-new" className="btn btn-primary btn-sm" type="button"><Plus size={15} aria-hidden="true" /><span data-i18n="taskpane.prompts.new">New command</span></button>
+        </div>
+        <div className="prompt-manager-toolbar">
+          <label><input id="custom-prompt-select-all" className="checkbox checkbox-primary checkbox-sm" type="checkbox" /> <span data-i18n="taskpane.common.selectAll">Select all</span></label>
+          <div className="prompt-manager-actions">
+            <button id="custom-prompt-import" className="btn btn-outline btn-xs" type="button" data-i18n="taskpane.prompts.import">Import</button>
+            <button id="custom-prompt-export" className="btn btn-outline btn-xs" type="button" data-i18n="taskpane.prompts.export">Export</button>
+            <button id="custom-prompt-delete-selected" className="btn btn-error btn-outline btn-xs" type="button" disabled data-i18n="taskpane.common.delete">Delete</button>
+          </div>
+        </div>
+        <input id="custom-prompt-import-file" type="file" accept="application/json,.json" hidden />
+        <div id="custom-prompt-manage-list" className="prompt-manage-list" />
+      </div>
+
+      <div id="custom-prompt-runner" className="prompt-runner" hidden>
+        <div className="prompt-view-heading">
+          <button id="custom-prompt-runner-back" className="btn btn-ghost btn-sm btn-square" type="button" aria-label="Back" data-i18n-aria-label="taskpane.common.back"><ArrowLeft size={18} aria-hidden="true" /></button>
+          <div className="prompt-runner-title"><h3 id="custom-prompt-running-name" /><span id="custom-prompt-source-status" className="muted" /></div>
+          <button id="custom-prompt-cancel" className="btn btn-error btn-outline btn-xs" type="button" disabled data-i18n="taskpane.common.stop">Stop</button>
+        </div>
+        <blockquote id="custom-prompt-source-preview" className="workflow-source-preview" hidden />
+        <div className="form-group prompt-result-panel">
+          <label htmlFor="custom-prompt-result" data-i18n="taskpane.common.generatedResult">Generated result</label>
+          <textarea id="custom-prompt-result" className="textarea" rows={10} />
+        </div>
+        <div className="task-result-actions">
+          <button id="custom-prompt-apply" className="btn btn-primary btn-sm" type="button" disabled data-i18n="taskpane.prompts.apply">Apply to Word</button>
+          <button id="custom-prompt-copy" className="btn btn-ghost btn-sm" type="button" disabled data-i18n="taskpane.image.copyResult">Copy result</button>
+          <button id="custom-prompt-run" className="btn btn-ghost btn-sm" type="button" disabled data-i18n="taskpane.prompts.rerun">Run again</button>
+        </div>
+      </div>
+
+      <dialog id="custom-prompt-editor" className="modal prompt-editor-modal">
+        <div className="modal-box shadow-none">
+          <h3 id="custom-prompt-editor-title" className="font-bold text-lg" data-i18n="taskpane.prompts.new">New command</h3>
+          <div className="prompt-editor-fields">
+            <label className="fieldset">
+              <span className="fieldset-legend" data-i18n="taskpane.prompts.name">Command name</span>
+              <input id="custom-prompt-name" className="input input-sm" maxLength={80} data-i18n-placeholder="taskpane.prompts.namePlaceholder" />
+            </label>
+            <label className="fieldset">
+              <span className="fieldset-legend" data-i18n="taskpane.prompts.outputMode">Output mode</span>
+              <select id="custom-prompt-output" className="select select-sm"><option value="TrackedChanges" data-i18n="taskpane.prompts.trackedReplace">Replace with tracked changes</option><option value="Insert" data-i18n="taskpane.text.insertBelow">Insert below</option><option value="Comment" data-i18n="taskpane.prompts.comment">Comment</option></select>
+            </label>
+            <label className="fieldset">
+              <span className="fieldset-legend" data-i18n="taskpane.prompts.prompt">Prompt</span>
+              <textarea id="custom-prompt-text" className="textarea textarea-sm" rows={7} maxLength={20_000} data-i18n-placeholder="taskpane.prompts.promptPlaceholder" />
+            </label>
+            <label className="label prompt-favorite-option"><input id="custom-prompt-favorite" className="checkbox checkbox-primary checkbox-sm" type="checkbox" /><span data-i18n="taskpane.prompts.favorite">Add to favorites</span></label>
+          </div>
+          <div className="modal-action">
+            <button id="custom-prompt-save" className="btn btn-primary btn-sm" type="button" data-i18n="taskpane.common.save">Save</button>
+            <button id="custom-prompt-editor-cancel" className="btn btn-outline btn-sm" type="button" data-i18n="taskpane.common.cancel">Cancel</button>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop"><button data-i18n="taskpane.common.close">Close</button></form>
+      </dialog>
     </section>
   );
 }

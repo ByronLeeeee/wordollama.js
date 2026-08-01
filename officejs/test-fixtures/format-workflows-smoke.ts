@@ -57,6 +57,7 @@ const markdown = [
   "# 标题",
   "",
   "含 **粗体**、*斜体*、`code` 和 [链接](https://example.com)。",
+  "带脚注的内容[^source]。",
   "",
   "- 第一项",
   "- 第二项",
@@ -71,9 +72,11 @@ const markdown = [
   "```js",
   "<script>alert(1)</script>",
   "```",
+  "",
+  "[^source]: 来源见 [示例](https://example.com/source)。",
 ].join("\n");
-const html = markdownToHtml(markdown, { headings: true, tables: true, code: true });
-const markdownBlocks = markdownToBlocks(markdown, { headings: true, tables: true, code: true });
+const html = markdownToHtml(markdown, { notePlacement: "footnote" });
+const markdownBlocks = markdownToBlocks(markdown, { notePlacement: "footnote" });
 assert(markdownBlocks[0]?.kind === "heading1", "Markdown heading block type was lost");
 assert(markdownBlocks.some((block) => block.kind === "unorderedList"), "Markdown unordered-list block type was lost");
 assert(markdownBlocks.some((block) => block.kind === "orderedList"), "Markdown ordered-list block type was lost");
@@ -92,13 +95,37 @@ assert(
   "Markdown settings must store ordered and unordered Word style mappings independently",
 );
 assert(html.includes("&lt;script&gt;") && !html.includes("<script>"), "code block HTML was not escaped");
+assert(html.includes('<a href="https://example.com">链接</a>'), "safe Markdown hyperlink was not converted");
+assert(html.includes("markdown-note-reference") && html.includes("markdown-notes"), "Markdown footnote preview was not rendered");
+assert(
+  markdownBlocks.some((block) => block.notes?.some((note) => note.text.includes("来源见"))),
+  "Markdown footnote definition was not preserved for native Word insertion",
+);
 assert(
   !markdownInlineToHtml("[危险](javascript:alert(1))").includes("<a "),
   "unsafe link protocol was accepted",
 );
 
-const disabled = markdownToHtml("# 普通文本", { headings: false, tables: false, code: false });
-assert(!disabled.includes("<h1>"), "disabled heading conversion was ignored");
+assert(markdownToHtml("# 普通文本").includes("<h1>"), "Markdown headings must always be converted");
+
+const skillPreviewHtml = markdownToHtml([
+  "---",
+  "name: legal-entity-research",
+  "description: <企业信息查询>",
+  "metadata:",
+  "  author: 李伯阳律师",
+  "  version: 1.0",
+  "---",
+  "# 企业信息查询",
+].join("\n"), undefined, { renderFrontMatter: true });
+assert(
+  skillPreviewHtml.includes("markdown-frontmatter") &&
+    skillPreviewHtml.includes("markdown-frontmatter-depth-1") &&
+    skillPreviewHtml.includes("&lt;企业信息查询&gt;") &&
+    !skillPreviewHtml.includes("<p>---</p>") &&
+    skillPreviewHtml.includes("<h1>企业信息查询</h1>"),
+  "Skill preview YAML front matter was not rendered as structured, escaped metadata",
+);
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 const adapter = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/officejs-word-adapter.ts"), "utf8");
@@ -106,6 +133,8 @@ assert(adapter.includes("async insertStructuredTable("), "Word adapter lacks str
 assert(adapter.includes("selection.insertTable("), "table insertion must use the current selection");
 assert(adapter.includes("async insertHtmlAtSelection("), "Word adapter lacks HTML insertion");
 assert(adapter.includes("async insertStyledHtmlBlocksAtSelection("), "Word adapter lacks style-mapped Markdown insertion");
+assert(adapter.includes("reference.insertFootnote(text)") && adapter.includes("reference.insertEndnote(text)"),
+  "Word adapter lacks native footnote/endnote insertion");
 assert(adapter.includes("async listStyles("), "Word adapter lacks cross-platform style discovery");
 assert(adapter.includes("async createParagraphStyle("), "Word adapter lacks WordApi 1.5 custom style creation");
 

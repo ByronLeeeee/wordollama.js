@@ -1,4 +1,4 @@
-import { ClipboardPaste, FileText, Table2, WandSparkles } from "lucide-react";
+import { ClipboardPaste, FileText, Plus, RotateCcw, Save, Table2, WandSparkles } from "lucide-react";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
 function TextWorkflow() {
@@ -15,9 +15,9 @@ function TextWorkflow() {
           </span>
         }
       />
-      <article className="card card-border task-panel">
+      <article className="card card-border task-panel workflow-source-panel">
         <div className="task-panel-heading">
-          <h3 data-i18n="taskpane.text.scope">Scope</h3>
+          <h3 data-i18n="taskpane.text.source">Source text</h3>
           <div className="task-panel-tools">
           <button
             id="workflow-load-selection"
@@ -35,31 +35,48 @@ function TextWorkflow() {
           >
             Load document
           </button>
-          <button
-            id="workflow-clear-source"
-            className="btn btn-ghost btn-xs text-button task-tertiary-action"
-            type="button"
-            data-i18n="taskpane.text.requirementOnly"
-          >
-            Use requirements only
-          </button>
           </div>
         </div>
         <p id="workflow-source-status" className="task-status" />
-        <blockquote id="workflow-source-preview" className="workflow-source-preview" hidden />
-      </article>
-      <div className="form-group task-instructions">
-        <label htmlFor="workflow-instruction" data-i18n="taskpane.text.instructions">
-          Instructions
-        </label>
         <textarea
-          id="workflow-instruction"
-          className="textarea"
-          rows={4}
-          placeholder="Add tone, length, terminology, or formatting requirements…"
-          data-i18n-placeholder="taskpane.text.instructionsPlaceholder"
+          id="workflow-source-text"
+          className="textarea workflow-source-text"
+          rows={7}
+          placeholder="Select text in Word, or enter text here…"
+          data-i18n-placeholder="taskpane.text.sourcePlaceholder"
         />
-      </div>
+      </article>
+      <article className="card card-border task-panel workflow-prompt-panel">
+        <div className="task-panel-heading">
+          <h3 data-i18n="taskpane.text.promptPreset">Prompt</h3>
+          <button id="workflow-manage-prompts" className="btn btn-ghost btn-xs" type="button" data-i18n="taskpane.text.managePrompts">
+            Manage
+          </button>
+        </div>
+        <label className="sr-only" htmlFor="workflow-prompt-select" data-i18n="taskpane.text.promptPreset">Prompt</label>
+        <select id="workflow-prompt-select" className="select select-bordered select-sm" />
+        <div className="form-group task-instructions">
+          <label htmlFor="workflow-instruction" data-i18n="taskpane.text.instructions">Instructions</label>
+          <textarea
+            id="workflow-instruction"
+            className="textarea textarea-bordered"
+            rows={4}
+            placeholder="Add tone, length, terminology, or formatting requirements…"
+            data-i18n-placeholder="taskpane.text.instructionsPlaceholder"
+          />
+        </div>
+        <div className="workflow-prompt-preferences">
+          <button id="workflow-save-prompt" className="btn btn-ghost btn-xs workflow-save-prompt" type="button">
+            <Save size={14} aria-hidden="true" />
+            <span data-i18n="taskpane.text.saveAsPrompt">Save as my prompt</span>
+          </button>
+          <button id="workflow-set-default-prompt" className="btn btn-ghost btn-xs" type="button" data-i18n="taskpane.text.setDefaultPrompt">Set as default</button>
+          <label className="label workflow-auto-apply-option">
+            <span className="label-text" data-i18n="taskpane.text.autoApply">Apply automatically</span>
+            <input id="workflow-auto-apply" className="toggle toggle-primary toggle-sm" type="checkbox" />
+          </label>
+        </div>
+      </article>
       <div className="task-primary-actions">
         <button id="workflow-generate" className="btn btn-primary btn-sm" type="button" data-i18n="taskpane.common.generate">
           Generate
@@ -91,20 +108,12 @@ function TextWorkflow() {
         <textarea id="workflow-result" className="textarea" rows={10} />
         <div className="task-result-actions">
           <button
-            id="workflow-apply-default"
-            className="btn btn-primary btn-sm"
+            id="workflow-retry"
+            className="btn btn-ghost btn-sm"
             type="button"
-            data-i18n="taskpane.text.applyDefault"
           >
-            Apply using default
-          </button>
-          <button
-            id="workflow-replace"
-            className="btn btn-sm"
-            type="button"
-            data-i18n="taskpane.text.replaceOriginal"
-          >
-            Replace original
+            <RotateCcw size={14} aria-hidden="true" />
+            <span data-i18n="taskpane.text.retry">Retry</span>
           </button>
           <button
             id="workflow-insert"
@@ -115,15 +124,47 @@ function TextWorkflow() {
             Insert below
           </button>
           <button
-            id="workflow-comment"
+            id="workflow-replace"
             className="btn btn-sm secondary-button"
             type="button"
-            data-i18n="taskpane.text.addComment"
+            data-i18n="taskpane.text.replaceOriginal"
           >
-            Add comment
+            Replace original
+          </button>
+          <button
+            id="workflow-precise-revision"
+            className="btn btn-primary btn-sm"
+            type="button"
+            data-i18n="taskpane.text.preciseRevision"
+          >
+            Precise revision
           </button>
         </div>
       </section>
+      <dialog id="workflow-prompt-dialog" className="modal workflow-prompt-dialog">
+        <div className="modal-box shadow-none">
+          <h3 className="text-lg font-bold" data-i18n="taskpane.text.myPrompts">My prompts</h3>
+          <p className="text-sm text-base-content/60" data-i18n="taskpane.text.myPromptsHint">Save multiple prompts for this tool.</p>
+          <ul id="workflow-prompt-list" className="list bg-base-100 rounded-box workflow-prompt-list" />
+          <div className="divider" />
+          <label className="form-control">
+            <span className="label-text" data-i18n="taskpane.text.promptName">Name</span>
+            <input id="workflow-prompt-name" className="input input-bordered input-sm" type="text" />
+          </label>
+          <label className="form-control">
+            <span className="label-text" data-i18n="taskpane.text.promptContent">Prompt content</span>
+            <textarea id="workflow-prompt-content" className="textarea textarea-bordered" rows={6} />
+          </label>
+          <div className="modal-action">
+            <button id="workflow-prompt-create" className="btn btn-primary btn-sm" type="button">
+              <Plus size={14} aria-hidden="true" />
+              <span data-i18n="taskpane.common.save">Save</span>
+            </button>
+            <button id="workflow-prompt-close" className="btn btn-ghost btn-sm" type="button" data-i18n="taskpane.common.close">Close</button>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop"><button data-i18n="taskpane.common.close">Close</button></form>
+      </dialog>
     </section>
   );
 }

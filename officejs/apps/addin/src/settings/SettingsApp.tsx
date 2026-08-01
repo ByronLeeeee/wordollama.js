@@ -1,5 +1,4 @@
 import {
-  Fragment,
   createContext,
   useCallback,
   useContext,
@@ -38,7 +37,6 @@ import type {
   McpServerView,
   McpToolDefinition,
   MemoryItemView,
-  OllamaServerSettingsUpdate,
   ProviderProfileUpdate,
   ProviderProfileView,
   ReviewSettingsView,
@@ -58,7 +56,6 @@ import {
 } from "./i18n";
 import {
   closeSettingsWindow,
-  createWordParagraphStyle,
   listWordStyles,
 } from "./dialog-rpc";
 import { classifyUpdateResult } from "./update-status";
@@ -74,7 +71,13 @@ type PageId =
   | "updates"
   | "about";
 
-type StatusState = { text: string; error?: boolean } | null;
+type StatusValues = Record<string, string | number | boolean | undefined>;
+type StatusState = {
+  text?: string;
+  translationKey?: string;
+  values?: StatusValues;
+  error?: boolean;
+} | null;
 
 const runtime = new RuntimeClient();
 
@@ -136,9 +139,17 @@ function parsePairs(value: string): Record<string, string> {
   }));
 }
 
-function toStatus(error: unknown, fallback: string): StatusState {
+function translatedStatus(
+  translationKey: string,
+  values?: StatusValues,
+  error = false,
+): StatusState {
+  return { translationKey, values, error };
+}
+
+function toStatus(error: unknown, fallbackKey: string): StatusState {
   console.error(error);
-  return { text: fallback, error: true };
+  return translatedStatus(fallbackKey, undefined, true);
 }
 
 function PageHeading({ title }: { title: string }) {
@@ -172,22 +183,51 @@ function Card({
 }
 
 function Status({ value }: { value: StatusState }) {
+  const { t } = useTranslation();
   return (
     <p className={`settings-status${value?.error ? " text-error" : ""}`} role={value?.error ? "alert" : undefined}>
-      {value?.text ?? ""}
+      {value?.translationKey ? t(value.translationKey, value.values) : value?.text ?? ""}
     </p>
   );
 }
 
-function SwitchRow({ label, title, checked, onChange }: {
+function FilePicker({
+  accept,
+  file,
+  onChange,
+}: {
+  accept: string;
+  file: File | null;
+  onChange: (file: File | null) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <label className="settings-file-picker">
+      <input
+        className="settings-file-picker-input"
+        type="file"
+        accept={accept}
+        onChange={(event) => onChange(event.currentTarget.files?.[0] ?? null)}
+      />
+      <span className="settings-file-picker-button">{t("common.chooseFile")}</span>
+      <span className="settings-file-picker-name">{file?.name ?? t("common.noFileChosen")}</span>
+    </label>
+  );
+}
+
+function SwitchRow({ label, hint, title, checked, onChange }: {
   label: string;
+  hint?: string;
   title?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
 }) {
   return (
     <label className="settings-switch-row" title={title}>
-      <span>{label}</span>
+      <span className="settings-switch-copy">
+        <span>{label}</span>
+        {hint ? <small>{hint}</small> : null}
+      </span>
       <input
         className="toggle toggle-primary toggle-sm"
         type="checkbox"
@@ -242,12 +282,23 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
         saved.current = { ...saved.current, reviewSettings: normalized };
         setReviewSettings(normalized);
       })
-      .catch((error) => setStatus(toStatus(error, t("common.notConnected"))));
-  }, [t]);
+      .catch((error) => setStatus(toStatus(error, "common.notConnected")));
+  }, []);
 
   const update = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
     setSettings((current) => ({ ...current, [key]: value }));
     if (key === "darkTheme") onThemeChange(Boolean(value));
+  };
+
+  const changeLocale = async (value: UiLocalePreference) => {
+    setPreference(value);
+    try {
+      await setUiLocalePreference(value);
+      saved.current = { ...saved.current, preference: value };
+      setStatus(null);
+    } catch (error) {
+      setStatus(toStatus(error, "common.saveFailed"));
+    }
   };
 
   const save = async () => {
@@ -267,15 +318,13 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
       suppressPlan: settings.suppressPlan,
       suppressDiff: settings.suppressDiff,
     });
-    await setUiLocalePreference(preference);
     setReviewSettings(persistedReviewSettings);
     saved.current = { preference, settings, reviewSettings: persistedReviewSettings };
-    setStatus({ text: t("common.saved") });
+    setStatus(translatedStatus("common.saved"));
   };
   useSettingsSection(
     "general",
-    preference !== saved.current.preference ||
-      !settingsEqual(settings, saved.current.settings) ||
+    !settingsEqual(settings, saved.current.settings) ||
       reviewSettings.outputPreference !== saved.current.reviewSettings.outputPreference ||
       reviewSettings.autoMemory !== saved.current.reviewSettings.autoMemory,
     save,
@@ -298,7 +347,7 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
       applyMemoryView(await runtime.addMemory(newMemory));
       setNewMemory("");
     } catch (error) {
-      setStatus(toStatus(error, t("common.saveFailed")));
+      setStatus(toStatus(error, "common.saveFailed"));
     }
   };
 
@@ -309,7 +358,7 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
       setEditingMemoryId(null);
       setEditingMemory("");
     } catch (error) {
-      setStatus(toStatus(error, t("common.saveFailed")));
+      setStatus(toStatus(error, "common.saveFailed"));
     }
   };
 
@@ -318,37 +367,41 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
     try {
       applyMemoryView(await runtime.deleteMemories(ids));
     } catch (error) {
-      setStatus(toStatus(error, t("common.saveFailed")));
+      setStatus(toStatus(error, "common.saveFailed"));
     }
   };
 
   return (
-    <div className="settings-page">
+    <div className="settings-page settings-general-page">
       <PageHeading title={t("general.title")} />
       <div className="settings-grid">
         <Card title={t("general.appearance")}>
-          <div className="settings-form-grid">
-            <label htmlFor="ui-language">{t("general.uiLanguage")}</label>
-            <select
-              id="ui-language"
-              className="select select-sm"
-              value={preference}
-              onChange={(event) => {
-                const value = event.currentTarget.value as UiLocalePreference;
-                setPreference(value);
-              }}
-            >
-              <option value="auto">{t("general.uiLanguageAuto")}</option>
-              <option value="en-US">{t("general.uiLanguageEnglish")}</option>
-              <option value="zh-CN">{t("general.uiLanguageChinese")}</option>
-            </select>
-            <div className="settings-row-wide settings-switch-list">
-              <SwitchRow
-                label={t("general.darkTheme")}
+          <div className="settings-control-list">
+            <label className="settings-control-row" htmlFor="ui-language">
+              <span className="settings-control-label">{t("general.uiLanguage")}</span>
+              <select
+                id="ui-language"
+                className="select select-sm"
+                value={preference}
+                onChange={(event) => {
+                  const value = event.currentTarget.value as UiLocalePreference;
+                  void changeLocale(value);
+                }}
+              >
+                <option value="auto">{t("general.uiLanguageAuto")}</option>
+                <option value="en-US">{t("general.uiLanguageEnglish")}</option>
+                <option value="zh-CN">{t("general.uiLanguageChinese")}</option>
+              </select>
+            </label>
+            <label className="settings-control-row">
+              <span className="settings-control-label">{t("general.darkTheme")}</span>
+              <input
+                className="toggle toggle-primary toggle-sm"
+                type="checkbox"
                 checked={settings.darkTheme}
-                onChange={(value) => update("darkTheme", value)}
+                onChange={(event) => update("darkTheme", event.currentTarget.checked)}
               />
-            </div>
+            </label>
           </div>
         </Card>
         <Card title={t("general.contentPreferences")}>
@@ -359,42 +412,50 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
                   <h3>{t("general.memory")}</h3>
                   <p>{t("general.memoryHint")}</p>
                 </div>
-                <SwitchRow
-                  label={t("general.autoMemory")}
-                  checked={reviewSettings.autoMemory}
-                  onChange={(value) => setReviewSettings((current) => ({ ...current, autoMemory: value }))}
-                />
-              </div>
-              <div className="settings-memory-toolbar">
-                <label className="settings-memory-select-all">
+                <label className="settings-inline-toggle">
+                  <span>{t("general.autoMemory")}</span>
                   <input
-                    className="checkbox checkbox-sm"
+                    className="toggle toggle-primary toggle-sm"
                     type="checkbox"
-                    checked={reviewSettings.memories.length > 0 && selectedMemories.size === reviewSettings.memories.length}
-                    onChange={(event) => setSelectedMemories(event.currentTarget.checked
-                      ? new Set(reviewSettings.memories.map((item) => item.id))
-                      : new Set())}
+                    checked={reviewSettings.autoMemory}
+                    onChange={(event) => setReviewSettings((current) => ({
+                      ...current,
+                      autoMemory: event.currentTarget.checked,
+                    }))}
                   />
-                  <span>{t("common.selectAll")}</span>
                 </label>
-                <button
-                  className="btn btn-ghost btn-sm text-error"
-                  type="button"
-                  disabled={!selectedMemories.size}
-                  onClick={() => void deleteMemories([...selectedMemories])}
-                >
-                  <Trash2 size={14} />
-                  {t("general.deleteSelected")}
-                </button>
-                <button
-                  className="btn btn-ghost btn-sm text-error"
-                  type="button"
-                  disabled={!reviewSettings.memories.length}
-                  onClick={() => void deleteMemories(reviewSettings.memories.map((item) => item.id))}
-                >
-                  {t("general.deleteAll")}
-                </button>
               </div>
+              {reviewSettings.memories.length ? (
+                <div className="settings-memory-toolbar">
+                  <label className="settings-memory-select-all">
+                    <input
+                      className="checkbox checkbox-sm"
+                      type="checkbox"
+                      checked={selectedMemories.size === reviewSettings.memories.length}
+                      onChange={(event) => setSelectedMemories(event.currentTarget.checked
+                        ? new Set(reviewSettings.memories.map((item) => item.id))
+                        : new Set())}
+                    />
+                    <span>{t("common.selectAll")}</span>
+                  </label>
+                  <button
+                    className="btn btn-ghost btn-sm text-error"
+                    type="button"
+                    disabled={!selectedMemories.size}
+                    onClick={() => void deleteMemories([...selectedMemories])}
+                  >
+                    <Trash2 size={14} />
+                    {t("general.deleteSelected")}
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-sm text-error"
+                    type="button"
+                    onClick={() => void deleteMemories(reviewSettings.memories.map((item) => item.id))}
+                  >
+                    {t("general.deleteAll")}
+                  </button>
+                </div>
+              ) : null}
               <div className="settings-memory-list">
                 {reviewSettings.memories.length ? reviewSettings.memories.map((memory) => (
                   <div className="settings-memory-row" key={memory.id}>
@@ -478,36 +539,46 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
                 placeholder={t("general.outputPreferencePlaceholder")}
               />
             </section>
-            <div className="settings-form-grid">
-            <label htmlFor="output-mode">{t("general.outputMode")}</label>
-            <select
-              id="output-mode"
-              className="select select-sm"
-              value={settings.outputMode}
-              onChange={(event) => update("outputMode", event.currentTarget.value)}
-            >
-              <option value="Auto">{t("general.outputAuto")}</option>
-              <option value="InsertBelow">{t("general.insertBelow")}</option>
-              <option value="InsertBelowWithDiff">{t("general.insertWithDiff")}</option>
-              <option value="ReplaceOriginal">{t("general.replace")}</option>
-              <option value="Comment">{t("general.comment")}</option>
-              <option value="ReviewPane">{t("general.reviewPane")}</option>
-            </select>
+            <div className="settings-control-list settings-output-mode">
+              <label className="settings-control-row" htmlFor="output-mode">
+                <span className="settings-control-label">{t("general.outputMode")}</span>
+                <select
+                  id="output-mode"
+                  className="select select-sm"
+                  value={settings.outputMode}
+                  onChange={(event) => update("outputMode", event.currentTarget.value)}
+                >
+                  <option value="Auto">{t("general.outputAuto")}</option>
+                  <option value="InsertBelow">{t("general.insertBelow")}</option>
+                  <option value="InsertBelowWithDiff">{t("general.insertWithDiff")}</option>
+                  <option value="ReplaceOriginal">{t("general.replace")}</option>
+                  <option value="Comment">{t("general.comment")}</option>
+                  <option value="ReviewPane">{t("general.reviewPane")}</option>
+                </select>
+              </label>
             </div>
           </div>
         </Card>
         <Card title={t("general.behavior")}>
-          <div className="settings-switch-list">
-            <SwitchRow
-              label={t("general.suppressPlan")}
-              checked={settings.suppressPlan}
-              onChange={(value) => update("suppressPlan", value)}
-            />
-            <SwitchRow
-              label={t("general.suppressDiff")}
-              checked={settings.suppressDiff}
-              onChange={(value) => update("suppressDiff", value)}
-            />
+          <div className="settings-control-list">
+            <label className="settings-control-row">
+              <span className="settings-control-label">{t("general.suppressPlan")}</span>
+              <input
+                className="toggle toggle-primary toggle-sm"
+                type="checkbox"
+                checked={settings.suppressPlan}
+                onChange={(event) => update("suppressPlan", event.currentTarget.checked)}
+              />
+            </label>
+            <label className="settings-control-row">
+              <span className="settings-control-label">{t("general.suppressDiff")}</span>
+              <input
+                className="toggle toggle-primary toggle-sm"
+                type="checkbox"
+                checked={settings.suppressDiff}
+                onChange={(event) => update("suppressDiff", event.currentTarget.checked)}
+              />
+            </label>
           </div>
           <Status value={status} />
         </Card>
@@ -517,10 +588,10 @@ function GeneralPage({ onThemeChange }: { onThemeChange: (dark: boolean) => void
 }
 
 const emptyProvider: ProviderProfileUpdate = {
-  id: "ollama",
-  name: "Ollama",
-  type: "Ollama",
-  endpoint: "http://127.0.0.1:11434",
+  id: "",
+  name: "",
+  type: "",
+  endpoint: "",
   model: "",
   toolCallingMode: "Auto",
   supportsStreaming: true,
@@ -540,25 +611,34 @@ type ProviderPreset = {
   type: string;
   endpoint: string;
   apiMode?: string;
+  icon: string;
 };
 
 const providerPresets: ProviderPreset[] = [
-  { id: "ollama", labelKey: "models.providers.ollama", name: "Ollama", type: "Ollama", endpoint: "http://127.0.0.1:11434" },
-  { id: "openai", labelKey: "models.providers.openai", name: "OpenAI", type: "OpenAI", endpoint: "https://api.openai.com/v1", apiMode: "Responses" },
-  { id: "deepseek", labelKey: "models.providers.deepseek", name: "DeepSeek", type: "OpenAI", endpoint: "https://api.deepseek.com", apiMode: "ChatCompletions" },
-  { id: "qwen", labelKey: "models.providers.qwen", name: "Qwen", type: "OpenAI", endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1", apiMode: "ChatCompletions" },
-  { id: "doubao", labelKey: "models.providers.doubao", name: "Doubao", type: "OpenAI", endpoint: "https://ark.cn-beijing.volces.com/api/v3", apiMode: "ChatCompletions" },
-  { id: "zhipu", labelKey: "models.providers.zhipu", name: "Zhipu GLM", type: "OpenAI", endpoint: "https://open.bigmodel.cn/api/paas/v4", apiMode: "ChatCompletions" },
-  { id: "kimi", labelKey: "models.providers.kimi", name: "Kimi", type: "OpenAI", endpoint: "https://api.moonshot.cn/v1", apiMode: "ChatCompletions" },
-  { id: "siliconflow", labelKey: "models.providers.siliconflow", name: "SiliconFlow", type: "OpenAI", endpoint: "https://api.siliconflow.cn/v1", apiMode: "ChatCompletions" },
-  { id: "minimax", labelKey: "models.providers.minimax", name: "MiniMax", type: "OpenAI", endpoint: "https://api.minimaxi.chat/v1", apiMode: "ChatCompletions" },
-  { id: "claude", labelKey: "models.providers.claude", name: "Claude", type: "Claude", endpoint: "https://api.anthropic.com/v1" },
-  { id: "gemini", labelKey: "models.providers.gemini", name: "Gemini", type: "Gemini", endpoint: "https://generativelanguage.googleapis.com/v1beta" },
-  { id: "lm-studio", labelKey: "models.providers.lmStudio", name: "LM Studio", type: "LMStudio", endpoint: "http://127.0.0.1:1234/v1", apiMode: "ChatCompletions" },
-  { id: "vllm", labelKey: "models.providers.vllm", name: "vLLM", type: "vLLM", endpoint: "http://127.0.0.1:8000/v1", apiMode: "ChatCompletions" },
-  { id: "llama-cpp", labelKey: "models.providers.llamaCpp", name: "llama.cpp", type: "OpenAI", endpoint: "http://127.0.0.1:8080/v1", apiMode: "ChatCompletions" },
-  { id: "custom", labelKey: "models.providers.custom", name: "OpenAI Compatible", type: "OpenAI", endpoint: "", apiMode: "Auto" },
+  { id: "ollama", labelKey: "models.providers.ollama", name: "Ollama", type: "Ollama", endpoint: "http://127.0.0.1:11434", icon: "O" },
+  { id: "openai", labelKey: "models.providers.openai", name: "OpenAI", type: "OpenAI", endpoint: "https://api.openai.com/v1", apiMode: "Responses", icon: "AI" },
+  { id: "deepseek", labelKey: "models.providers.deepseek", name: "DeepSeek", type: "OpenAI", endpoint: "https://api.deepseek.com", apiMode: "ChatCompletions", icon: "DS" },
+  { id: "qwen", labelKey: "models.providers.qwen", name: "Qwen", type: "OpenAI", endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1", apiMode: "ChatCompletions", icon: "Q" },
+  { id: "doubao", labelKey: "models.providers.doubao", name: "Doubao", type: "OpenAI", endpoint: "https://ark.cn-beijing.volces.com/api/v3", apiMode: "ChatCompletions", icon: "DB" },
+  { id: "zhipu", labelKey: "models.providers.zhipu", name: "Zhipu GLM", type: "OpenAI", endpoint: "https://open.bigmodel.cn/api/paas/v4", apiMode: "ChatCompletions", icon: "GL" },
+  { id: "kimi", labelKey: "models.providers.kimi", name: "Kimi", type: "OpenAI", endpoint: "https://api.moonshot.cn/v1", apiMode: "ChatCompletions", icon: "K" },
+  { id: "siliconflow", labelKey: "models.providers.siliconflow", name: "SiliconFlow", type: "OpenAI", endpoint: "https://api.siliconflow.cn/v1", apiMode: "ChatCompletions", icon: "SF" },
+  { id: "minimax", labelKey: "models.providers.minimax", name: "MiniMax", type: "OpenAI", endpoint: "https://api.minimaxi.chat/v1", apiMode: "ChatCompletions", icon: "M" },
+  { id: "claude", labelKey: "models.providers.claude", name: "Claude", type: "Claude", endpoint: "https://api.anthropic.com/v1", icon: "C" },
+  { id: "gemini", labelKey: "models.providers.gemini", name: "Gemini", type: "Gemini", endpoint: "https://generativelanguage.googleapis.com/v1beta", icon: "G" },
+  { id: "lm-studio", labelKey: "models.providers.lmStudio", name: "LM Studio", type: "LMStudio", endpoint: "http://127.0.0.1:1234/v1", apiMode: "ChatCompletions", icon: "LM" },
+  { id: "vllm", labelKey: "models.providers.vllm", name: "vLLM", type: "vLLM", endpoint: "http://127.0.0.1:8000/v1", apiMode: "ChatCompletions", icon: "V" },
+  { id: "llama-cpp", labelKey: "models.providers.llamaCpp", name: "llama.cpp", type: "OpenAI", endpoint: "http://127.0.0.1:8080/v1", apiMode: "ChatCompletions", icon: "L" },
+  { id: "custom", labelKey: "models.providers.custom", name: "OpenAI Compatible", type: "OpenAI", endpoint: "", apiMode: "Auto", icon: "<>" },
 ];
+
+function ProviderIcon({ preset }: { preset: ProviderPreset }) {
+  return (
+    <span className="settings-provider-icon" data-provider={preset.id} aria-hidden="true">
+      {preset.icon}
+    </span>
+  );
+}
 
 function providerToUpdate(profile: ProviderProfileView): ProviderProfileUpdate {
   return { ...profile, apiKey: undefined, clearApiKey: false };
@@ -618,7 +698,7 @@ function ModelsPage() {
   const [activeId, setActiveId] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<"new" | "edit">("new");
-  const [presetId, setPresetId] = useState("ollama");
+  const [presetId, setPresetId] = useState("");
   const [form, setForm] = useState<ProviderProfileUpdate>(emptyProvider);
   const [models, setModels] = useState<string[]>([]);
   const [oauth, setOauth] = useState({ clientId: "", clientSecret: "", quotaProject: "" });
@@ -633,7 +713,7 @@ function ModelsPage() {
       setActiveId(view.activeProviderId);
       setStatus(null);
     } catch (error) {
-      setStatus(toStatus(error, t("common.notConnected")));
+      setStatus(toStatus(error, "common.notConnected"));
     }
   };
 
@@ -648,18 +728,17 @@ function ModelsPage() {
   };
 
   const refreshModels = async () => {
-    setConnectionStatus({ text: t("models.fetchingModels") });
+    setConnectionStatus(translatedStatus("models.fetchingModels"));
     try {
       const result = await runtime.fetchProviderModels(form);
       setModels(result.models);
-      setConnectionStatus({
-        text: result.models.length
-          ? t("models.connectionSucceeded", { count: result.models.length })
-          : t("models.emptyModels"),
-        error: result.models.length === 0,
-      });
+      setConnectionStatus(translatedStatus(
+        result.models.length ? "models.connectionSucceeded" : "models.emptyModels",
+        { count: result.models.length },
+        result.models.length === 0,
+      ));
     } catch (error) {
-      setConnectionStatus(toStatus(error, t("models.fetchModelsFailed")));
+      setConnectionStatus(toStatus(error, "models.fetchModelsFailed"));
     }
   };
 
@@ -668,22 +747,17 @@ function ModelsPage() {
     if (form.type.toLowerCase() !== "ollama") return;
     try {
       await runtime.loadOllamaModel(model);
-      setStatus({ text: t("models.modelLoaded", { model }) });
+      setStatus(translatedStatus("models.modelLoaded", { model }));
     } catch (error) {
-      setStatus(toStatus(error, t("common.notConnected")));
+      setStatus(toStatus(error, "common.notConnected"));
     }
   };
 
   const isGoogleProvider = /^(gemini|google)$/iu.test(form.type.trim());
   const openNewModel = () => {
-    const preset = providerPresets[0];
     setEditorMode("new");
-    setPresetId(preset.id);
-    setForm(createProviderUpdate(
-      preset,
-      uniqueProviderId(preset.id, profiles),
-      t(preset.labelKey),
-    ));
+    setPresetId("");
+    setForm(emptyProvider);
     setModels([]);
     setOauth({ clientId: "", clientSecret: "", quotaProject: "" });
     setConnectionStatus(null);
@@ -705,7 +779,7 @@ function ModelsPage() {
     setForm((current) => createProviderUpdate(
       preset,
       editorMode === "new" ? uniqueProviderId(preset.id, profiles) : current.id,
-      editorMode === "new" ? t(preset.labelKey) : current.name,
+      preset.name,
     ));
     setModels([]);
     setConnectionStatus(null);
@@ -713,26 +787,23 @@ function ModelsPage() {
 
   const saveProvider = async () => {
     try {
-      await runtime.saveProviderProfile(form);
-      const activated = await runtime.activateProvider(form.id);
-      applyView(activated);
+      applyView(await runtime.saveProviderProfile(form));
       setEditorOpen(false);
-      setStatus({
-        text: editorMode === "new"
-          ? t("models.modelAdded", { name: form.name })
-          : t("models.modelUpdated", { name: form.name }),
-      });
+      setStatus(translatedStatus(
+        editorMode === "new" ? "models.modelAdded" : "models.modelUpdated",
+        { name: form.model },
+      ));
     } catch (error) {
-      setConnectionStatus(toStatus(error, t("common.notConnected")));
+      setConnectionStatus(toStatus(error, "common.notConnected"));
     }
   };
 
   const activateProfile = async (profile: ProviderProfileView) => {
     try {
       applyView(await runtime.activateProvider(profile.id));
-      setStatus({ text: t("models.modelActivated", { name: profile.name || profile.model }) });
+      setStatus(translatedStatus("models.modelActivated", { name: profile.model }));
     } catch (error) {
-      setStatus(toStatus(error, t("common.notConnected")));
+      setStatus(toStatus(error, "common.notConnected"));
     }
   };
 
@@ -741,10 +812,10 @@ function ModelsPage() {
     try {
       applyView(await runtime.deleteProvider(deleteTarget.id));
       setDeleteTarget(null);
-      setStatus({ text: t("models.modelDeleted", { name: deleteTarget.name || deleteTarget.model }) });
+      setStatus(translatedStatus("models.modelDeleted", { name: deleteTarget.model }));
     } catch (error) {
       setDeleteTarget(null);
-      setStatus(toStatus(error, t("models.deleteFailed")));
+      setStatus(toStatus(error, "models.deleteFailed"));
     }
   };
 
@@ -766,20 +837,17 @@ function ModelsPage() {
           <ul className="list settings-saved-model-list">
             {profiles.map((profile) => {
               const active = profile.id === activeId;
+              const preset = presetForProfile(profile);
               return (
                 <li className={`list-row settings-saved-model-row${active ? " active" : ""}`} key={profile.id}>
-                  <div className="settings-saved-model-mark" aria-hidden="true">
-                    {(profile.name || profile.model || profile.type).slice(0, 1).toLocaleUpperCase()}
-                  </div>
+                  <ProviderIcon preset={preset} />
                   <div className="list-col-grow min-w-0">
                     <div className="settings-saved-model-title">
-                      <strong>{profile.name || profile.model}</strong>
+                      <strong>{profile.model}</strong>
                       {active ? <span className="badge badge-primary badge-soft badge-sm">{t("models.current")}</span> : null}
                     </div>
                     <div className="settings-saved-model-meta">
-                      <span>{t(presetForProfile(profile).labelKey)}</span>
-                      <span>·</span>
-                      <span>{profile.model || t("models.modelNotConfigured")}</span>
+                      <span>{t(preset.labelKey)}</span>
                     </div>
                   </div>
                   <div className="settings-saved-model-actions">
@@ -799,8 +867,6 @@ function ModelsPage() {
                     <button
                       className="btn btn-ghost btn-sm text-error"
                       type="button"
-                      disabled={profiles.length <= 1}
-                      title={profiles.length <= 1 ? t("models.keepOneModel") : undefined}
                       onClick={() => setDeleteTarget(profile)}
                     >
                       <Trash2 size={14} />
@@ -852,18 +918,23 @@ function ModelsPage() {
                     if (preset) selectPreset(preset);
                   }}
                 >
+                  <option value="" disabled>{t("models.chooseProvider")}</option>
                   {providerPresets.map((preset) => (
                     <option key={preset.id} value={preset.id}>{t(preset.labelKey)}</option>
                   ))}
                 </select>
               </fieldset>
-              <fieldset className="fieldset">
-                <legend className="fieldset-legend">{t("models.profileName")}</legend>
-                <input className="input input-sm w-full" value={form.name} onChange={(event) => patch("name", event.currentTarget.value)} />
-              </fieldset>
               <fieldset className="fieldset settings-model-editor-wide">
                 <legend className="fieldset-legend">{t("models.endpoint")}</legend>
-                <input className="input input-sm w-full" type="url" value={form.endpoint} onChange={(event) => patch("endpoint", event.currentTarget.value)} />
+                <input
+                  className="input input-sm w-full"
+                  type="url"
+                  name="wordollama-provider-endpoint"
+                  autoComplete="off"
+                  disabled={!presetId}
+                  value={form.endpoint}
+                  onChange={(event) => patch("endpoint", event.currentTarget.value)}
+                />
                 <p className="label">{t("models.endpointAutoHint")}</p>
               </fieldset>
               {form.type === "OpenAI" || form.type === "LMStudio" || form.type === "vLLM" ? (
@@ -880,16 +951,24 @@ function ModelsPage() {
                   </select>
                 </fieldset>
               ) : null}
-              {form.type !== "Ollama" ? (
+              {presetId && form.type !== "Ollama" ? (
                 <fieldset className="fieldset settings-model-editor-wide">
                   <legend className="fieldset-legend">{t("models.apiKey")}</legend>
-                  <input className="input input-sm w-full" type="password" value={form.apiKey ?? ""} onChange={(event) => patch("apiKey", event.currentTarget.value)} placeholder={t("models.apiKeyHint")} />
+                  <input
+                    className="input input-sm w-full"
+                    type="password"
+                    name="wordollama-provider-api-key"
+                    autoComplete="new-password"
+                    value={form.apiKey ?? ""}
+                    onChange={(event) => patch("apiKey", event.currentTarget.value)}
+                    placeholder={t("models.apiKeyHint")}
+                  />
                 </fieldset>
               ) : null}
               <fieldset className="fieldset settings-model-editor-wide">
                 <legend className="fieldset-legend">{t("models.model")}</legend>
                 <div className="settings-model-fetch-row">
-                  <button className="btn btn-sm" type="button" onClick={() => void refreshModels()}>
+                  <button className="btn btn-sm" type="button" disabled={!presetId} onClick={() => void refreshModels()}>
                     <RefreshCw size={14} />
                     {t("models.fetchModels")}
                   </button>
@@ -906,7 +985,7 @@ function ModelsPage() {
                     {models.map((model) => <option key={model} value={model}>{model}</option>)}
                   </select>
                 </div>
-                <input className="input input-sm w-full" value={form.model} onChange={(event) => patch("model", event.currentTarget.value)} placeholder={t("models.modelHint")} />
+                <input className="input input-sm w-full" disabled={!presetId} value={form.model} onChange={(event) => patch("model", event.currentTarget.value)} placeholder={t("models.modelHint")} />
               </fieldset>
             </div>
 
@@ -977,8 +1056,10 @@ function ModelsPage() {
                     }).then((result) => {
                       applyView(result.providerSettings);
                       setOauth((current) => ({ ...current, clientSecret: "" }));
-                      setConnectionStatus({ text: result.hasRefreshToken ? t("models.oauthSuccess") : t("models.oauthSuccessNoRefresh") });
-                    }).catch((error) => setConnectionStatus(toStatus(error, t("models.oauthFailed"))))}
+                      setConnectionStatus(translatedStatus(result.hasRefreshToken
+                        ? "models.oauthSuccess"
+                        : "models.oauthSuccessNoRefresh"));
+                    }).catch((error) => setConnectionStatus(toStatus(error, "models.oauthFailed")))}
                   >
                     {t("models.oauthLogin")}
                   </button>
@@ -1002,7 +1083,7 @@ function ModelsPage() {
         <dialog className="modal modal-open" open onCancel={() => setDeleteTarget(null)}>
           <div className="modal-box settings-confirm-modal">
             <h2>{t("models.deleteModel")}</h2>
-            <p>{t("models.deleteConfirm", { name: deleteTarget.name || deleteTarget.model })}</p>
+            <p>{t("models.deleteConfirm", { name: deleteTarget.model })}</p>
             <div className="modal-action">
               <button className="btn btn-sm" type="button" onClick={() => setDeleteTarget(null)}>{t("common.cancel")}</button>
               <button className="btn btn-error btn-sm" type="button" onClick={() => void deleteProfile()}>{t("common.delete")}</button>
@@ -1035,12 +1116,12 @@ function SkillsPage() {
       setSkills(Array.from(new Map(listed.map((skill) => [skill.name, skill])).values()));
       setStatus(null);
     } catch (error) {
-      setStatus(toStatus(error, t("common.notConnected")));
+      setStatus(toStatus(error, "common.notConnected"));
     }
   };
   useEffect(() => { void load(); }, []);
   const previewHtml = useMemo(() => preview?.content
-    ? markdownToHtml(preview.content, { headings: true, tables: true, code: true })
+    ? markdownToHtml(preview.content, undefined, { renderFrontMatter: true })
     : "", [preview?.content]);
   const openPreview = async (skill: SkillSummary) => {
     setPreview({ skill, content: "", loading: true });
@@ -1065,20 +1146,20 @@ function SkillsPage() {
         title={t("skills.installed")}
         actions={(
           <div className="flex gap-2">
-            <button className="btn btn-ghost btn-xs" type="button" onClick={() => void runtime.openSkillsFolder().catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}><FolderOpen size={14} />{t("common.openFolder")}</button>
+            <button className="btn btn-ghost btn-xs" type="button" onClick={() => void runtime.openSkillsFolder().catch((error) => setStatus(toStatus(error, "common.notConnected")))}><FolderOpen size={14} />{t("common.openFolder")}</button>
             <button className="btn btn-ghost btn-xs" type="button" onClick={() => void load()}><RefreshCw size={14} />{t("common.refresh")}</button>
           </div>
         )}
       >
         <div className="settings-import">
-          <input className="file-input file-input-sm" type="file" accept=".zip,application/zip" onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)} />
+          <FilePicker accept=".zip,application/zip" file={file} onChange={setFile} />
           <button className="btn btn-primary btn-sm" type="button" disabled={!file} onClick={() => void (async () => {
             if (!file) return;
             try {
               await runtime.importSkill(file.name, await fileToBase64(file));
               await load();
             } catch (error) {
-              setStatus(toStatus(error, t("common.notConnected")));
+              setStatus(toStatus(error, "common.notConnected"));
             }
           })()}><Upload size={14} />{t("skills.importZip")}</button>
         </div>
@@ -1093,7 +1174,7 @@ function SkillsPage() {
                   <Eye size={14} />
                   {t("skills.preview")}
                 </button>
-                <button className="btn btn-ghost btn-sm text-error" type="button" onClick={() => void runtime.deleteSkill(skill.name).then(load).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>
+                <button className="btn btn-ghost btn-sm text-error" type="button" onClick={() => void runtime.deleteSkill(skill.name).then(load).catch((error) => setStatus(toStatus(error, "common.notConnected")))}>
                   <Trash2 size={14} />
                   {t("common.delete")}
                 </button>
@@ -1163,13 +1244,14 @@ function McpPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importJson, setImportJson] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
 
   const load = async () => {
     try {
       setServers(await runtime.listMcpServers());
       setStatus(null);
     } catch (error) {
-      setStatus(toStatus(error, t("common.notConnected")));
+      setStatus(toStatus(error, "common.notConnected"));
     }
   };
   useEffect(() => { void load(); }, []);
@@ -1219,15 +1301,15 @@ function McpPage() {
       setServers(result.servers);
       setImportOpen(false);
       setImportJson("");
+      setImportFile(null);
       const failed = Object.keys(result.errors).length;
-      setStatus({
-        text: failed
-          ? t("mcp.importedWithErrors", { total: result.total, connected: result.connected, failed })
-          : t("mcp.imported", { total: result.total, connected: result.connected }),
-        error: failed > 0,
-      });
+      setStatus(translatedStatus(
+        failed ? "mcp.importedWithErrors" : "mcp.imported",
+        { total: result.total, connected: result.connected, failed },
+        failed > 0,
+      ));
     } catch (error) {
-      setStatus(toStatus(error, t("mcp.importFailed")));
+      setStatus(toStatus(error, "mcp.importFailed"));
     }
   };
 
@@ -1324,21 +1406,20 @@ function McpPage() {
                   {tools.map((tool) => (
                     <SwitchRow key={tool.name} label={tool.name} title={tool.description} checked={permissions[tool.name] ?? false} onChange={(value) => setPermissions((current) => ({ ...current, [tool.name]: value }))} />
                   ))}
-                  <button className="btn btn-sm mt-2" type="button" onClick={() => void runtime.saveMcpPermissions(form.name, permissions).then(() => setStatus({ text: t("common.saved") })).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("mcp.savePermissions")}</button>
+                  <button className="btn btn-sm mt-2" type="button" onClick={() => void runtime.saveMcpPermissions(form.name, permissions).then(() => setStatus(translatedStatus("common.saved"))).catch((error) => setStatus(toStatus(error, "common.notConnected")))}>{t("mcp.savePermissions")}</button>
                 </div>
               </details>
             ) : null}
             <div className="modal-action settings-mcp-editor-actions">
-              <button className="btn btn-primary btn-sm" type="button" disabled={!form.name.trim() || !form.command.trim()} onClick={() => void runtime.saveMcpServer(payload()).then(async (result) => { setTools(result.tools); await load(); setEditorOpen(false); setStatus({ text: t("common.saved") }); }).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("mcp.saveConnect")}</button>
-              <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.connectMcpServer(form.name).then((result) => { setTools(result.tools); void load(); }).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("common.connect")}</button>
-              <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.checkMcpHealth(form.name).then((health) => setStatus({
-                text: health.connected
-                  ? t("mcp.healthConnected", { count: health.toolCount })
-                  : t("mcp.healthDisconnected"),
-                error: !health.connected,
-              })).catch((error) => setStatus(toStatus(error, t("mcp.healthDisconnected"))))}>{t("mcp.health")}</button>
-              <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.disconnectMcpServer(form.name).then(load).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("common.disconnect")}</button>
-              <button className="btn btn-ghost btn-sm text-error" type="button" disabled={!servers.some((server) => server.name === form.name)} onClick={() => void runtime.deleteMcpServer(form.name).then(() => { setEditorOpen(false); setForm(emptyMcp); return load(); }).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("common.delete")}</button>
+              <button className="btn btn-primary btn-sm" type="button" disabled={!form.name.trim() || !form.command.trim()} onClick={() => void runtime.saveMcpServer(payload()).then(async (result) => { setTools(result.tools); await load(); setEditorOpen(false); setStatus(translatedStatus("common.saved")); }).catch((error) => setStatus(toStatus(error, "common.notConnected")))}>{t("mcp.saveConnect")}</button>
+              <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.connectMcpServer(form.name).then((result) => { setTools(result.tools); void load(); }).catch((error) => setStatus(toStatus(error, "common.notConnected")))}>{t("common.connect")}</button>
+              <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.checkMcpHealth(form.name).then((health) => setStatus(translatedStatus(
+                health.connected ? "mcp.healthConnected" : "mcp.healthDisconnected",
+                { count: health.toolCount },
+                !health.connected,
+              ))).catch((error) => setStatus(toStatus(error, "mcp.healthDisconnected")))}>{t("mcp.health")}</button>
+              <button className="btn btn-sm" type="button" disabled={!form.name} onClick={() => void runtime.disconnectMcpServer(form.name).then(load).catch((error) => setStatus(toStatus(error, "common.notConnected")))}>{t("common.disconnect")}</button>
+              <button className="btn btn-ghost btn-sm text-error" type="button" disabled={!servers.some((server) => server.name === form.name)} onClick={() => void runtime.deleteMcpServer(form.name).then(() => { setEditorOpen(false); setForm(emptyMcp); return load(); }).catch((error) => setStatus(toStatus(error, "common.notConnected")))}>{t("common.delete")}</button>
             </div>
           </div>
           <form method="dialog" className="modal-backdrop" onSubmit={() => setEditorOpen(false)}>
@@ -1359,13 +1440,12 @@ function McpPage() {
               </button>
             </div>
             <div className="settings-modal-body p-0">
-              <input
-                className="file-input file-input-sm"
-                type="file"
+              <FilePicker
                 accept=".json,application/json"
-                onChange={(event) => {
-                  const file = event.currentTarget.files?.[0];
-                  if (file) void file.text().then(setImportJson);
+                file={importFile}
+                onChange={(nextFile) => {
+                  setImportFile(nextFile);
+                  if (nextFile) void nextFile.text().then(setImportJson);
                 }}
               />
               <textarea
@@ -1393,23 +1473,62 @@ function McpPage() {
 function AgentPage() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<StatusState>(null);
-  const [agent, setAgent] = useState(() => readStored("wordollama-agent-settings", {
-    iterations: 20,
-    mode: "TrackedChanges",
-    unlimited: false,
-    externalTools: false,
-  }));
-  const [review, setReview] = useState(() => readStored("wordollama-linter-settings", {
-    enabled: false,
-    model: "",
-    intervalSeconds: 30,
-  }));
+  const [providerProfiles, setProviderProfiles] = useState<ProviderProfileView[]>([]);
+  const [activeProviderId, setActiveProviderId] = useState("");
+  const [agent, setAgent] = useState(() => {
+    const stored = readStored("wordollama-agent-settings", {
+      maxIterations: 20,
+      executionMode: "TrackedChanges",
+      unlimited: false,
+      allowExternalTools: false,
+      allowLocalTools: false,
+      allowNetworkTools: false,
+      allowMcpTools: false,
+      // Legacy aliases are read once so settings from older builds keep working.
+      iterations: undefined as number | undefined,
+      mode: undefined as string | undefined,
+      externalTools: undefined as boolean | undefined,
+    });
+    const legacyExternal = stored.externalTools ?? stored.allowExternalTools;
+    return {
+      maxIterations: stored.iterations ?? stored.maxIterations,
+      executionMode: stored.mode ?? stored.executionMode,
+      unlimited: stored.unlimited,
+      allowLocalTools: stored.allowLocalTools || legacyExternal,
+      allowNetworkTools: stored.allowNetworkTools || legacyExternal,
+      allowMcpTools: stored.allowMcpTools || legacyExternal,
+    };
+  });
+  const [review, setReview] = useState(() => {
+    const stored = readStored("wordollama-linter-settings", {
+      enabled: false,
+      model: "",
+      profileId: "",
+      intervalSeconds: 30,
+    });
+    return {
+      enabled: stored.enabled,
+      profileId: stored.profileId || "",
+      intervalSeconds: stored.intervalSeconds,
+    };
+  });
   const saved = useRef({ agent, review });
+  useEffect(() => {
+    void runtime.getProviderSettings()
+      .then((view) => {
+        setProviderProfiles(view.profiles);
+        setActiveProviderId(view.activeProviderId);
+      })
+      .catch(() => {
+        setProviderProfiles([]);
+        setActiveProviderId("");
+      });
+  }, []);
   const save = async () => {
     writeStored("wordollama-agent-settings", agent);
     writeStored("wordollama-linter-settings", review);
     saved.current = { agent, review };
-    setStatus({ text: t("common.saved") });
+    setStatus(translatedStatus("common.saved"));
   };
   useSettingsSection(
     "agent",
@@ -1424,16 +1543,18 @@ function AgentPage() {
         <Card title={t("agent.execution")}>
           <div className="settings-form-grid">
             <label>{t("agent.iterations")}</label>
-            <input className="input input-sm" type="number" min={1} value={agent.iterations} onChange={(event) => setAgent({ ...agent, iterations: Number(event.currentTarget.value) })} />
+            <input className="input input-sm" type="number" min={1} value={agent.maxIterations} onChange={(event) => setAgent({ ...agent, maxIterations: Number(event.currentTarget.value) })} />
             <label>{t("agent.mode")}</label>
-            <select className="select select-sm" value={agent.mode} onChange={(event) => setAgent({ ...agent, mode: event.currentTarget.value })}>
+            <select className="select select-sm" value={agent.executionMode} onChange={(event) => setAgent({ ...agent, executionMode: event.currentTarget.value })}>
               <option value="ViewOnly">{t("agent.viewOnly")}</option>
               <option value="ProposeChanges">{t("agent.propose")}</option>
               <option value="TrackedChanges">{t("agent.tracked")}</option>
             </select>
             <div className="settings-row-wide settings-switch-list">
               <SwitchRow label={t("agent.unlimited")} checked={agent.unlimited} onChange={(value) => setAgent({ ...agent, unlimited: value })} />
-              <SwitchRow label={t("agent.externalTools")} checked={agent.externalTools} onChange={(value) => setAgent({ ...agent, externalTools: value })} />
+              <SwitchRow label={t("agent.localTools")} hint={t("agent.localToolsHint")} checked={agent.allowLocalTools} onChange={(value) => setAgent({ ...agent, allowLocalTools: value })} />
+              <SwitchRow label={t("agent.networkTools")} hint={t("agent.networkToolsHint")} checked={agent.allowNetworkTools} onChange={(value) => setAgent({ ...agent, allowNetworkTools: value })} />
+              <SwitchRow label={t("agent.mcpTools")} hint={t("agent.mcpToolsHint")} checked={agent.allowMcpTools} onChange={(value) => setAgent({ ...agent, allowMcpTools: value })} />
             </div>
           </div>
         </Card>
@@ -1443,7 +1564,21 @@ function AgentPage() {
           </div>
           <div className="settings-form-grid mt-4">
             <label>{t("agent.reviewModel")}</label>
-            <input className="input input-sm" value={review.model} onChange={(event) => setReview({ ...review, model: event.currentTarget.value })} />
+            <select
+              className="select select-sm"
+              value={review.profileId}
+              onChange={(event) => setReview({ ...review, profileId: event.currentTarget.value })}
+            >
+              <option value="">{t("agent.activeModel", {
+                model: providerProfiles.find((profile) => profile.id === activeProviderId)?.model || t("agent.noActiveModel"),
+              })}</option>
+              {providerProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.model} · {profile.name}
+                </option>
+              ))}
+            </select>
+            <p className="settings-row-wide settings-help">{t("agent.reviewModelHint")}</p>
             <label>{t("agent.reviewInterval")}</label>
             <input className="input input-sm" type="number" min={3} value={review.intervalSeconds} onChange={(event) => setReview({ ...review, intervalSeconds: Number(event.currentTarget.value) })} />
           </div>
@@ -1459,22 +1594,22 @@ function MarkdownPage() {
   const [status, setStatus] = useState<StatusState>(null);
   const [wordStyles, setWordStyles] = useState<string[]>([]);
   const [stylesLoading, setStylesLoading] = useState(true);
-  const [newStyle, setNewStyle] = useState("");
   const [settings, setSettings] = useState(() =>
     readStored<MarkdownSettings>(
       "wordollama-markdown-settings",
       DEFAULT_MARKDOWN_SETTINGS,
     ));
   const saved = useRef(settings);
-  const patch = (key: keyof typeof settings, value: string | boolean) => setSettings((current) => ({ ...current, [key]: value }));
+  const patch = <K extends keyof MarkdownSettings>(key: K, value: MarkdownSettings[K]) =>
+    setSettings((current) => ({ ...current, [key]: value }));
   const refreshStyles = async () => {
     setStylesLoading(true);
     try {
       const styles = await listWordStyles();
       setWordStyles(styles);
-      setStatus({ text: t("markdown.stylesLoaded", { count: styles.length }) });
+      setStatus(translatedStatus("markdown.stylesLoaded", { count: styles.length }));
     } catch (error) {
-      setStatus({ text: t("markdown.stylesUnavailable"), error: true });
+      setStatus(translatedStatus("markdown.stylesUnavailable", undefined, true));
     } finally {
       setStylesLoading(false);
     }
@@ -1482,36 +1617,16 @@ function MarkdownPage() {
   useEffect(() => {
     void refreshStyles();
   }, []);
-  const createStyle = async () => {
-    const name = newStyle.trim();
-    if (!name) return;
-    try {
-      await createWordParagraphStyle(name);
-      const styles = await listWordStyles();
-      setWordStyles(styles);
-      setNewStyle("");
-      setStatus({ text: t("markdown.styleCreated", { name }) });
-    } catch (error) {
-      setStatus({ text: t("markdown.stylesUnavailable"), error: true });
-    }
-  };
   const save = async () => {
     writeStored("wordollama-markdown-settings", settings);
     saved.current = settings;
-    setStatus({ text: t("common.saved") });
+    setStatus(translatedStatus("common.saved"));
   };
   useSettingsSection("markdown", !settingsEqual(settings, saved.current), save);
   return (
     <div className="settings-page">
       <PageHeading title={t("markdown.title")} />
-      <div className="settings-grid">
-        <Card title={t("markdown.conversion")}>
-          <div className="settings-switch-list">
-            <SwitchRow label={t("markdown.tables")} checked={settings.tables} onChange={(value) => patch("tables", value)} />
-            <SwitchRow label={t("markdown.code")} checked={settings.code} onChange={(value) => patch("code", value)} />
-            <SwitchRow label={t("markdown.headings")} checked={settings.headings} onChange={(value) => patch("headings", value)} />
-          </div>
-        </Card>
+      <div className="settings-single-column">
         <Card
           title={t("markdown.styles")}
           wide
@@ -1522,6 +1637,17 @@ function MarkdownPage() {
             </button>
           )}
         >
+          <label className="settings-markdown-note-placement">
+            <span className="settings-markdown-note-label">{t("markdown.notePlacement")}</span>
+            <select
+              className="select select-sm"
+              value={settings.notePlacement}
+              onChange={(event) => patch("notePlacement", event.currentTarget.value as MarkdownSettings["notePlacement"])}
+            >
+              <option value="footnote">{t("markdown.footnote")}</option>
+              <option value="endnote">{t("markdown.endnote")}</option>
+            </select>
+          </label>
           <p className="settings-card-note">{t("markdown.stylesDescription")}</p>
           <div className="settings-markdown-style-grid">
             {([
@@ -1546,10 +1672,6 @@ function MarkdownPage() {
               </fieldset>
             ))}
           </div>
-          <div className="settings-style-create">
-            <input className="input input-sm" value={newStyle} onChange={(event) => setNewStyle(event.currentTarget.value)} placeholder={t("markdown.newStyle")} />
-            <button className="btn btn-sm" type="button" disabled={!newStyle.trim()} onClick={() => void createStyle()}>{t("markdown.createStyle")}</button>
-          </div>
           <Status value={status} />
         </Card>
       </div>
@@ -1559,30 +1681,7 @@ function MarkdownPage() {
 
 function AdvancedPage() {
   const { t } = useTranslation();
-  const [status, setStatus] = useState<StatusState>(null);
   const [bridgeState, setBridgeState] = useState<"checking" | "connected" | "disconnected">("checking");
-  const [ollama, setOllama] = useState<OllamaServerSettingsUpdate>({
-    modelsPath: "", host: "127.0.0.1:11434", keepAlive: "5m",
-    contextLength: 0, maxLoadedModels: 0, numParallel: 0, maxQueue: 0,
-  });
-  const saved = useRef(ollama);
-  const loadOllama = async () => {
-    try {
-      const value = await runtime.getOllamaServerSettings();
-      saved.current = value;
-      setOllama(value);
-    } catch (error) {
-      setStatus(toStatus(error, t("common.notConnected")));
-    }
-  };
-  const patch = <K extends keyof OllamaServerSettingsUpdate>(key: K, value: OllamaServerSettingsUpdate[K]) =>
-    setOllama((current) => ({ ...current, [key]: value }));
-  const save = async () => {
-    const value = await runtime.saveOllamaServerSettings(ollama);
-    saved.current = value;
-    setOllama(value);
-    setStatus({ text: t("common.saved") });
-  };
   const checkBridge = async () => {
     setBridgeState("checking");
     try {
@@ -1594,9 +1693,7 @@ function AdvancedPage() {
       setBridgeState("disconnected");
     }
   };
-  useSettingsSection("advanced", !settingsEqual(ollama, saved.current), save);
   useEffect(() => {
-    void loadOllama();
     void checkBridge();
   }, []);
   return (
@@ -1614,38 +1711,14 @@ function AdvancedPage() {
             <button className="btn btn-primary btn-sm" type="button" disabled={bridgeState === "checking"} onClick={() => void checkBridge()}>{t("advanced.reconnect")}</button>
           </div>
         </Card>
-        <Card title={t("advanced.ollama")}>
-          <div className="alert alert-warning mb-4 text-xs">{t("advanced.networkWarning")}</div>
-          <div className="settings-form-grid">
-            <label>{t("advanced.modelsPath")}</label>
-            <input className="input input-sm" value={ollama.modelsPath} onChange={(event) => patch("modelsPath", event.currentTarget.value)} />
-            <label>{t("advanced.host")}</label>
-            <input className="input input-sm" value={ollama.host} onChange={(event) => patch("host", event.currentTarget.value)} />
-            <label>{t("advanced.keepAlive")}</label>
-            <input className="input input-sm" value={ollama.keepAlive} onChange={(event) => patch("keepAlive", event.currentTarget.value)} />
-            {([
-              ["contextLength", "contextLength"], ["maxLoadedModels", "maxLoaded"],
-              ["numParallel", "parallel"], ["maxQueue", "maxQueue"],
-            ] as const).map(([key, label]) => (
-              <Fragment key={key}>
-                <label>{t(`advanced.${label}`)}</label>
-                <input className="input input-sm" type="number" value={ollama[key]} onChange={(event) => patch(key, Number(event.currentTarget.value))} />
-              </Fragment>
-            ))}
-          </div>
-          <div className="settings-actions">
-            <button className="btn btn-sm" onClick={() => void loadOllama()}>{t("advanced.reloadOllama")}</button>
-          </div>
-        </Card>
       </div>
-      <Status value={status} />
     </div>
   );
 }
 
 function UpdatesPage() {
   const { t } = useTranslation();
-  const [bridgeVersion, setBridgeVersion] = useState<string>(t("common.notConnected"));
+  const [bridgeVersion, setBridgeVersion] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
   const [status, setStatus] = useState<StatusState>(null);
   const [confirmInstall, setConfirmInstall] = useState(false);
@@ -1655,13 +1728,13 @@ function UpdatesPage() {
   }, []);
   const install = async () => {
     setInstalling(true);
-    setStatus({ text: t("updates.preparingInstaller") });
+    setStatus(translatedStatus("updates.preparingInstaller"));
     try {
       const result = await runtime.installUpdate();
       setConfirmInstall(false);
-      setStatus({ text: t("updates.installerLaunched", { version: result.version }) });
+      setStatus(translatedStatus("updates.installerLaunched", { version: result.version }));
     } catch (error) {
-      setStatus(toStatus(error, t("updates.installFailed")));
+      setStatus(toStatus(error, "updates.installFailed"));
     } finally {
       setInstalling(false);
     }
@@ -1672,22 +1745,22 @@ function UpdatesPage() {
       <Card title={t("updates.title")}>
         <div className="settings-form-grid">
           <label>{t("updates.addinVersion")}</label><output>{ADDIN_VERSION}</output>
-          <label>{t("updates.bridgeVersion")}</label><output>{bridgeVersion}</output>
+          <label>{t("updates.bridgeVersion")}</label><output>{bridgeVersion ?? t("common.notConnected")}</output>
         </div>
         <div className="settings-actions">
           <button className="btn btn-primary btn-sm" onClick={() => void runtime.checkForUpdates().then((result) => {
             setUpdate(result);
             setConfirmInstall(false);
             const statusKind = classifyUpdateResult(result);
-            const text = statusKind === "not-configured"
-              ? t("updates.notConfigured")
+            const translationKey = statusKind === "not-configured"
+              ? "updates.notConfigured"
               : statusKind === "missing-artifact"
-                ? t("updates.noArtifact")
+                ? "updates.noArtifact"
                 : statusKind === "available"
-                  ? t("updates.available", { version: result.latestVersion })
-                  : t("updates.current");
-            setStatus({ text });
-          }).catch((error) => setStatus(toStatus(error, t("common.notConnected"))))}>{t("updates.check")}</button>
+                  ? "updates.available"
+                  : "updates.current";
+            setStatus(translatedStatus(translationKey, { version: result.latestVersion }));
+          }).catch((error) => setStatus(toStatus(error, "common.notConnected")))}>{t("updates.check")}</button>
           {update?.updateAvailable &&
           update.artifact?.kind === "installer" &&
           update.artifact.publisherSubject ? (
@@ -1815,10 +1888,10 @@ export function SettingsApp() {
         entry.dirty = false;
       }
       setSaveRevision((value) => value + 1);
-      setFooterStatus({ text: t("common.allSaved") });
+      setFooterStatus(translatedStatus("common.allSaved"));
       return true;
     } catch (error) {
-      setFooterStatus(toStatus(error, t("common.saveFailed")));
+      setFooterStatus(toStatus(error, "common.saveFailed"));
       return false;
     } finally {
       setSaving(false);

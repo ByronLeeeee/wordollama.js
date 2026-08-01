@@ -296,6 +296,22 @@ if (Directory.Exists(addinWebRoot))
     });
 }
 app.UseCors("officejs");
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (NoActiveModelException) when (!context.Response.HasStarted)
+    {
+        context.Response.Clear();
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            error = UiText.Get(context.Request.Headers.AcceptLanguage.FirstOrDefault(), "NoActiveModel"),
+        });
+    }
+});
 var eventJsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 var agentRecoveryCapabilities = agentRecoveryStore.Enabled
     ? new[] { "encrypted-agent-recovery" }
@@ -470,7 +486,12 @@ async Task<IResult> ChatWithProvider(
 
     try
     {
-        return Results.Ok(await provider.ChatAsync(settings.ApplyDefaults(request), cancellationToken));
+        var selectedProvider = string.IsNullOrWhiteSpace(request.ProviderProfileId)
+            ? provider
+            : ModelProviderFactory.Create(settings.GetOptions(request.ProviderProfileId));
+        return Results.Ok(await selectedProvider.ChatAsync(
+            settings.ApplyDefaults(request, request.ProviderProfileId),
+            cancellationToken));
     }
     catch (HttpRequestException exception)
     {
@@ -507,7 +528,12 @@ async Task StreamProviderChat(
 
     httpContext.Response.ContentType = "application/x-ndjson";
     httpContext.Response.Headers.CacheControl = "no-cache";
-    await foreach (var chunk in provider.ChatStreamAsync(settings.ApplyDefaults(request), cancellationToken))
+    var selectedProvider = string.IsNullOrWhiteSpace(request.ProviderProfileId)
+        ? provider
+        : ModelProviderFactory.Create(settings.GetOptions(request.ProviderProfileId));
+    await foreach (var chunk in selectedProvider.ChatStreamAsync(
+        settings.ApplyDefaults(request, request.ProviderProfileId),
+        cancellationToken))
     {
         await httpContext.Response.WriteAsync(
             JsonSerializer.Serialize(chunk, eventJsonOptions) + "\n",
@@ -563,6 +589,10 @@ app.MapGet("/providers/runtime", async (
     if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
 
     var active = settings.GetActiveProfile();
+    if (active is null)
+    {
+        return Results.Ok(new ProviderRuntimeResponse(string.Empty, string.Empty, []));
+    }
     try
     {
         IReadOnlyList<string> models =
@@ -1755,6 +1785,10 @@ static OllamaModelManager CreateActiveOllamaManager(
     string? uiLocale)
 {
     var profile = settings.GetActiveProfile();
+    if (profile is null)
+    {
+        throw new NoActiveModelException();
+    }
     if (!string.Equals(profile.Type, "Ollama", StringComparison.OrdinalIgnoreCase))
     {
         throw new ArgumentException(UiText.Get(uiLocale, "OllamaProviderRequired"));

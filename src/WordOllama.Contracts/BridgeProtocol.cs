@@ -67,7 +67,8 @@ public sealed record ProviderChatRequest(
     int? MaxTokens = null,
     int? ContextWindow = null,
     string? KeepAlive = null,
-    IReadOnlyList<OfficeToolDescriptor>? Tools = null);
+    IReadOnlyList<OfficeToolDescriptor>? Tools = null,
+    string? ProviderProfileId = null);
 
 public sealed record ProviderChatResponse(
     string Provider,
@@ -110,6 +111,9 @@ public sealed record AgentStartRequest(
     int MaxIterations = 50,
     string ExecutionMode = "TrackedChanges",
     bool AllowExternalTools = false,
+    bool? AllowLocalTools = null,
+    bool? AllowNetworkTools = null,
+    bool? AllowMcpTools = null,
     string? ImageDataUrl = null,
     double? Temperature = null,
     int? MaxTokens = null,
