@@ -20,11 +20,6 @@ pwsh ./packaging/publish-bridge.ps1 -Runtime osx-arm64 `
   -AddinStaticRoot ./artifacts/addin/0.1.0 `
   -UpdateIndexUrl https://downloads.wordollama.com/update-index-0.1.0.json `
   -ExpectedUpdatePublisherSubject "Developer ID Installer: Example (TEAMID)"
-pwsh ./packaging/publish-bridge.ps1 -Runtime osx-x64 `
-  -AddinOrigin https://localhost:37421 `
-  -AddinStaticRoot ./artifacts/addin/0.1.0 `
-  -UpdateIndexUrl https://downloads.wordollama.com/update-index-0.1.0.json `
-  -ExpectedUpdatePublisherSubject "Developer ID Installer: Example (TEAMID)"
 ```
 
 非目标平台 CI 只能显式使用 `-CrossBuildOnly` 验证编译和生产配置，不会生成可误传为正式包的 ZIP，例如在 Windows 执行 `pwsh ./packaging/publish-bridge.ps1 -Runtime osx-arm64 -CrossBuildOnly`。
@@ -47,9 +42,9 @@ pwsh ./packaging/package-unified-release.ps1 -Runtime win-x64 `
 
 正式目标平台构建会生成 `unified-build-<version>-<runtime>.json`，明确标记 `releaseReady: false`，记录 Add-in/Bridge 未签名归档的 SHA-256 与大小，并列出签名、PFX 配置和真实 Word 验收三个后续门槛。Add-in 在终审时必须仍与该记录逐字节一致；Bridge 因平台签名和签后重建 ZIP 必然允许一次受控哈希转换，但终审会重新验证当前归档内所有 PE 的 Authenticode，或 macOS codesign、Gatekeeper 与 Developer ID Authority，并在最终描述中同时固化源描述文件哈希、未签名哈希和签名后哈希。其他替换仍会被拒绝，该描述文件也不能被误当成已签名发布证明。`-CrossBuildOnly` 只验证编译，不生成 Bridge ZIP 或发布描述文件。
 
-`.github/workflows/officejs-unified-ci.yml` 在 Windows x64、macOS arm64 和 macOS Intel 三个目标原生 runner 上执行包 smoke 和统一构建，并上传保留 7 天的 unsigned evidence。工作流采用 GitHub 当前标准标签：`macos-15` 为 arm64，`macos-15-intel` 为 Intel；参考 [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。CI 产物仍明确为 unsigned，工作流不会在缺少发布凭据时自动创建 Release。
+`.github/workflows/officejs-unified-ci.yml` 在 Windows x64 和 macOS arm64 两个目标原生 runner 上执行包 smoke 和统一构建，并上传保留 7 天的 unsigned evidence。工作流采用 GitHub 的 `macos-15` Apple Silicon runner；项目不构建或发布 Intel Mac 版本。参考 [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。CI 产物仍明确为 unsigned，工作流不会在缺少发布凭据时自动创建 Release。
 
-每个目标平台 runner 还会直接启动其自包含 Bridge 可执行文件，连接受控本地 Provider 和 stdio MCP fixture，并执行配对鉴权、设置持久化及 Agent 加密恢复的跨进程重启回归。macOS 两个 runner 因而会真实经过 Keychain，而不是用 Windows 结果代替 Mac 平台证据；它们还会为 `smoke` 版本原生执行 unsigned `pkgbuild/productbuild`，用 `pkgutil --expand-full` 展开 PKG，再由系统 `sh -n`/`plutil` 检查 launcher、postinstall、双语卸载器、LaunchAgent 和可执行权限。`-BuildUnsignedForTests` 对非 `smoke`/`test` 版本无效，生产路径仍强制 Developer ID Installer、公证、stapling 和 Gatekeeper。这些 CI 结果仍不等同于 Word 宿主、正式签名或 Apple 公证证据。
+每个目标平台 runner 还会直接启动其自包含 Bridge 可执行文件，连接受控本地 Provider 和 stdio MCP fixture，并执行配对鉴权、设置持久化及 Agent 加密恢复的跨进程重启回归。macOS arm64 runner 会真实经过 Keychain，而不是用 Windows 结果代替 Mac 平台证据；它还会为 `smoke` 版本原生执行 unsigned `pkgbuild/productbuild`，用 `pkgutil --expand-full` 展开 PKG，再由系统 `sh -n`/`plutil` 检查 launcher、postinstall、双语卸载器、LaunchAgent 和可执行权限。`-BuildUnsignedForTests` 对非 `smoke`/`test` 版本无效，生产路径仍强制 Developer ID Installer、公证、stapling 和 Gatekeeper。这些 CI 结果仍不等同于 Word 宿主、正式签名或 Apple 公证证据。
 
 需要正式签名候选包时，手动运行 `.github/workflows/officejs-signed-candidate.yml`。Windows runner 从 `WINDOWS_SIGNING_PFX_BASE64` / `WINDOWS_SIGNING_PFX_PASSWORD` 导入临时证书，签署 Bridge PE/ZIP 后继续生成并签署用户级 EXE；macOS runner 从 `MACOS_SIGNING_P12_BASE64` / `MACOS_SIGNING_P12_PASSWORD` 导入同时包含 Application/Installer 身份的临时 Keychain，分别使用 `MACOS_SIGNING_IDENTITY` 和 `MACOS_INSTALLER_IDENTITY`，并用 `APPLE_ID` / `APPLE_TEAM_ID` / `APPLE_APP_PASSWORD` 创建一次性 notarytool profile。临时 Keychain 路径会同时传给凭据存储、公证 ZIP 和公证 PKG。工作流会签名/公证 Bridge 更新 ZIP，继续构建、签名、公证、staple 和 Gatekeeper 验证用户级 `.pkg`，再启动候选 Bridge 执行实时 API 回归；最后删除临时凭据，只上传保留 14 天的 `signed-candidate` 和原始 unsigned descriptor。该候选仍为 `releaseReady: false`；必须在目标 Word 中生成同版本宿主证据并运行终审，不能直接作为 GA 发布。
 
@@ -157,7 +152,7 @@ pwsh ./packaging/provision-bridge-https.ps1 `
 
 加载项发布时用 `package-addin.ps1 -Version <产物版本> -ManifestVersion <四段递增版本>`；`ManifestVersion` 必须在每次 Ribbon/manifest 发布时单调递增，否则已经侧载或集中部署的 Word 可能继续使用旧命令缓存。
 
-Bridge 更新流程：三个 runtime 都完成终审后，用 `create-update-index.ps1` 读取对应的 `releaseReady: true` 描述文件并生成 SHA-256 索引，再由签名/分发系统发布；脚本会逐项核对版本、runtime、归档路径、哈希、大小和安装器发布者，正式模式缺少任一 runtime 或描述文件都会拒绝。`-AllowUnsignedForTests` 只供仓库 smoke 使用。设置页的一键更新会由已配对 Bridge 重新读取索引，只接受当前 runtime 的 EXE/PKG；下载时限制 512 MB、逐字节核对大小与 SHA-256，并同时要求索引发布者、上一版 Bridge 配置中固定的发布者和平台签名发布者完全一致。Windows 还要求 CA 链与 RFC 3161 时间戳，macOS 同时执行 `pkgutil --check-signature` 和安装类 Gatekeeper 评估；任何失败都会删除下载文件且不会启动。旧索引或 ZIP 仍仅提供手动兼容下载。
+Bridge 更新流程：两个受支持 runtime 都完成终审后，用 `create-update-index.ps1` 读取对应的 `releaseReady: true` 描述文件并生成 SHA-256 索引，再由签名/分发系统发布；脚本会逐项核对版本、runtime、归档路径、哈希、大小和安装器发布者，正式模式缺少任一 runtime 或描述文件都会拒绝。`-AllowUnsignedForTests` 只供仓库 smoke 使用。设置页的一键更新会由已配对 Bridge 重新读取索引，只接受当前 runtime 的 EXE/PKG；下载时限制 512 MB、逐字节核对大小与 SHA-256，并同时要求索引发布者、上一版 Bridge 配置中固定的发布者和平台签名发布者完全一致。Windows 还要求 CA 链与 RFC 3161 时间戳，macOS 同时执行 `pkgutil --check-signature` 和安装类 Gatekeeper 评估；任何失败都会删除下载文件且不会启动。旧索引或 ZIP 仍仅提供手动兼容下载。
 
 离线/兼容 ZIP 安装时调用 `install-bridge-update.ps1` 做哈希校验、版本目录切换和保留旧版本，随后运行 `provision-bridge-https.ps1` 写入该安装根目录的证书路径，异常时用 `rollback-bridge.ps1` 原子回退。`ExpectedSha256` 是强制参数，不能用空值跳过完整性校验：
 
@@ -222,7 +217,7 @@ stapled ticket 和安装类 Gatekeeper 评估；证据不能在不同版本或�
 Windows 终审必须传入
 `-WindowsInstallerEvidencePath ./artifacts/bridge/WordOllama-Installer-1.2.3-win-x64.installer.json`；
 终审会重新核对 EXE 哈希/大小、Bridge ZIP 哈希、精确发布者、签名证书指纹及 RFC 3161
-时间戳证书指纹。最终生产分发索引要求三个 runtime 都包含经过终审的用户安装器；
+时间戳证书指纹。最终生产分发索引要求两个受支持 runtime 都包含经过终审的用户安装器；
 更新页优先提供 `installers` 中当前平台的用户安装器，仅对旧索引回退 Bridge ZIP。
 
 补充宿主验收使用两阶段采集器，避免手工复制模板时写错版本、时间戳、runtime
@@ -258,7 +253,7 @@ pwsh ./tools/record-word-host-supplemental.ps1 -Mode Complete `
 缺少或重复用例、匿名客户端或被替换的输入都会被拒绝。原始模板仍保留用于查看
 schema，但不再建议手工填写；不能通过修改 unsigned descriptor 绕过。
 
-三个目标系统的终审描述文件收齐后才能创建生产更新索引：
+两个目标系统的终审描述文件收齐后才能创建生产更新索引：
 
 ```powershell
 pwsh ./packaging/create-update-index.ps1 `
@@ -268,7 +263,6 @@ pwsh ./packaging/create-update-index.ps1 `
   -VerifiedReleaseDescriptorPaths @(
     "./artifacts/unified/unified-release-1.2.3-win-x64.json"
     "./artifacts/unified/unified-release-1.2.3-osx-arm64.json"
-    "./artifacts/unified/unified-release-1.2.3-osx-x64.json"
   )
 ```
 

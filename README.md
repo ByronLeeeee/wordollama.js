@@ -138,7 +138,7 @@ pwsh ./tools/bridge-package-smoke-test.ps1 -Configuration Release
 它覆盖 Bridge ZIP 布局、本地 `wwwroot`、manifest、HTTPS 失败关闭、自启、回滚、
 Windows 安装/卸载以及 macOS PKG 脚本结构。
 
-在目标原生 CI 或具备三个 runtime 构建条件的机器上，还可以执行：
+在目标原生 CI 或具备两个正式 runtime 构建条件的机器上，还可以执行：
 
 ```powershell
 pwsh ./tools/bridge-package-smoke-test.ps1 `
@@ -223,8 +223,8 @@ pwsh ./packaging/package-unified-release.ps1 `
   -SkipManifestValidation
 ```
 
-Intel Mac 使用 `-Runtime osx-x64`。在 Windows 上只能加 `-CrossBuildOnly` 验证，
-不会生成正式 macOS ZIP。
+macOS 正式版仅支持 Apple Silicon（`osx-arm64`）。在 Windows 上只能加
+`-CrossBuildOnly` 验证，不会生成正式 macOS ZIP。
 
 ## 正式签名与安装器
 

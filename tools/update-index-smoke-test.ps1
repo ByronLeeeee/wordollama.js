@@ -5,7 +5,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $indexScript = Join-Path $repoRoot "packaging/create-update-index.ps1"
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) "wordollama-update-index-$([Guid]::NewGuid().ToString('N'))"
 $version = "9.8.7-test"
-$runtimes = @("win-x64", "osx-arm64", "osx-x64")
+$runtimes = @("win-x64", "osx-arm64")
 
 function Assert-Throws {
     param(
@@ -90,8 +90,8 @@ try {
         -VerifiedReleaseDescriptorPaths $descriptorPaths `
         -OutputPath $verifiedIndexPath
     $verifiedIndex = Get-Content -LiteralPath $verifiedIndexPath -Raw | ConvertFrom-Json
-    if (@($verifiedIndex.artifacts).Count -ne 3 -or
-        @($verifiedIndex.installers).Count -ne 3) {
+    if (@($verifiedIndex.artifacts).Count -ne 2 -or
+        @($verifiedIndex.installers).Count -ne 2) {
         throw "Verified update index did not contain all runtimes and user installers."
     }
     foreach ($installer in @($verifiedIndex.installers)) {

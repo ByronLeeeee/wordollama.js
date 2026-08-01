@@ -104,7 +104,7 @@ if ($Mode -eq "Start") {
     if ($descriptor.schemaVersion -ne 1 -or
         $descriptor.product -ne "WordOllama.JS" -or
         $descriptor.releaseReady -ne $false -or
-        $descriptor.runtime -notin @("win-x64", "osx-arm64", "osx-x64") -or
+        $descriptor.runtime -notin @("win-x64", "osx-arm64") -or
         [string]::IsNullOrWhiteSpace([string]$descriptor.version)) {
         throw "BuildDescriptorPath is not an unsigned WordOllama.JS release descriptor."
     }

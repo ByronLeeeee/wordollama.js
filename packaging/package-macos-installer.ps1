@@ -1,7 +1,7 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("osx-arm64", "osx-x64")]
+    [ValidateSet("osx-arm64")]
     [string]$Runtime,
     [Parameter(Mandatory = $true)]
     [string]$ArtifactRoot,

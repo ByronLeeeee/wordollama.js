@@ -75,7 +75,7 @@ $descriptorRecord = Read-JsonFile -Path $BuildDescriptorPath -Label "Build descr
 $descriptor = $descriptorRecord.Value
 if ($descriptor.schemaVersion -ne 1 -or $descriptor.product -ne "WordOllama.JS" -or
     $descriptor.releaseReady -ne $false -or
-    $descriptor.runtime -notin @("win-x64", "osx-arm64", "osx-x64")) {
+    $descriptor.runtime -notin @("win-x64", "osx-arm64")) {
     throw "Build descriptor is not an unsigned WordOllama.JS runtime descriptor."
 }
 $version = [string]$descriptor.version

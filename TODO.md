@@ -151,7 +151,7 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 - [ ] 在干净 Windows 用户账户完成安装、升级、回滚和卸载。
 - [ ] 在真实 Windows Word 重新执行 36/36 工具、长文档和修订验收。
 - [ ] 在 Apple Silicon Mac 构建并使用自签名/本地信任方式验收 arm64 PKG。
-- [ ] 在 Intel Mac 构建并使用自签名/本地信任方式验收 x64 PKG。
+- [x] 产品支持范围确定为 Apple Silicon Mac；不构建或发布 Intel Mac 版本。
 - [ ] macOS 安装文档明确说明：没有 Apple Developer ID 时不能完成 Apple 公证和
   默认 Gatekeeper 无警告分发；安装器必须引导用户执行系统允许的显式信任步骤，
   不能伪造 notarization/stapling 通过状态。
@@ -214,10 +214,10 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 
 ## P1：发布与更新
 
-- [x] 产品决策：首期只有 stable 通道；Windows x64、macOS arm64、macOS x64 共用
-  签名索引，下载文件托管于独立 HTTPS 域名/对象存储。
-- [ ] 配置正式下载域名和三平台 stable 更新索引。
-- [ ] 完成 Windows/macOS 三个 runtime 的 `releaseReady: true` 终审描述文件。
+- [x] 产品决策：首期只有 stable 通道；Windows x64、macOS arm64 共用签名索引，
+  下载文件托管于独立 HTTPS 域名/对象存储。
+- [ ] 配置正式下载域名和双平台 stable 更新索引。
+- [ ] 完成 Windows x64/macOS arm64 两个 runtime 的 `releaseReady: true` 终审描述文件。
 - [ ] 验证更新下载的大小、SHA-256、签名发布者和失败清理。
 - [ ] 验证设置页一键更新、版本回滚和旧版本保留策略。
 - [ ] 发布前递增四段 `ManifestVersion`，避免 Word 使用旧 Ribbon 缓存。

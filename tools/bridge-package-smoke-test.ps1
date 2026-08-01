@@ -53,8 +53,11 @@ if ($IsWindows) {
     $hostRuntime = "win-x64"
 }
 elseif ($IsMacOS) {
-    $hostRuntime = if ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture -eq
-        [System.Runtime.InteropServices.Architecture]::Arm64) { "osx-arm64" } else { "osx-x64" }
+    if ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture -ne
+        [System.Runtime.InteropServices.Architecture]::Arm64) {
+        throw "WordOllama.JS supports Apple Silicon macOS only."
+    }
+    $hostRuntime = "osx-arm64"
 }
 else {
     throw "Bridge release archive smoke supports Windows or macOS hosts."
@@ -925,7 +928,7 @@ Assert-WindowsInstallerLifecycle
 Assert-NativeMacInstallerPackage
 
 if ($IncludeCrossBuilds) {
-    foreach ($runtime in @("win-x64", "osx-arm64", "osx-x64")) {
+    foreach ($runtime in @("win-x64", "osx-arm64")) {
         if ($runtime -eq $hostRuntime) { continue }
         & $publishScript -Runtime $runtime -Configuration $Configuration `
             -Version $version -OutputRoot $buildRootFullPath -CrossBuildOnly `

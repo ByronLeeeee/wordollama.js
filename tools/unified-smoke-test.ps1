@@ -258,10 +258,9 @@ $unifiedWorkflow = Get-Content `
     (Join-Path $repoRoot ".github\workflows\officejs-unified-ci.yml") -Raw
 if ($unifiedWorkflow -notmatch "platform-secret-store-smoke" -or
     $unifiedWorkflow -notmatch "--allow-user-vault-test" -or
-    $unifiedWorkflow -notmatch "macos-15-intel" -or
-    $unifiedWorkflow -notmatch "osx-arm64" -or
-    $unifiedWorkflow -notmatch "osx-x64") {
-    throw "平台回归失败：三目标原生 CI 缺少 Credential Manager/Keychain 门禁。"
+    $unifiedWorkflow -notmatch "macos-15" -or
+    $unifiedWorkflow -notmatch "osx-arm64") {
+    throw "平台回归失败：Windows x64/macOS arm64 原生 CI 缺少 Credential Manager/Keychain 门禁。"
 }
 
 $skillFile = Join-Path $buildRoot ($Configuration + "\net8.0\Skills\contract-review\SKILL.md")

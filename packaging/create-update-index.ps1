@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $artifactRootPath = (Resolve-Path $ArtifactRoot).Path
-$runtimes = @("win-x64", "osx-arm64", "osx-x64")
+$runtimes = @("win-x64", "osx-arm64")
 $verifiedDescriptors = @{}
 if (-not $AllowUnsignedForTests) {
     if ($VerifiedReleaseDescriptorPaths.Count -eq 0) {
@@ -105,8 +105,8 @@ foreach ($runtime in $runtimes) {
 if ($artifacts.Count -eq 0) {
     throw "No Bridge archives found under $artifactRootPath for version $Version."
 }
-if (-not $AllowUnsignedForTests -and $installers.Count -ne 3) {
-    throw "Production distribution metadata requires all three user installers."
+if (-not $AllowUnsignedForTests -and $installers.Count -ne $runtimes.Count) {
+    throw "Production distribution metadata requires all supported user installers."
 }
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $OutputPath = Join-Path $artifactRootPath "update-index-$Version.json"
