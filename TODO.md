@@ -220,7 +220,7 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
   - 私有内存：49.3 MB。
   - 空闲 CPU：接近 0。
 - [ ] 测量连接多个 MCP Server、长 Agent 会话和多窗格后的资源占用。
-- [ ] 不把 Ollama 模型内存计入 Bridge 指标；单独展示本地模型资源。
+- [x] 不把 Ollama 模型内存计入 Bridge 指标；单独展示本地模型资源。
 
 ## P1：发布与更新
 

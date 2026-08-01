@@ -602,6 +602,8 @@ public sealed class AgentSessionManager : IAgentRecoveryStore
     private readonly ConcurrentDictionary<string, AgentRecoverySnapshot> _recoveries = new(StringComparer.Ordinal);
     private readonly object _recoveryGate = new();
 
+    public int ActiveCount => _sessions.Count;
+
     public AgentSessionManager(
         IModelProvider provider,
         IEnumerable<IInternalToolExecutor> internalTools,

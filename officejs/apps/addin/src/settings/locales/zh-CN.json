@@ -286,6 +286,20 @@
     "title": "进阶",
     "localService": "本机服务",
     "reconnect": "重新连接",
+    "resources": {
+      "title": "资源占用",
+      "refresh": "刷新",
+      "bridge": "Desktop Bridge",
+      "ollama": "Ollama（外部）",
+      "processes": "{{count}} 个进程",
+      "workingSet": "工作集",
+      "privateMemory": "私有内存",
+      "cpu": "CPU",
+      "mcp": "已连接 MCP：{{count}}",
+      "agent": "活动 Agent：{{count}}",
+      "hint": "Ollama 是独立的外部服务，其模型资源不会计入 Desktop Bridge。CPU 从第二次采样开始计算。",
+      "unavailable": "连接本机服务后可查看资源占用。"
+    },
     "connection": {
       "checking": "正在连接…",
       "checkingHint": "正在检查本机服务。",

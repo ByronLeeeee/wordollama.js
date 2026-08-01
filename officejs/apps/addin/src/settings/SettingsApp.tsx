@@ -40,6 +40,7 @@ import type {
   ProviderProfileUpdate,
   ProviderProfileView,
   ReviewSettingsView,
+  ResourceDiagnosticsSnapshot,
   SkillSummary,
   UpdateCheckResult,
 } from "../contracts";
@@ -1833,12 +1834,26 @@ function MarkdownPage() {
 function AdvancedPage() {
   const { t } = useTranslation();
   const [bridgeState, setBridgeState] = useState<"checking" | "connected" | "disconnected">("checking");
+  const [resources, setResources] = useState<ResourceDiagnosticsSnapshot | null>(null);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
+  const formatBytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  const loadResources = async () => {
+    setResourcesLoading(true);
+    try {
+      setResources(await runtime.getResourceDiagnostics());
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setResourcesLoading(false);
+    }
+  };
   const checkBridge = async () => {
     setBridgeState("checking");
     try {
       if (!runtime.hasPairing()) await runtime.autoPair();
       const health = await runtime.health();
       setBridgeState(health.ready ? "connected" : "disconnected");
+      if (health.ready) void loadResources();
     } catch (error) {
       console.error(error);
       setBridgeState("disconnected");
@@ -1861,6 +1876,36 @@ function AdvancedPage() {
           <div className="settings-actions">
             <button className="btn btn-primary btn-sm" type="button" disabled={bridgeState === "checking"} onClick={() => void checkBridge()}>{t("advanced.reconnect")}</button>
           </div>
+        </Card>
+        <Card
+          title={t("advanced.resources.title")}
+          actions={<button className="btn btn-ghost btn-sm" type="button" disabled={resourcesLoading || bridgeState !== "connected"} onClick={() => void loadResources()}><RefreshCw size={14} className={resourcesLoading ? "animate-spin" : ""} />{t("advanced.resources.refresh")}</button>}
+        >
+          {resources ? (
+            <div className="grid gap-3">
+              {(["bridge", "ollama"] as const).map((key) => {
+                const value = resources[key];
+                return (
+                  <section className="rounded-box border border-base-300 bg-base-100 p-4" key={key}>
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <strong>{t(`advanced.resources.${key}`)}</strong>
+                      <span className="badge badge-ghost">{t("advanced.resources.processes", { count: value.processCount })}</span>
+                    </div>
+                    <dl className="grid grid-cols-3 gap-3 text-sm">
+                      <div><dt className="opacity-60">{t("advanced.resources.workingSet")}</dt><dd className="font-semibold">{formatBytes(value.workingSetBytes)}</dd></div>
+                      <div><dt className="opacity-60">{t("advanced.resources.privateMemory")}</dt><dd className="font-semibold">{formatBytes(value.privateBytes)}</dd></div>
+                      <div><dt className="opacity-60">{t("advanced.resources.cpu")}</dt><dd className="font-semibold">{value.cpuPercent.toFixed(1)}%</dd></div>
+                    </dl>
+                  </section>
+                );
+              })}
+              <div className="flex flex-wrap gap-2">
+                <span className="badge badge-outline">{t("advanced.resources.mcp", { count: resources.connectedMcpServers })}</span>
+                <span className="badge badge-outline">{t("advanced.resources.agent", { count: resources.activeAgentSessions })}</span>
+              </div>
+              <p className="text-xs opacity-60">{t("advanced.resources.hint")}</p>
+            </div>
+          ) : <p className="text-sm opacity-60">{t("advanced.resources.unavailable")}</p>}
         </Card>
       </div>
     </div>

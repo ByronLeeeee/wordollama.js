@@ -271,6 +271,7 @@ builder.Services.AddSingleton(sp => new UpdateInstallerService(
 builder.Services.AddSingleton<AgentSessionManager>();
 builder.Services.AddSingleton<IInternalToolExecutor, McpToolExecutor>();
 builder.Services.AddSingleton<McpManager>();
+builder.Services.AddSingleton<ResourceDiagnosticsService>();
 builder.Services.AddSingleton<IDocumentComparer, OpenXmlDocumentComparer>();
 builder.Services.AddSingleton<LegalArticleService>();
 builder.Services.AddSingleton<AutomaticMemoryService>();
@@ -376,6 +377,21 @@ app.MapGet("/health", (IAgentRuntime runtime, IModelProvider provider) =>
         bridgeVersion,
         Ready: true,
         ["bridge", .. runtime.Capabilities, provider.ProviderType, "provider-settings", "isolated-agent-workspace", "local-process", "local-secrets", "legal-articles", .. agentRecoveryCapabilities])));
+
+app.MapGet("/diagnostics/resources", (
+    HttpRequest httpRequest,
+    BridgeSessionStore sessions,
+    ResourceDiagnosticsService diagnostics,
+    McpManager mcpManager,
+    AgentSessionManager agentSessions) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers.Origin.FirstOrDefault();
+    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
+    return Results.Ok(diagnostics.Capture(
+        mcpManager.GetServerStates().Count(state => state.Connected),
+        agentSessions.ActiveCount));
+});
 
 if (app.Environment.IsDevelopment())
 {

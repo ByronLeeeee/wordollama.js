@@ -22,6 +22,21 @@ export interface BridgeHealthResponse {
   capabilities: string[];
 }
 
+export interface ProcessResourceSnapshot {
+  processCount: number;
+  workingSetBytes: number;
+  privateBytes: number;
+  cpuPercent: number;
+}
+
+export interface ResourceDiagnosticsSnapshot {
+  capturedAt: string;
+  bridge: ProcessResourceSnapshot;
+  ollama: ProcessResourceSnapshot;
+  connectedMcpServers: number;
+  activeAgentSessions: number;
+}
+
 export interface UpdateArtifact {
   kind: "installer" | "archive";
   runtime: string;

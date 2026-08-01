@@ -15,6 +15,19 @@ public sealed record BridgeHealthResponse(
     bool Ready,
     IReadOnlyList<string> Capabilities);
 
+public sealed record ProcessResourceSnapshot(
+    int ProcessCount,
+    long WorkingSetBytes,
+    long PrivateBytes,
+    double CpuPercent);
+
+public sealed record ResourceDiagnosticsSnapshot(
+    DateTimeOffset CapturedAt,
+    ProcessResourceSnapshot Bridge,
+    ProcessResourceSnapshot Ollama,
+    int ConnectedMcpServers,
+    int ActiveAgentSessions);
+
 public sealed record PairRequest(string PairingCode, string Origin);
 
 public sealed record AutomaticPairRequest(string Origin);

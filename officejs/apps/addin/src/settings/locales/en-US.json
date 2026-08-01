@@ -286,6 +286,20 @@
     "title": "Advanced",
     "localService": "Local service",
     "reconnect": "Reconnect",
+    "resources": {
+      "title": "Resource usage",
+      "refresh": "Refresh",
+      "bridge": "Desktop Bridge",
+      "ollama": "Ollama (external)",
+      "processes": "{{count}} processes",
+      "workingSet": "Working set",
+      "privateMemory": "Private memory",
+      "cpu": "CPU",
+      "mcp": "Connected MCP: {{count}}",
+      "agent": "Active agents: {{count}}",
+      "hint": "Ollama is an independent external service, so its model resources are not included in Desktop Bridge. CPU is calculated from the second sample.",
+      "unavailable": "Connect the local service to view resource usage."
+    },
     "connection": {
       "checking": "Connecting…",
       "checkingHint": "Checking the local service.",
