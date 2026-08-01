@@ -439,6 +439,7 @@ function Assert-UnsignedReleaseCannotFinalize {
             -LongDocumentReportPath (Join-Path $buildRootFullPath "missing-long.json") `
             -RevisionReportPath (Join-Path $buildRootFullPath "missing-revisions.json") `
             -SupplementalHostReportPath (Join-Path $buildRootFullPath "missing-host.json") `
+            -PlatformLifecycleEvidencePath (Join-Path $buildRootFullPath "missing-lifecycle.json") `
             -ExpectedPublisherSubject "CN=Unsigned Smoke Must Fail" `
             -ExpectedMacInstallerPublisherSubject $fixtureInstallerPublisher `
             -OutputPath $outputPath
@@ -464,6 +465,7 @@ function Assert-UnsignedReleaseCannotFinalize {
             -LongDocumentReportPath (Join-Path $buildRootFullPath "missing-long.json") `
             -RevisionReportPath (Join-Path $buildRootFullPath "missing-revisions.json") `
             -SupplementalHostReportPath (Join-Path $buildRootFullPath "missing-host.json") `
+            -PlatformLifecycleEvidencePath (Join-Path $buildRootFullPath "missing-lifecycle.json") `
             -ExpectedPublisherSubject "CN=Unsigned Smoke Must Fail" `
             -ExpectedMacInstallerPublisherSubject $fixtureInstallerPublisher `
             -OutputPath $outputPath

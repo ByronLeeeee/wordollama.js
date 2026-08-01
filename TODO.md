@@ -29,6 +29,10 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 截至 2026-08-02，可在当前开发机完成的产品功能与自动化门禁已冻结并通过。下方仍未
 勾选的项目只包含真实 Word/目标设备操作、正式下载域名与由这些真实证据生成的终审
 描述文件；按当前安排暂不让它们阻塞功能完成，也不会用模拟报告冒充实机通过。
+Windows 与 macOS arm64 的安装、升级、证书信任、回滚、卸载（以及 Mac Agent 沙箱）
+现可分别通过 `tools/record-windows-release-lifecycle.ps1` 和
+`tools/record-macos-release-lifecycle.ps1` 在干净账户生成不可覆盖的实测证据；终审器
+强制校验该证据与构建描述文件及安装包哈希一致。
 
 ## 已完成
 
@@ -274,12 +278,15 @@ git status
 - TypeScript 类型检查、23 组 Office.js smoke 与 Vite 生产构建：通过。
 - Desktop Bridge Release 构建：0 警告、0 错误；统一 Core smoke：通过。
 - 统一 Release 冒烟已通过前端构建、36 工具注册、宿主能力矩阵、Golden、
-  长文档、修订、Provider 设置、结构化记忆存储、MCP/Ollama 设置及更新安全测试。
+  长文档、修订、Provider 设置、结构化记忆存储、MCP/Ollama 设置、更新安全测试和
+  双平台生命周期证据防篡改门禁。
 - 独立 Bridge live API 已通过配对、Provider 模型读取、MCP、加密 Agent 恢复和
   重启持久化；此前 HTTP 405 已修复。
 - Bridge package smoke 已通过 win-x64 自包含包、安装/回滚、HTTPS 失败关闭、
   Windows/macOS 自启模拟、Windows 安装器和 macOS 签名/安装器 dry-run；测试脚本
   已修复为可重复执行。
+- 2026-08-02 最新 Windows Release 实测：Bridge 空闲工作集 69.1 MB、私有内存
+  52.8 MB、CPU 0.2%；载入两个 MCP 和一个 Agent 后为 86.8 MB、60.1 MB、4.6%。
 - 已在 360px 窄窗中实际检查基础设置、Agent 设置、翻译和编辑工作流，无控制台
   error/warn；开发 Bridge 测试后已恢复运行。
 

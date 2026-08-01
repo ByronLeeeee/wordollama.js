@@ -201,7 +201,7 @@ pwsh ./packaging/unregister-bridge-autostart.ps1 -InstallRoot <install-root>
 Credential Manager/Keychain 的写入、精确读回和删除，并在 `finally` 清理。该工具必须显式传入
 `--allow-user-vault-test`，不应在含有真实同名测试键的共享账户中运行。
 
-签名、HTTPS 和宿主测试全部完成后，使用 `finalize-unified-release.ps1` 生成唯一允许标记 `releaseReady: true` 的终审描述文件。该命令必须在产物目标系统执行，会重新解包并校验所有 Windows PE 的 Authenticode 发布者，或校验 macOS codesign、Gatekeeper 和 Developer ID Authority；同时要求目标版本生成后的 HTTPS 证据、36/36 工具报告、1,000/5,000 段报告、修订报告，以及复杂合同、双客户端共同编辑、16 个独立任务窗格、设置 Office Dialog 和中英文/明暗主题/窄宽窗格补充报告：
+签名、HTTPS 和宿主测试全部完成后，使用 `finalize-unified-release.ps1` 生成唯一允许标记 `releaseReady: true` 的终审描述文件。该命令必须在产物目标系统执行，会重新解包并校验所有 Windows PE 的 Authenticode 发布者，或校验 macOS codesign、Gatekeeper 和签名 Authority；同时要求目标版本生成后的 HTTPS 证据、安装/升级/证书/回滚/卸载生命周期证据、36/36 工具报告、1,000/5,000 段报告、修订报告，以及复杂合同、双客户端共同编辑、16 个独立任务窗格、设置 Office Dialog 和中英文/明暗主题/窄宽窗格补充报告：
 
 ```powershell
 pwsh ./packaging/finalize-unified-release.ps1 `
@@ -211,7 +211,32 @@ pwsh ./packaging/finalize-unified-release.ps1 `
   -LongDocumentReportPath ./evidence/windows-long.json `
   -RevisionReportPath ./evidence/windows-revisions.json `
   -SupplementalHostReportPath ./evidence/windows-supplemental.json `
+  -PlatformLifecycleEvidencePath ./evidence/windows-lifecycle.json `
   -ExpectedPublisherSubject "CN=Your Exact Publisher Subject"
+```
+
+生命周期报告不能手写。请在没有 WordOllama.JS 安装残留、Word 已退出的干净当前用户
+账户运行对应脚本；脚本默认拒绝执行，只有显式加入变更授权开关才会安装/卸载产品并
+修改本产品 localhost 证书的当前用户信任：
+
+```powershell
+# Windows x64
+pwsh ./tools/record-windows-release-lifecycle.ps1 `
+  -PreviousInstallerPath ./previous/WordOllama-Installer.exe `
+  -CandidateInstallerEvidencePath ./artifacts/WordOllama-Installer.installer.json `
+  -BuildDescriptorPath ./artifacts/unified-build-win-x64.json `
+  -ExpectedPublisherSubject "CN=Your Exact Publisher Subject" `
+  -OutputPath ./evidence/windows-lifecycle.json `
+  -AllowCurrentUserInstallAndCertificateChanges
+
+# Apple Silicon Mac；首次证书信任仍由 macOS 显示自己的授权界面
+pwsh ./tools/record-macos-release-lifecycle.ps1 `
+  -PreviousPackagePath ./previous/WordOllama-Installer.pkg `
+  -CandidateInstallerEvidencePath ./artifacts/WordOllama-Installer.installer.json `
+  -BuildDescriptorPath ./artifacts/unified-build-osx-arm64.json `
+  -ExpectedInstallerIdentity "WordOllama.JS Local Installer" `
+  -OutputPath ./evidence/macos-lifecycle.json `
+  -AllowCurrentUserInstallAndCertificateChanges
 ```
 
 Developer ID 模式的 macOS 终审还必须传入签名阶段产生的

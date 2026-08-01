@@ -6,6 +6,7 @@ param(
     [Parameter(Mandatory = $true)][string]$LongDocumentReportPath,
     [Parameter(Mandatory = $true)][string]$RevisionReportPath,
     [Parameter(Mandatory = $true)][string]$SupplementalHostReportPath,
+    [Parameter(Mandatory = $true)][string]$PlatformLifecycleEvidencePath,
     [Parameter(Mandatory = $true)][string]$ExpectedPublisherSubject,
     [string]$WindowsInstallerEvidencePath = "",
     [string]$MacNotarizationEvidencePath = "",
@@ -464,12 +465,23 @@ $supplementalValidator = Join-Path $PSScriptRoot "validate-word-host-supplementa
 & $supplementalValidator -ReportPath $supplementalRecord.Path -ExpectedVersion $version `
     -ExpectedPlatform $expectedPlatform -BuildTime $buildTime
 
+$lifecycleRecord = Read-JsonFile -Path $PlatformLifecycleEvidencePath `
+    -Label "Platform release lifecycle evidence"
+$lifecycle = $lifecycleRecord.Value
+$lifecycleValidator = Join-Path $PSScriptRoot "validate-platform-release-lifecycle.ps1"
+& $lifecycleValidator -ReportPath $lifecycleRecord.Path `
+    -BuildDescriptorPath $descriptorRecord.Path `
+    -CandidateInstallerSha256 ([string]$installer.packageSha256) `
+    -ExpectedWindowsPublisherSubject $ExpectedPublisherSubject `
+    -ExpectedMacInstallerIdentity $ExpectedMacInstallerPublisherSubject
+
 $evidenceRecords = @(
     @{ kind = "bridge-https"; record = $httpsRecord },
     @{ kind = "word-tools"; record = $goldenRecord },
     @{ kind = "long-document"; record = $longRecord },
     @{ kind = "word-revisions"; record = $revisionRecord },
-    @{ kind = "host-supplemental"; record = $supplementalRecord }
+    @{ kind = "host-supplemental"; record = $supplementalRecord },
+    @{ kind = "platform-release-lifecycle"; record = $lifecycleRecord }
 )
 if ($descriptor.runtime -like "osx-*") {
     $evidenceRecords += @{

@@ -238,6 +238,8 @@ $updateIndexSmoke = Join-Path $repoRoot "tools\update-index-smoke-test.ps1"
 & $updateIndexSmoke
 $supplementalHostSmoke = Join-Path $repoRoot "tools\word-host-supplemental-smoke-test.ps1"
 & $supplementalHostSmoke
+$platformLifecycleSmoke = Join-Path $repoRoot "tools\platform-release-lifecycle-smoke-test.ps1"
+& $platformLifecycleSmoke
 
 $baseOutputPath = $buildRoot + [System.IO.Path]::DirectorySeparatorChar
 $dotnetArguments = @(

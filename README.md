@@ -286,8 +286,11 @@ pwsh ./packaging/package-macos-installer.ps1 `
 ```
 
 终审本地自签名候选时，还要给 `finalize-unified-release.ps1` 传入上述本地签名证据、
-安装器证据、两个精确签名身份和 `-MacLocalSelfSignedRelease`。这只证明产物身份固定且
-可复现，不代表 Apple 已公证。
+安装器证据、`-PlatformLifecycleEvidencePath`、两个精确签名身份和
+`-MacLocalSelfSignedRelease`。生命周期证据必须由目标平台的
+`record-windows-release-lifecycle.ps1` 或 `record-macos-release-lifecycle.ps1` 在干净
+当前用户账户实际执行安装、升级、回滚和卸载后生成。这只证明产物身份固定且可复现，
+不代表 Apple 已公证。
 
 完整签名、终审证据和更新索引流程见
 [`packaging/README.zh-CN.md`](packaging/README.zh-CN.md)。
