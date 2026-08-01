@@ -8,6 +8,9 @@ import {
   type TrackedRevision,
   type TrackedRevisionResult,
 } from "../apps/addin/src/officejs-word-adapter.ts";
+import i18n from "../apps/addin/src/i18n.ts";
+
+await i18n.changeLanguage("zh-CN");
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
