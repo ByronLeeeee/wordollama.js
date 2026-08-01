@@ -13,6 +13,7 @@
     <Product>WordOllama.JS Desktop Bridge</Product>
     <Company>WordOllama</Company>
     <Description>Per-user setup for the WordOllama.JS Desktop Bridge</Description>
+    <ApplicationIcon>Assets\WordOllama.JS.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup Condition="'$(BridgeArchive)' != ''">
     <EmbeddedResource Include="$(BridgeArchive)"

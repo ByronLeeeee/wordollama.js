@@ -109,7 +109,7 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
 - [x] 产品决策：安装器可以在用户明确确认后，为当前用户安装并信任本产品生成的
   localhost HTTPS 证书；不写入机器级信任库。
 - [x] Windows 安装器生成每用户、仅限 `localhost/127.0.0.1` 的服务器叶证书。
-- [ ] 安装器在用户明确同意后写入“当前用户”信任库，并在界面显示用途、范围和
+- [x] 安装器在用户明确同意后写入“当前用户”信任库，并在界面显示用途、范围和
   证书指纹。
 - [x] 证书必须包含 SAN：`localhost`、`127.0.0.1` 和 `::1`。
 - [x] PFX 使用随机密码，密码只写入 Windows Credential Manager/macOS Keychain。
@@ -146,7 +146,7 @@ MCP、Skills 和 Markdown 设置已完成新 UI。自动记忆、会话 CSRF、A
   `index.html` 和 manifest；首次安装在用户完成证书授权入口后执行同样检查。
 - [x] 安装/升级时安全停止旧 Bridge，完成后启动新版本。
 - [x] Word 正在运行时提示用户完全退出并重启，以刷新 manifest/Ribbon 缓存。
-- [ ] 为 Windows 安装器补充仓库原生 `.ico`，不要再引用旧 COM 仓库资源。
+- [x] 为 Windows 安装器补充仓库原生 `.ico`，不要再引用旧 COM 仓库资源。
 
 ## P0：目标平台发布验证
 

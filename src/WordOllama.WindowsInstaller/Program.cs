@@ -90,14 +90,16 @@ internal static class Program
 
             var noStart = options.ContainsKey("--no-start");
             var trustLocalhostCertificate = options.ContainsKey(
-                "--trust-localhost-certificate") ||
-                (!quiet && ConfirmLocalhostCertificateTrust());
+                "--trust-localhost-certificate");
+            var promptForLocalhostCertificateTrust =
+                !quiet && !trustLocalhostCertificate;
             Install(
                 installRoot,
                 startupRoot,
                 noStart,
                 skipRegistration,
-                trustLocalhostCertificate);
+                trustLocalhostCertificate,
+                promptForLocalhostCertificateTrust);
             Notify(InstallerText.Installed, quiet);
             if (!quiet && Process.GetProcessesByName("WINWORD").Length > 0)
             {
@@ -237,7 +239,8 @@ internal static class Program
         string startupRoot,
         bool noStart,
         bool skipRegistration,
-        bool trustLocalhostCertificate)
+        bool trustLocalhostCertificate,
+        bool promptForLocalhostCertificateTrust)
     {
         var assembly = Assembly.GetExecutingAssembly();
         var metadata = ReadMetadata(assembly);
@@ -395,9 +398,13 @@ internal static class Program
 
         StopOwnedBridgeProcesses(installRoot);
 
-        if (!skipRegistration && trustLocalhostCertificate)
+        if (!skipRegistration &&
+            (trustLocalhostCertificate || promptForLocalhostCertificateTrust))
         {
-            ProvisionLocalhostCertificate(installRoot, target);
+            ProvisionLocalhostCertificate(
+                installRoot,
+                target,
+                promptForLocalhostCertificateTrust);
         }
 
         var certificatePath = Path.Combine(
@@ -710,16 +717,20 @@ internal static class Program
             lastError);
     }
 
-    private static bool ConfirmLocalhostCertificateTrust() =>
+    private static bool ConfirmLocalhostCertificateTrust(
+        X509Certificate2 certificate) =>
         MessageBoxW(
             IntPtr.Zero,
-            InstallerText.CertificateTrustPrompt,
+            InstallerText.CertificateTrustPrompt(
+                certificate.Thumbprint,
+                certificate.NotAfter.ToLocalTime()),
             InstallerText.Title,
             0x00000004 | 0x00000030) == 6;
 
     private static void ProvisionLocalhostCertificate(
         string installRoot,
-        string versionRoot)
+        string versionRoot,
+        bool promptForTrust)
     {
         var certsRoot = Path.Combine(installRoot, "certs");
         Directory.CreateDirectory(certsRoot);
@@ -750,6 +761,10 @@ internal static class Program
         using var certificate = request.CreateSelfSigned(
             DateTimeOffset.UtcNow.AddMinutes(-5),
             DateTimeOffset.UtcNow.AddYears(2));
+        if (promptForTrust && !ConfirmLocalhostCertificateTrust(certificate))
+        {
+            return;
+        }
         var password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var pfxPath = Path.Combine(certsRoot, "bridge.pfx");
         File.WriteAllBytes(pfxPath, certificate.Export(X509ContentType.Pfx, password));

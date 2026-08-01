@@ -7,7 +7,14 @@
   <data name="Title" xml:space="preserve"><value>WordOllama.JS 安装程序</value></data>
   <data name="Installed" xml:space="preserve"><value>已为当前用户安装 WordOllama.JS Desktop Bridge。</value></data>
   <data name="Removed" xml:space="preserve"><value>已移除 WordOllama.JS Desktop Bridge。</value></data>
-  <data name="CertificateTrustPrompt" xml:space="preserve"><value>是否在当前用户证书库中信任 WordOllama.JS 的 localhost 证书？该证书仅用于 localhost、127.0.0.1 和 ::1，卸载 WordOllama.JS 时会一并移除。</value></data>
+  <data name="CertificateTrustPrompt" xml:space="preserve"><value>是否在当前用户证书库中信任以下 WordOllama.JS HTTPS 服务器证书？
+
+用途：仅用于保护本机 Desktop Bridge 连接
+名称：localhost、127.0.0.1 和 ::1
+SHA-256 指纹：{0}
+有效期至：{1:g}
+
+该证书不能签发其他证书，不会写入计算机级信任库；卸载 WordOllama.JS 时会一并移除。</value></data>
   <data name="RestartWord" xml:space="preserve"><value>检测到 Microsoft Word 正在运行。请完全退出并重新打开 Word，以载入更新后的 WordOllama.JS 功能区。</value></data>
   <data name="Failed" xml:space="preserve"><value>安装失败：{0}</value></data>
 </root>

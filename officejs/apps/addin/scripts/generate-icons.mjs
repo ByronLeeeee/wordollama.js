@@ -58,6 +58,34 @@ for (const [name, resource, body] of icons) {
 }
 await writeFile(join(root, "catalog.json"), `${JSON.stringify(catalog, null, 2)}\n`, "utf8");
 
+const appIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#2563eb"/><path d="M8 8h16v4H12v4h10v4H12v4h12v4H8z" fill="white"/></svg>`;
+const icoPngs = [16, 32, 48, 256].map((size) =>
+  new Resvg(appIconSvg, { fitTo: { mode: "width", value: size } }).render().asPng(),
+);
+const icoHeaderSize = 6 + icoPngs.length * 16;
+const ico = Buffer.alloc(icoHeaderSize + icoPngs.reduce((sum, png) => sum + png.length, 0));
+ico.writeUInt16LE(0, 0);
+ico.writeUInt16LE(1, 2);
+ico.writeUInt16LE(icoPngs.length, 4);
+let icoOffset = icoHeaderSize;
+icoPngs.forEach((png, index) => {
+  const size = [16, 32, 48, 256][index];
+  const entry = 6 + index * 16;
+  ico.writeUInt8(size === 256 ? 0 : size, entry);
+  ico.writeUInt8(size === 256 ? 0 : size, entry + 1);
+  ico.writeUInt8(0, entry + 2);
+  ico.writeUInt8(0, entry + 3);
+  ico.writeUInt16LE(1, entry + 4);
+  ico.writeUInt16LE(32, entry + 6);
+  ico.writeUInt32LE(png.length, entry + 8);
+  ico.writeUInt32LE(icoOffset, entry + 12);
+  png.copy(ico, icoOffset);
+  icoOffset += png.length;
+});
+const installerAssets = join(import.meta.dirname, "..", "..", "..", "..", "src", "WordOllama.WindowsInstaller", "Assets");
+await mkdir(installerAssets, { recursive: true });
+await writeFile(join(installerAssets, "WordOllama.JS.ico"), ico);
+
 const manifestPath = join(import.meta.dirname, "..", "manifest.xml");
 let manifest = await readFile(manifestPath, "utf8");
 const manifestIcons = [
@@ -80,4 +108,4 @@ const imageResources = icons.flatMap(([name, resource]) => [16, 32, 80].map((siz
 )).join("\n");
 manifest = manifest.replace(/      <bt:Images>[\s\S]*?      <\/bt:Images>/, `      <bt:Images>\n${imageResources}\n      </bt:Images>`);
 await writeFile(manifestPath, manifest, "utf8");
-console.log(`Generated ${icons.length} semantic SVG icons and Ribbon PNG variants.`);
+console.log(`Generated ${icons.length} semantic SVG icons, Ribbon PNG variants, and the Windows installer icon.`);
