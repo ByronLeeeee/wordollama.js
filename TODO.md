@@ -34,6 +34,12 @@ Windows 与 macOS arm64 的安装、升级、证书信任、回滚、卸载（�
 `tools/record-macos-release-lifecycle.ps1` 在干净账户生成不可覆盖的实测证据；终审器
 强制校验该证据与构建描述文件及安装包哈希一致。
 
+自动化基线已由提交 `6a9993d` 的
+[Office.js unified CI #30725877376](https://github.com/ByronLeeeee/wordollama.js/actions/runs/30725877376)
+验证通过：Windows 统一回归、Windows x64 与 macOS arm64 原生 Bridge 包、两端平台
+密钥库、Bridge live API/重启恢复以及未签名构建证据全部成功。该结果证明跨平台代码与
+自动构建链路可用，但不替代下方仍未勾选的真实 Word、证书信任和安装生命周期验收。
+
 ## 已完成
 
 - [x] COM/VSTO 与 JS 仓库完全分离。
