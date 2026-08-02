@@ -142,15 +142,28 @@ function Invoke-Bridge {
 function Get-ResourceSnapshot {
     param(
         [Parameter(Mandatory = $true)][string]$BaseUrl,
-        [Parameter(Mandatory = $true)][string]$Token
+        [Parameter(Mandatory = $true)][string]$Token,
+        [double]$RequiredCpuBelow = -1
     )
-    # The first sample primes the process CPU-time delta. A second sample after
-    # a short quiet interval is the meaningful idle reading shown in diagnostics.
+    # The first sample primes the process CPU-time delta and JITs the diagnostics
+    # endpoint. Hosted runners can still be compiling immediately after Kestrel
+    # reports ready, so require a genuinely quiet post-warmup interval instead
+    # of treating one 750 ms startup window as steady-state CPU.
     Invoke-Bridge -BaseUrl $BaseUrl -Token $Token -Method Get `
         -Path "/diagnostics/resources" | Out-Null
-    Start-Sleep -Milliseconds 750
-    return Invoke-Bridge -BaseUrl $BaseUrl -Token $Token -Method Get `
-        -Path "/diagnostics/resources"
+    $snapshot = $null
+    $attempts = if ($RequiredCpuBelow -ge 0) { 6 } else { 1 }
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        Start-Sleep -Milliseconds 1500
+        $snapshot = Invoke-Bridge -BaseUrl $BaseUrl -Token $Token -Method Get `
+            -Path "/diagnostics/resources"
+        if ($RequiredCpuBelow -lt 0 -or
+            $snapshot.bridge.cpuPercent -le $RequiredCpuBelow) {
+            return $snapshot
+        }
+        Write-Host "Idle CPU warmup sample $attempt/$attempts was $($snapshot.bridge.cpuPercent)%; waiting for a stable <= $RequiredCpuBelow% interval."
+    }
+    return $snapshot
 }
 
 function Start-IsolatedBridge {
@@ -221,7 +234,8 @@ try {
         throw "Live Bridge does not expose the Office-compatible frame-ancestors policy."
     }
     $token = New-BridgeSession -BaseUrl $baseUrl
-    $idleResources = Get-ResourceSnapshot -BaseUrl $baseUrl -Token $token
+    $idleResources = Get-ResourceSnapshot -BaseUrl $baseUrl -Token $token `
+        -RequiredCpuBelow $MaxIdleCpuPercent
     $idleWorkingSetMb = [Math]::Round($idleResources.bridge.workingSetBytes / 1MB, 1)
     $idlePrivateMb = [Math]::Round($idleResources.bridge.privateBytes / 1MB, 1)
     if ($idleResources.bridge.processCount -ne 1 -or

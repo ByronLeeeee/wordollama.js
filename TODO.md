@@ -289,6 +289,8 @@ git status
   已修复为可重复执行。
 - 2026-08-02 最新 Windows Release 实测：Bridge 空闲工作集 69.1 MB、私有内存
   52.8 MB、CPU 0.2%；载入两个 MCP 和一个 Agent 后为 86.8 MB、60.1 MB、4.6%。
+  CI 空闲 CPU 门禁仍固定为 5%，但会先 JIT 诊断端点并在最多 6 个 1.5 秒窗口中等待
+  真正的稳定空闲样本，避免把 Kestrel 启动编译误判为常驻 CPU。
 - 已在 360px 窄窗中实际检查基础设置、Agent 设置、翻译和编辑工作流，无控制台
   error/warn；开发 Bridge 测试后已恢复运行。
 
