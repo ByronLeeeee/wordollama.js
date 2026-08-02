@@ -2,7 +2,22 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Resvg } from "@resvg/resvg-js";
 
-const wrap = (body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
+const writeFileIfChanged = async (path, content, encoding) => {
+  const next = Buffer.isBuffer(content) ? content : Buffer.from(content, encoding);
+  try {
+    const current = await readFile(path);
+    if (current.equals(next)) return;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  await writeFile(path, content, encoding);
+};
+
+// Ribbon bitmaps cannot inherit the current Office theme like the task-pane
+// masks can. Keep them neutral and lightweight so they read like native Office
+// glyphs instead of a row of branded blue illustrations. The separate app icon
+// below intentionally retains WordOllama's blue identity.
+const wrap = (body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#202020" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
 const icons = [
   ["writing", "Writing", `<path d="M6 3h8l4 4v14H6zM14 3v5h5M9 16l5-5 2 2-5 5-3 1z"/>`],
   ["image", "Image", `<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m5 18 5-5 3 3 2-2 4 4"/>`],
@@ -45,18 +60,19 @@ const icons = [
 ];
 
 const root = join(import.meta.dirname, "..", "assets", "ribbon");
+const ribbonAssetRevision = "mono-1";
 await mkdir(root, { recursive: true });
 const catalog = [];
 for (const [name, resource, body] of icons) {
   const svg = wrap(body);
-  await writeFile(join(root, `${name}.svg`), `${svg}\n`, "utf8");
+  await writeFileIfChanged(join(root, `${name}.svg`), `${svg}\n`, "utf8");
   for (const size of [16, 32, 80]) {
     const png = new Resvg(svg, { fitTo: { mode: "width", value: size } }).render().asPng();
-    await writeFile(join(root, `${name}-${size}.png`), png);
+    await writeFileIfChanged(join(root, `${name}-${size}.png`), png);
   }
   catalog.push({ name, resource, svg: `assets/ribbon/${name}.svg` });
 }
-await writeFile(join(root, "catalog.json"), `${JSON.stringify(catalog, null, 2)}\n`, "utf8");
+await writeFileIfChanged(join(root, "catalog.json"), `${JSON.stringify(catalog, null, 2)}\n`, "utf8");
 
 const appIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#2563eb"/><path d="M8 8h16v4H12v4h10v4H12v4h12v4H8z" fill="white"/></svg>`;
 const icoPngs = [16, 32, 48, 256].map((size) =>
@@ -84,7 +100,7 @@ icoPngs.forEach((png, index) => {
 });
 const installerAssets = join(import.meta.dirname, "..", "..", "..", "..", "src", "WordOllama.WindowsInstaller", "Assets");
 await mkdir(installerAssets, { recursive: true });
-await writeFile(join(installerAssets, "WordOllama.JS.ico"), ico);
+await writeFileIfChanged(join(installerAssets, "WordOllama.JS.ico"), ico);
 
 const manifestPath = join(import.meta.dirname, "..", "manifest.xml");
 let manifest = await readFile(manifestPath, "utf8");
@@ -104,8 +120,8 @@ for (const [element, id, resource] of manifestIcons) {
   manifest = manifest.replace(matcher, `$1${images}$2`);
 }
 const imageResources = icons.flatMap(([name, resource]) => [16, 32, 80].map((size) =>
-  `        <bt:Image id="${resource}.Icon${size}" DefaultValue="https://localhost:3000/assets/ribbon/${name}-${size}.png" />`,
+  `        <bt:Image id="${resource}.Icon${size}" DefaultValue="https://localhost:3000/assets/ribbon/${name}-${size}.png?v=${ribbonAssetRevision}" />`,
 )).join("\n");
 manifest = manifest.replace(/      <bt:Images>[\s\S]*?      <\/bt:Images>/, `      <bt:Images>\n${imageResources}\n      </bt:Images>`);
-await writeFile(manifestPath, manifest, "utf8");
+await writeFileIfChanged(manifestPath, manifest, "utf8");
 console.log(`Generated ${icons.length} semantic SVG icons, Ribbon PNG variants, and the Windows installer icon.`);

@@ -554,7 +554,7 @@ internal static class Program
     }
 
     private static string CreateLauncher() =>
-        """
+        $"""
         @echo off
         setlocal
         set "WORDOLLAMA_BRIDGE_ROOT=%~dp0"
@@ -562,7 +562,13 @@ internal static class Program
         set /p "WORDOLLAMA_BRIDGE_VERSION="<"%WORDOLLAMA_BRIDGE_ROOT%current-version"
         if not defined WORDOLLAMA_BRIDGE_VERSION exit /b 2
         set "WORDOLLAMA_BRIDGE_EXE=%WORDOLLAMA_BRIDGE_ROOT%versions\%WORDOLLAMA_BRIDGE_VERSION%\WordOllama.DesktopBridge.exe"
+        set "WORDOLLAMA_MANIFEST=%WORDOLLAMA_BRIDGE_ROOT%versions\%WORDOLLAMA_BRIDGE_VERSION%\WordOllama.JS.xml"
         if not exist "%WORDOLLAMA_BRIDGE_EXE%" exit /b 3
+        if not exist "%WORDOLLAMA_MANIFEST%" exit /b 4
+        rem Repair only this product's per-user Office.js registration. Office may
+        rem discard a developer value while refreshing its WEF cache; login startup
+        rem must restore it without reinstalling or touching COM/VSTO registrations.
+        reg.exe add "HKCU\{OfficeAddinRegistryPath}" /v "{OfficeAddinId}" /t REG_SZ /d "%WORDOLLAMA_MANIFEST%" /f >nul 2>&1
         start "WordOllama.JS Desktop Bridge" /b "%WORDOLLAMA_BRIDGE_EXE%" >>"%WORDOLLAMA_BRIDGE_ROOT%bridge.log" 2>&1
         """;
 

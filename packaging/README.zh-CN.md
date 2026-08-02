@@ -42,7 +42,7 @@ pwsh ./packaging/package-unified-release.ps1 -Runtime win-x64 `
 
 正式目标平台构建会生成 `unified-build-<version>-<runtime>.json`，明确标记 `releaseReady: false`，记录 Add-in/Bridge 未签名归档的 SHA-256 与大小，并列出签名、PFX 配置和真实 Word 验收三个后续门槛。Add-in 在终审时必须仍与该记录逐字节一致；Bridge 因平台签名和签后重建 ZIP 必然允许一次受控哈希转换，但终审会重新验证当前归档内所有 PE 的 Authenticode，或 macOS codesign、Gatekeeper 与 Developer ID Authority，并在最终描述中同时固化源描述文件哈希、未签名哈希和签名后哈希。其他替换仍会被拒绝，该描述文件也不能被误当成已签名发布证明。`-CrossBuildOnly` 只验证编译，不生成 Bridge ZIP 或发布描述文件。
 
-`.github/workflows/officejs-unified-ci.yml` 在 Windows x64 和 macOS arm64 两个目标原生 runner 上执行包 smoke 和统一构建，并上传保留 7 天的 unsigned evidence。工作流采用 GitHub 的 `macos-15` Apple Silicon runner；项目不构建或发布 Intel Mac 版本。参考 [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。CI 产物仍明确为 unsigned，工作流不会在缺少发布凭据时自动创建 Release。
+`.github/workflows/officejs-unified-ci.yml` 在 Windows x64 和 macOS arm64 两个目标原生 runner 上执行包 smoke 和统一构建，并上传保留 7 天的 unsigned evidence；每个平台产物还包含仅供跨设备测试的自包含安装器（Windows EXE / Apple Silicon macOS PKG）。工作流采用 GitHub 的 `macos-15` Apple Silicon runner；项目不构建或发布 Intel Mac 版本。参考 [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。CI 产物仍明确为 unsigned，Windows 可能显示 SmartScreen 提示，macOS 需要按系统方式确认打开；工作流不会在缺少发布凭据时自动创建 Release。
 
 每个目标平台 runner 还会直接启动其自包含 Bridge 可执行文件，连接受控本地 Provider 和 stdio MCP fixture，并执行配对鉴权、设置持久化及 Agent 加密恢复的跨进程重启回归。macOS arm64 runner 会真实经过 Keychain，而不是用 Windows 结果代替 Mac 平台证据；它还会为 `smoke` 版本原生执行 unsigned `pkgbuild/productbuild`，用 `pkgutil --expand-full` 展开 PKG，再由系统 `sh -n`/`plutil` 检查 launcher、postinstall、双语卸载器、回滚入口、LaunchAgent 和可执行权限。`-BuildUnsignedForTests` 对非 `smoke`/`test` 版本无效；生产路径必须明确选择 Developer ID 公证模式或首发采用的本地自签名/显式用户信任模式。这些 CI 结果仍不等同于 Word 宿主、正式签名或 Apple 公证证据。
 
@@ -181,7 +181,7 @@ Windows 与 macOS 的新 ZIP 都把可执行文件、`appsettings.json` 和 `Ski
 pwsh ./packaging/register-bridge-autostart.ps1 -InstallRoot <install-root>
 ```
 
-Windows 会创建 Startup `.lnk` 和安装根目录下的 `start-bridge.cmd`；macOS 会创建 `~/Library/LaunchAgents/com.wordollama.desktopbridge.plist` 和 `start-bridge`。两者都不要求系统级服务权限。卸载前执行：
+Windows 会创建 Startup `.lnk` 和安装根目录下的 `start-bridge.cmd`；每次登录启动时，launcher 还会只校验并修复 WordOllama.JS 自己的当前用户 WEF manifest 值，避免 Office 刷新开发缓存后出现“Bridge 已安装但 Ribbon 不见了”，不会触碰 COM/VSTO 注册或重新生成 localhost 证书。macOS 会创建 `~/Library/LaunchAgents/com.wordollama.desktopbridge.plist` 和 `start-bridge`。两者都不要求系统级服务权限。卸载前执行：
 
 ```powershell
 pwsh ./packaging/unregister-bridge-autostart.ps1 -InstallRoot <install-root>

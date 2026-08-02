@@ -653,10 +653,12 @@ for (const interactionContract of [
   "runtime.saveReviewSettings(",
   "imageDataUrl: imageDataUrl || undefined",
   'label: "/clear"',
-  'label: "/newchat"',
-  'label: "/review"',
-  'label: "/refreshskills"',
-  'loadReviewScope("selection")',
+  'label: "/new"',
+  'label: "/goal"',
+  'label: "/selection"',
+  'label: "/skills"',
+  'label: "/status"',
+  'refreshAgentSkillsInBackground',
 ]) {
   assert(main.includes(interactionContract), `missing migrated interaction ${interactionContract}`);
 }

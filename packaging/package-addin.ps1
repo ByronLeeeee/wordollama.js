@@ -76,7 +76,9 @@ function Invoke-Checked {
 }
 
 $previousBridgeUrl = $env:WORDOLLAMA_BRIDGE_URL
+$previousAddinVersion = $env:WORDOLLAMA_ADDIN_VERSION
 $env:WORDOLLAMA_BRIDGE_URL = $productionBridgeUrl
+$env:WORDOLLAMA_ADDIN_VERSION = $ManifestVersion
 Push-Location $addinRoot
 try {
     Invoke-Checked -Command $npmCommand -Arguments @("run", "build") -Label "Office.js TypeScript build"
@@ -89,11 +91,28 @@ finally {
     } else {
         $env:WORDOLLAMA_BRIDGE_URL = $previousBridgeUrl
     }
+    if ($null -eq $previousAddinVersion) {
+        Remove-Item Env:WORDOLLAMA_ADDIN_VERSION -ErrorAction SilentlyContinue
+    } else {
+        $env:WORDOLLAMA_ADDIN_VERSION = $previousAddinVersion
+    }
 }
 
 Copy-Item -Path (Join-Path $addinRoot "dist\*") -Destination $output -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $addinRoot "assets") -Destination $output -Recurse -Force
-Copy-Item -LiteralPath (Join-Path $addinRoot "commands.html") -Destination $output -Force
+
+# commands.html is a Vite entry point. Keep the bundled file copied from dist;
+# copying the source entry here would restore its /src/commands.ts reference,
+# which the packaged Bridge does not (and must not) serve.
+$packagedCommandsPath = Join-Path $output "commands.html"
+if (-not (Test-Path -LiteralPath $packagedCommandsPath -PathType Leaf)) {
+    throw "Production Add-in bundle does not contain commands.html."
+}
+$packagedCommandsText = Get-Content -LiteralPath $packagedCommandsPath -Raw
+if ($packagedCommandsText -match '(?i)(?:src|href)=["'']/?src/' -or
+    $packagedCommandsText -notmatch '(?i)src=["'']/assets/commands-[^"'']+\.js') {
+    throw "Production commands.html still references source code instead of its Vite bundle."
+}
 
 $javascriptFiles = @(Get-ChildItem -LiteralPath (Join-Path $output "assets") -Filter "*.js" -File)
 if ($javascriptFiles.Count -eq 0) {
@@ -118,6 +137,11 @@ foreach ($node in $manifest.SelectNodes("//*[@DefaultValue]")) {
         $node.DefaultValue = $node.DefaultValue.Replace($oldBase, $newBase)
     }
 }
+$commandsUrlNode = $manifest.SelectSingleNode("//*[@id='Commands.Url']")
+if ($null -eq $commandsUrlNode) {
+    throw "Manifest Commands.Url resource is missing."
+}
+$commandsUrlNode.DefaultValue = "$newBase/commands.html?v=$ManifestVersion"
 foreach ($node in $manifest.SelectNodes("//*[local-name()='AppDomain']")) {
     if ($node.InnerText -eq $oldBase) {
         $node.InnerText = $newBase
@@ -131,6 +155,9 @@ if ($productionManifestText.Contains($oldBase, [StringComparison]::OrdinalIgnore
 }
 if ($productionManifestText -notmatch "<Version>$([Regex]::Escape($ManifestVersion))</Version>") {
     throw "Production manifest version was not set to $ManifestVersion."
+}
+if ($productionManifestText -notmatch "commands\.html\?v=$([Regex]::Escape($ManifestVersion))") {
+    throw "Production Commands.Url was not cache-busted with manifest version $ManifestVersion."
 }
 $productionManifest = [xml]$productionManifestText
 $defaultLocaleNode = $productionManifest.SelectSingleNode(

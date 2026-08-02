@@ -26,7 +26,12 @@ assert(
     contracts.includes("__WORDOLLAMA_BRIDGE_URL__") &&
     contracts.includes('"http://127.0.0.1:37421"') &&
     packaging.includes('[string]$BridgeUrl = "https://localhost:37421"') &&
-    packaging.includes("$env:WORDOLLAMA_BRIDGE_URL = $productionBridgeUrl"),
+    packaging.includes("$env:WORDOLLAMA_BRIDGE_URL = $productionBridgeUrl") &&
+    !packaging.includes('Copy-Item -LiteralPath (Join-Path $addinRoot "commands.html")') &&
+    packaging.includes("Production commands.html still references source code") &&
+    packaging.includes("$env:WORDOLLAMA_ADDIN_VERSION = $ManifestVersion") &&
+    packaging.includes('commands.html?v=$ManifestVersion') &&
+    packaging.includes("Production Commands.Url was not cache-busted"),
   "production packaging must compile the runtime client against the local HTTPS Bridge and keep only a loopback development fallback",
 );
 

@@ -105,6 +105,7 @@ assert(
   commandsHtml.includes('src="/src/commands.ts"') &&
     commands.includes("Office.context.ui.displayDialogAsync(") &&
     commands.includes('"/settings.html"') &&
+    commands.includes('dialogUrl.searchParams.set("v", ADDIN_VERSION)') &&
     settingsHtml.includes('src="/src/settings/main.tsx"') &&
     commands.includes('Office.actions.associate("openSettingsDialog"'),
   "the function file must register the dedicated React settings Office Dialog",
@@ -112,6 +113,7 @@ assert(
 assert(
   commands.includes("DialogMessageReceived") &&
     commands.includes("messageChild(") &&
+    commands.includes("event.completed();") &&
     settingsRpc.includes("DialogParentMessageReceived") &&
     settingsRpc.includes("messageParent("),
   "Word-dependent settings actions must be proxied through the dialog parent runtime",

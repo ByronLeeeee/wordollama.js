@@ -1,4 +1,5 @@
 import { OfficeJsWordAdapter } from "./officejs-word-adapter";
+import { ADDIN_VERSION } from "./contracts";
 
 type DialogCommandEvent = {
   completed: (options?: { allowEvent?: boolean }) => void;
@@ -63,13 +64,11 @@ function openSettingsDialog(event: DialogCommandEvent): void {
     settingsDialog = null;
   }
 
-  const dialogUrl = new URL(
-    "/settings.html",
-    window.location.origin,
-  ).href;
+  const dialogUrl = new URL("/settings.html", window.location.origin);
+  dialogUrl.searchParams.set("v", ADDIN_VERSION);
 
   Office.context.ui.displayDialogAsync(
-    dialogUrl,
+    dialogUrl.href,
     {
       height: 78,
       width: 72,

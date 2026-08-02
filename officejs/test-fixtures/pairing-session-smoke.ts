@@ -40,6 +40,10 @@ const cookiePairing: PairResponse = {
   sessionToken: "",
   cookieSession: true,
 };
+const cookiePairingWithMemoryFallback: PairResponse = {
+  ...cookiePairing,
+  sessionToken: validPairing.sessionToken,
+};
 
 if (!isPairingSessionValid(validPairing, now)) {
   throw new Error("A valid Bridge pairing session was rejected.");
@@ -59,6 +63,10 @@ if (!isPairingSessionValid(cookiePairing, now) ||
 const storedCookieSession = storage.getItem(PAIRING_SESSION_STORAGE_KEY) ?? "";
 if (storedCookieSession.includes(validPairing.sessionToken)) {
   throw new Error("HttpOnly cookie mode leaked a bearer token to WebView storage.");
+}
+if (!writePairingSession(storage, cookiePairingWithMemoryFallback, now) ||
+    (storage.getItem(PAIRING_SESSION_STORAGE_KEY) ?? "").includes(validPairing.sessionToken)) {
+  throw new Error("The Office WebView bearer fallback leaked into session storage.");
 }
 const secondPane = readPairingSession(storage, now);
 if (!secondPane?.cookieSession || secondPane.csrfToken !== cookiePairing.csrfToken) {
@@ -104,11 +112,18 @@ const runtimeClient = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/ru
 const bridgeProgram = readFileSync(resolve(repoRoot, "src/WordOllama.DesktopBridge/Program.cs"), "utf8");
 if (!runtimeClient.includes('headers.delete("X-WordOllama-Session")') ||
     !runtimeClient.includes("HTTP_ONLY_COOKIE_SESSION") ||
-    !runtimeClient.includes("if (response.status === 401) this.clearPairing()")) {
+    !runtimeClient.includes("if (response.status === 401) this.clearPairing()") ||
+    !runtimeClient.includes("if (this.autoPairPromise) return this.autoPairPromise") ||
+    !runtimeClient.includes("if (!this.hasPairing()) await this.autoPair()") ||
+    !runtimeClient.includes("if (response.status === 401)")) {
   throw new Error("RuntimeClient does not keep the bearer token out of JS or recover from Bridge restart/session expiry.");
 }
 if (!bridgeProgram.includes("CookieSession: isSameOrigin") ||
+    !bridgeProgram.includes("session.Token,") ||
     !bridgeProgram.includes("!isSameOrigin && !environment.IsDevelopment()") ||
+    !bridgeProgram.includes("SameSite = SameSiteMode.None") ||
+    !bridgeProgram.includes("Browsers commonly omit Origin on same-origin GET/HEAD requests") ||
+    !bridgeProgram.includes("sessions.IsOriginAllowed(inferredOrigin)") ||
     !bridgeProgram.includes("frame-ancestors 'self'") ||
     !bridgeProgram.includes("Request.Cookies.TryGetValue")) {
   throw new Error("Bridge same-origin cookie, origin-spoofing, or Office-compatible frame policy is missing.");

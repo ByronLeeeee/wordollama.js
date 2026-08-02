@@ -45,7 +45,7 @@ import type {
   UpdateCheckResult,
   UpdateRollbackStatus,
 } from "../contracts";
-import { RuntimeClient } from "../runtime-client";
+import { RuntimeClient, RuntimeRequestError } from "../runtime-client";
 import {
   DEFAULT_MARKDOWN_SETTINGS,
   type MarkdownSettings,
@@ -812,7 +812,10 @@ function ModelsPage() {
         result.models.length === 0,
       ));
     } catch (error) {
-      setOllamaUnavailable(form.type.trim().toLowerCase() === "ollama");
+      const providerUnavailable = !(error instanceof RuntimeRequestError) || error.status === 502;
+      setOllamaUnavailable(
+        form.type.trim().toLowerCase() === "ollama" && providerUnavailable,
+      );
       setConnectionStatus(toStatus(error, "models.fetchModelsFailed"));
     }
   };
@@ -1145,9 +1148,9 @@ function ModelsPage() {
             <Status value={connectionStatus} />
             {ollamaUnavailable ? (
               <div className="alert alert-warning settings-ollama-guide">
-                <span>{t("models.ollamaExternalHint")}</span>
+                <span className="min-w-0">{t("models.ollamaExternalHint")}</span>
                 <a
-                  className="btn btn-sm"
+                  className="btn btn-sm shrink-0"
                   href="https://ollama.com/download"
                   target="_blank"
                   rel="noreferrer"

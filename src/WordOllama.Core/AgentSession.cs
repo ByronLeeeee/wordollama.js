@@ -39,6 +39,8 @@ public sealed class AgentSession
     private readonly string _languageMode;
     private readonly string _uiLocale;
     private readonly string _permissionMode;
+    private bool _awaitingPlanConfirmation;
+    private bool _planWasPresented;
     private int _iterations;
     private bool _completed;
     private AgentCheckpoint? _checkpoint;
@@ -83,12 +85,17 @@ public sealed class AgentSession
             .SelectMany(tool => tool.GetToolDescriptors())
             .Select(tool => tool.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        _advertisedTools = _tools
+        var advertisedTools = _tools
             .Where(tool => (_executionMode == "TrackedChanges" || !tool.IsWriteOperation) &&
                 (!internalToolNames.Contains(tool.Name) ||
                  IsInternalToolAllowed(tool.Name) ||
                  string.Equals(tool.Name, "read_skill", StringComparison.OrdinalIgnoreCase)))
-            .ToArray();
+            .ToList();
+        if (_requirePlanConfirmation)
+        {
+            advertisedTools.Add(CreateUpdatePlanTool());
+        }
+        _advertisedTools = advertisedTools;
         if (!_requirePlanConfirmation || _isRecovered)
         {
             _planApproval.TrySetResult(true);
@@ -107,6 +114,14 @@ public sealed class AgentSession
                 "You are WordOllama, an AI assistant operating inside Microsoft Word. " +
                 "Use the provided tools for document changes. Never claim a document change " +
                 "succeeded until the tool result confirms it. " +
+                "The active Microsoft Word document is available only through the Office tools " +
+                "such as get_selection, get_doc_overview, read_paragraphs, and read_large_chunk. " +
+                 "Never use isolated-workspace file tools to read the active Word document. " +
+                 (_requirePlanConfirmation
+                     ? "You may call update_plan when the task genuinely requires multiple meaningful steps. " +
+                       "Use it to show a concise TODO plan before executing those steps. Do not call it for greetings, " +
+                       "simple questions, one-step answers, or merely to restate the user's request. "
+                     : string.Empty) +
                 (_executionMode == "ViewOnly"
                     ? "The session is ViewOnly: analyze and answer without changing the document."
                     : _executionMode == "ProposeChanges"
@@ -166,7 +181,7 @@ public sealed class AgentSession
     public string? Model { get; }
     public string Status => _completed
         ? "completed"
-        : _requirePlanConfirmation && !_planApproval.Task.IsCompleted
+        : _awaitingPlanConfirmation
             ? "awaiting_plan"
             : "running";
 
@@ -186,7 +201,7 @@ public sealed class AgentSession
 
     public bool ConfirmPlan(AgentPlanConfirmationRequest request)
     {
-        if (_completed || _planApproval.Task.IsCompleted)
+        if (_completed || !_awaitingPlanConfirmation || _planApproval.Task.IsCompleted)
         {
             return false;
         }
@@ -242,28 +257,6 @@ public sealed class AgentSession
     {
         try
         {
-            if (_requirePlanConfirmation && !_isRecovered)
-            {
-                Publish(new RuntimeEvent(
-                    "plan_pending",
-                    Message: Localize("AgentPlanPending"),
-                    Data: JsonSerializer.SerializeToElement(new
-                    {
-                        userRequirement = UserRequirement,
-                        executionMode = _executionMode,
-                        maxIterations = _maxIterations,
-                    })));
-            }
-
-            if (!await _planApproval.Task.WaitAsync(_cancellation.Token))
-            {
-                Publish(new RuntimeEvent(
-                    "failed",
-                    Message: Localize("AgentPlanRejected")));
-                Complete();
-                return;
-            }
-
             while (!_cancellation.IsCancellationRequested && _iterations++ < _maxIterations)
             {
                 _checkpoint = new AgentCheckpoint(
@@ -308,6 +301,57 @@ public sealed class AgentSession
                 var results = new List<(ProviderToolCall Call, ToolResult Result)>();
                 foreach (var call in calls)
                 {
+                    if (string.Equals(call.Name, "update_plan", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var steps = ReadPlanSteps(call.Arguments);
+                        if (steps.Count == 0)
+                        {
+                            _messages.Add(new ChatMessage(
+                                "tool",
+                                JsonSerializer.Serialize(new { error = "A plan must contain at least one concrete step." }),
+                                ToolCallId: call.Id,
+                                Name: call.Name));
+                            continue;
+                        }
+
+                        if (_planWasPresented)
+                        {
+                            _messages.Add(new ChatMessage(
+                                "tool",
+                                JsonSerializer.Serialize(new { approved = true, alreadyPresented = true }),
+                                ToolCallId: call.Id,
+                                Name: call.Name));
+                            continue;
+                        }
+
+                        _planWasPresented = true;
+                        _awaitingPlanConfirmation = true;
+                        Publish(new RuntimeEvent(
+                            "plan_pending",
+                            Message: Localize("AgentPlanPending"),
+                            Data: JsonSerializer.SerializeToElement(new
+                            {
+                                userRequirement = UserRequirement,
+                                executionMode = _executionMode,
+                                maxIterations = _maxIterations,
+                                steps,
+                            })));
+                        var approved = await _planApproval.Task.WaitAsync(_cancellation.Token);
+                        _awaitingPlanConfirmation = false;
+                        if (!approved)
+                        {
+                            Publish(new RuntimeEvent("failed", Message: Localize("AgentPlanRejected")));
+                            Complete();
+                            return;
+                        }
+                        _messages.Add(new ChatMessage(
+                            "tool",
+                            JsonSerializer.Serialize(new { approved = true }),
+                            ToolCallId: call.Id,
+                            Name: call.Name));
+                        continue;
+                    }
+
                     var declaredTool = _tools.FirstOrDefault(tool =>
                         string.Equals(tool.Name, call.Name, StringComparison.OrdinalIgnoreCase));
                     if (declaredTool?.IsWriteOperation == true && _executionMode != "TrackedChanges")
@@ -468,7 +512,7 @@ public sealed class AgentSession
             string.Equals(name, "list_workspace_files", StringComparison.OrdinalIgnoreCase) ||
             name is "run_python" or "run_node")
         {
-            return true;
+            return _allowLocalTools;
         }
 
         if (name.StartsWith("mcp__", StringComparison.OrdinalIgnoreCase))
@@ -487,6 +531,44 @@ public sealed class AgentSession
         }
 
         return _allowLocalTools;
+    }
+
+    private static OfficeToolDescriptor CreateUpdatePlanTool() => new(
+        "update_plan",
+        "Show a concise TODO plan for a genuinely multi-step task and wait for the user to approve it before execution. Do not use for simple or one-step requests.",
+        false,
+        JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new
+            {
+                steps = new
+                {
+                    type = "array",
+                    items = new { type = "string" },
+                    minItems = 2,
+                    maxItems = 8,
+                    description = "Concrete, non-duplicative execution steps."
+                },
+            },
+            required = new[] { "steps" },
+        }));
+
+    private static IReadOnlyList<string> ReadPlanSteps(JsonElement arguments)
+    {
+        if (arguments.ValueKind != JsonValueKind.Object ||
+            !arguments.TryGetProperty("steps", out var stepsElement) ||
+            stepsElement.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+        return stepsElement.EnumerateArray()
+            .Where(step => step.ValueKind == JsonValueKind.String)
+            .Select(step => step.GetString()?.Trim() ?? string.Empty)
+            .Where(step => step.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .Take(8)
+            .ToArray();
     }
 
     private bool ShouldRequirePermission(string name, bool toolDefault)

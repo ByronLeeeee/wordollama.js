@@ -46,7 +46,9 @@ export default defineConfig(async ({ command }) => {
       __WORDOLLAMA_BRIDGE_URL__: JSON.stringify(
         environment?.WORDOLLAMA_BRIDGE_URL ?? "http://127.0.0.1:37421",
       ),
-      __WORDOLLAMA_ADDIN_VERSION__: JSON.stringify(packageVersion),
+      __WORDOLLAMA_ADDIN_VERSION__: JSON.stringify(
+        environment?.WORDOLLAMA_ADDIN_VERSION ?? packageVersion,
+      ),
       // Vite 8's dev client reads these compile-time flags as globals. A task
       // pane can inherit them from an existing runtime, but an Office Dialog
       // starts in a fresh WebView and otherwise fails before React is loaded.

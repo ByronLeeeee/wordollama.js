@@ -415,7 +415,8 @@ var advertisedNames = agentProvider.LastRequest?.Tools?.Select(tool => tool.Name
 Assert(advertisedNames.Contains("read_document") &&
        advertisedNames.Contains("read_skill") &&
        !advertisedNames.Contains("replace_text") &&
-       !advertisedNames.Contains("execute_command"),
+       !advertisedNames.Contains("execute_command") &&
+       !advertisedNames.Contains("read_workspace_file"),
     "ViewOnly and external-tool settings filter advertised Agent tools");
 Assert(agentProvider.LastRequest?.Messages.Any(message =>
            message.Role == "user" &&
@@ -467,16 +468,38 @@ var englishPlanMessages = await CapturePlanMessagesAsync("en-US");
 var chinesePlanMessages = await CapturePlanMessagesAsync("zh-CN");
 Assert(
     englishPlanMessages.Plan.Contains("must be confirmed", StringComparison.Ordinal) &&
+    englishPlanMessages.Steps.SequenceEqual(["Inspect the relevant clauses", "Apply the agreed edits"]) &&
     englishPlanMessages.Failure.Contains("rejected by the user", StringComparison.Ordinal),
-    "Agent emits English plan lifecycle messages for an English UI");
+    "Agent shows a model-authored English TODO only when update_plan is called");
 Assert(
     chinesePlanMessages.Plan.Contains("需要确认", StringComparison.Ordinal) &&
+    chinesePlanMessages.Steps.SequenceEqual(["检查相关条款", "应用确认后的修改"]) &&
     chinesePlanMessages.Failure.Contains("用户拒绝", StringComparison.Ordinal),
-    "Agent emits Chinese plan lifecycle messages for a Chinese UI");
+    "Agent shows a model-authored Chinese TODO only when update_plan is called");
+var simplePlanProvider = new CapturingProvider([new ProviderChatResponse("fake", "fake", "hello")]);
+var simplePlanAgent = new AgentSession(
+    "simple-plan-smoke",
+    "https://localhost:3000",
+    new AgentStartRequest("hello", RequirePlanConfirmation: true),
+    simplePlanProvider);
+simplePlanAgent.Start();
+var simplePlanWasShown = false;
+await foreach (var runtimeEvent in simplePlanAgent.ReadEventsAsync())
+{
+    simplePlanWasShown |= runtimeEvent.Type == "plan_pending";
+}
+Assert(!simplePlanWasShown &&
+       simplePlanProvider.LastRequest?.Tools?.Any(tool => tool.Name == "update_plan") == true,
+    "simple Agent requests complete directly while the model retains the option to create a TODO");
 foreach (var resourceKey in new[]
          {
              "AgentSessionCancelled",
              "AgentPlanPending",
+              "AgentPlanReadStep",
+              "AgentPlanAnalyzeStep",
+              "AgentPlanApplyStep",
+              "AgentPlanProposeStep",
+              "AgentPlanAnswerStep",
              "AgentPlanRejected",
              "AgentToolBlocked",
              "AgentExternalToolDisabled",
@@ -663,7 +686,9 @@ var workspaceManager = new AgentSessionManager(
     workspaceProvider,
     Array.Empty<IInternalToolExecutor>(),
     workspaceFactory: workspaceFactory);
-var workspaceAgent = workspaceManager.Create(new AgentStartRequest("prepare notes"), "https://localhost:3000");
+var workspaceAgent = workspaceManager.Create(
+    new AgentStartRequest("prepare notes", AllowLocalTools: true),
+    "https://localhost:3000");
 await foreach (var runtimeEvent in workspaceAgent.ReadEventsAsync())
 {
     if (runtimeEvent.Type == "completed") break;
@@ -715,7 +740,7 @@ static async Task<bool> ObservePermissionAsync(string permissionMode)
         new AgentStartRequest(
             "write a temporary note",
             Tools: tools.GetToolDescriptors(),
-            AllowLocalTools: false,
+            AllowLocalTools: true,
             PermissionMode: permissionMode),
         provider,
         [tools]);
@@ -739,8 +764,11 @@ static void Assert(bool condition, string name)
     if (!condition) throw new InvalidOperationException($"Failed: {name}");
 }
 
-static async Task<(string Plan, string Failure)> CapturePlanMessagesAsync(string uiLocale)
+static async Task<(string Plan, string Failure, IReadOnlyList<string> Steps)> CapturePlanMessagesAsync(string uiLocale)
 {
+    var planSteps = uiLocale.StartsWith("zh", StringComparison.OrdinalIgnoreCase)
+        ? new[] { "检查相关条款", "应用确认后的修改" }
+        : new[] { "Inspect the relevant clauses", "Apply the agreed edits" };
     var session = new AgentSession(
         $"locale-{uiLocale}",
         "https://localhost:3000",
@@ -748,15 +776,32 @@ static async Task<(string Plan, string Failure)> CapturePlanMessagesAsync(string
             "inspect",
             RequirePlanConfirmation: true,
             UiLocale: uiLocale),
-        new CapturingProvider([]));
+        new CapturingProvider([
+            new ProviderChatResponse(
+                "fake",
+                "fake",
+                "",
+                [new ProviderToolCall(
+                    "plan-1",
+                    "update_plan",
+                    JsonSerializer.SerializeToElement(new { steps = planSteps }))]),
+        ]));
     session.Start();
     var plan = string.Empty;
     var failure = string.Empty;
+    IReadOnlyList<string> steps = [];
     await foreach (var runtimeEvent in session.ReadEventsAsync())
     {
         if (runtimeEvent.Type == "plan_pending")
         {
             plan = runtimeEvent.Message ?? string.Empty;
+            if (runtimeEvent.Data is { } data && data.TryGetProperty("steps", out var stepsElement))
+            {
+                steps = stepsElement.EnumerateArray()
+                    .Select(step => step.GetString() ?? string.Empty)
+                    .Where(step => !string.IsNullOrWhiteSpace(step))
+                    .ToArray();
+            }
             session.ConfirmPlan(new AgentPlanConfirmationRequest(false));
         }
         if (runtimeEvent.Type == "failed")
@@ -765,7 +810,7 @@ static async Task<(string Plan, string Failure)> CapturePlanMessagesAsync(string
             break;
         }
     }
-    return (plan, failure);
+    return (plan, failure, steps);
 }
 
 sealed class MemorySecretStore : IMutableSecretStore

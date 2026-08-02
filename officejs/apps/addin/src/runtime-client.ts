@@ -42,6 +42,13 @@ const tr = (key: string, values?: Record<string, unknown>): string =>
   i18n.t(key, values);
 const HTTP_ONLY_COOKIE_SESSION = "__wordollama_http_only_cookie__";
 
+export class RuntimeRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "RuntimeRequestError";
+  }
+}
+
 async function responseError(response: Response, fallback: string): Promise<Error> {
   try {
     const payload = await response.json() as { error?: string; detail?: string };
@@ -67,6 +74,7 @@ export class RuntimeClient {
   private cookieSession = false;
   private sessionToken: string | undefined;
   private csrfToken: string | undefined;
+  private autoPairPromise: Promise<PairResponse> | undefined;
   private outputLanguage: OutputLanguageMode = "auto";
   private readonly pairingStorage: PairingStorage | undefined;
 
@@ -99,7 +107,9 @@ export class RuntimeClient {
     }
     writePairingSession(this.pairingStorage, result);
     this.cookieSession = result.cookieSession === true;
-    this.sessionToken = this.cookieSession ? HTTP_ONLY_COOKIE_SESSION : result.sessionToken;
+    this.sessionToken = this.cookieSession
+      ? result.sessionToken || HTTP_ONLY_COOKIE_SESSION
+      : result.sessionToken;
     this.csrfToken = result.csrfToken;
   }
 
@@ -115,7 +125,9 @@ export class RuntimeClient {
     init?: RequestInit,
   ): Promise<Response> {
     const headers = new Headers(init?.headers);
-    if (this.cookieSession) headers.delete("X-WordOllama-Session");
+    if (this.cookieSession && this.sessionToken === HTTP_ONLY_COOKIE_SESSION) {
+      headers.delete("X-WordOllama-Session");
+    }
     if (this.csrfToken && init?.method && !["GET", "HEAD", "OPTIONS"].includes(init.method.toUpperCase())) {
       headers.set("X-WordOllama-CSRF", this.csrfToken);
     }
@@ -180,6 +192,16 @@ export class RuntimeClient {
   }
 
   async autoPair(): Promise<PairResponse> {
+    if (this.autoPairPromise) return this.autoPairPromise;
+    this.autoPairPromise = this.performAutoPair();
+    try {
+      return await this.autoPairPromise;
+    } finally {
+      this.autoPairPromise = undefined;
+    }
+  }
+
+  private async performAutoPair(): Promise<PairResponse> {
     const origin = window.location.origin;
     const response = await fetch(`${BRIDGE_URL}/pair/automatic`, {
       method: "POST",
@@ -765,21 +787,33 @@ export class RuntimeClient {
   }
 
   private async settingsRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-    if (!this.sessionToken) throw new Error(tr("runtime.pairFirst"));
-    const headers = new Headers(init.headers);
-    headers.set("X-WordOllama-Session", this.sessionToken);
-    headers.set(
-      "Accept-Language",
-      i18n.resolvedLanguage === "zh-CN" ? "zh-CN" : "en-US",
-    );
-    const response = await this.sessionFetch(BRIDGE_URL + path, { ...init, headers });
+    if (!this.hasPairing()) await this.autoPair();
+    const request = async (): Promise<Response> => {
+      const headers = new Headers(init.headers);
+      if (this.sessionToken && this.sessionToken !== HTTP_ONLY_COOKIE_SESSION) {
+        headers.set("X-WordOllama-Session", this.sessionToken);
+      }
+      headers.set(
+        "Accept-Language",
+        i18n.resolvedLanguage === "zh-CN" ? "zh-CN" : "en-US",
+      );
+      return this.sessionFetch(BRIDGE_URL + path, { ...init, headers });
+    };
+    let response = await request();
+    if (response.status === 401) {
+      await this.autoPair();
+      response = await request();
+    }
     if (!response.ok) {
       let detail = "";
       try {
         const payload = await response.json() as { error?: string; detail?: string };
         detail = payload.error ?? payload.detail ?? "";
       } catch { /* Status fallback below. */ }
-      throw new Error(detail || tr("runtime.settingsRequestFailed", { status: response.status }));
+      throw new RuntimeRequestError(
+        detail || tr("runtime.settingsRequestFailed", { status: response.status }),
+        response.status,
+      );
     }
     return response.json() as Promise<T>;
   }

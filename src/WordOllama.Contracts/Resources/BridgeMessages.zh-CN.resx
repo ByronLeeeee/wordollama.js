@@ -6,6 +6,11 @@
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="AgentSessionCancelled" xml:space="preserve"><value>Agent 会话已取消。</value></data>
   <data name="AgentPlanPending" xml:space="preserve"><value>Agent 计划需要确认后才会执行。</value></data>
+  <data name="AgentPlanReadStep" xml:space="preserve"><value>读取当前 Word 文档中的相关内容。</value></data>
+  <data name="AgentPlanAnalyzeStep" xml:space="preserve"><value>按照需求分析内容：{0}</value></data>
+  <data name="AgentPlanApplyStep" xml:space="preserve"><value>给出结论，并在需要时以修订方式执行已确认的修改。</value></data>
+  <data name="AgentPlanProposeStep" xml:space="preserve"><value>给出结论和修改建议，但不改动文档。</value></data>
+  <data name="AgentPlanAnswerStep" xml:space="preserve"><value>给出分析结论，但不改动文档。</value></data>
   <data name="AgentPlanRejected" xml:space="preserve"><value>Agent 计划被用户拒绝。</value></data>
   <data name="AgentToolBlocked" xml:space="preserve"><value>工具“{0}”在 {1} 模式下被阻止。</value></data>
   <data name="AgentExternalToolDisabled" xml:space="preserve"><value>此会话未启用外部工具“{0}”。</value></data>

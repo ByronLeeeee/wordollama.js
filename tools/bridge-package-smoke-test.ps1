@@ -685,7 +685,10 @@ function Assert-WindowsInstallerLifecycle {
             -PathType Leaf) -or
         -not (Test-Path -LiteralPath $startupScript -PathType Leaf) -or
         $launcher -notlike "*certs\bridge.pfx*" -or
-        $launcher -notlike "*current-version*") {
+        $launcher -notlike "*current-version*" -or
+        $launcher -notlike "*WordOllama.JS.xml*" -or
+        $launcher -notlike "*Microsoft\Office\16.0\Wef\Developer*" -or
+        $launcher -notlike "*4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701*") {
         throw "Bridge package smoke: Windows setup payload or version state is invalid."
     }
 

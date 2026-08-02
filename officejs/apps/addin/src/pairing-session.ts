@@ -22,7 +22,8 @@ function isValidPairing(
     ? Date.parse(pairing.expiresAt)
     : Number.NaN;
   const hasCredential = pairing.cookieSession === true
-    ? pairing.sessionToken === "" || pairing.sessionToken === undefined
+    ? pairing.sessionToken === "" || pairing.sessionToken === undefined ||
+      (typeof pairing.sessionToken === "string" && pairing.sessionToken.length >= 32)
     : typeof pairing.sessionToken === "string" && pairing.sessionToken.length >= 32;
   return pairing.protocolVersion === BRIDGE_PROTOCOL_VERSION &&
     hasCredential &&
@@ -68,7 +69,10 @@ export function writePairingSession(
 ): boolean {
   if (!storage || !isValidPairing(pairing, now)) return false;
   try {
-    storage.setItem(PAIRING_SESSION_STORAGE_KEY, JSON.stringify(pairing));
+    const storedPairing = pairing.cookieSession === true
+      ? { ...pairing, sessionToken: "" }
+      : pairing;
+    storage.setItem(PAIRING_SESSION_STORAGE_KEY, JSON.stringify(storedPairing));
     return true;
   } catch {
     return false;

@@ -345,6 +345,8 @@ let settingsOfficeDialog: Office.Dialog | null = null;
 let commandMenuItems: Array<{ label: string; hint?: string; action: () => void }> = [];
 let selectedCommandIndex = -1;
 let availableSkills: Array<{ name: string; description: string }> = [];
+let availableSkillsRefreshedAt = 0;
+let skillRefreshPending: Promise<void> | null = null;
 let bridgePaired = false;
 let bridgeCatalog: ToolCatalogResponse | null = null;
 let bridgeActivation: Promise<ToolCatalogResponse> | null = null;
@@ -398,6 +400,8 @@ async function activateBridgeSession(): Promise<ToolCatalogResponse> {
       bridgeCatalog = catalog;
       bridgePaired = true;
       configureSilentLinter();
+      await refreshAvailableSkills().catch((error) =>
+        appendDiagnostic("skills", `automatic refresh failed: ${error instanceof Error ? error.message : String(error)}`));
       await offerAgentRecovery();
       await refreshRuntimeStatus();
       return catalog;
@@ -2182,8 +2186,26 @@ required<HTMLButtonElement>("#copy-diagnostic-log").addEventListener("click", as
   } catch (error) { showError(error); }
 });
 async function refreshAvailableSkills(): Promise<void> {
-  availableSkills = await runtime.listSkills();
+  if (skillRefreshPending) return skillRefreshPending;
+  skillRefreshPending = runtime.listSkills()
+    .then((skills) => {
+      availableSkills = skills;
+      availableSkillsRefreshedAt = Date.now();
+    })
+    .finally(() => { skillRefreshPending = null; });
+  return skillRefreshPending;
 }
+
+function refreshAgentSkillsInBackground(): void {
+  if (activeSurface !== "agent" || !bridgePaired) return;
+  void refreshAvailableSkills().catch((error) =>
+    appendDiagnostic("skills", `background refresh failed: ${error instanceof Error ? error.message : String(error)}`));
+}
+
+window.addEventListener("focus", refreshAgentSkillsInBackground);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshAgentSkillsInBackground();
+});
 
 function clearAgentImage(): void {
   agentImageDataUrl = "";
@@ -2231,7 +2253,7 @@ agentRequirement.addEventListener("paste", (event) => {
 
 function appendMessage(
   text: string,
-  kind: "user" | "agent" | "system" | "action" | "error-message" = "agent",
+  kind: "user" | "agent" | "system" | "activity" | "action" | "error-message" = "agent",
   imageDataUrl = "",
 ): HTMLDivElement {
   emptyChatState.remove();
@@ -2253,6 +2275,17 @@ function appendMessage(
   agentOutput.appendChild(row);
   agentOutput.scrollTop = agentOutput.scrollHeight;
   return bubble;
+}
+
+function updateActivity(
+  bubble: HTMLDivElement | undefined,
+  text: string,
+  failed = false,
+): void {
+  if (!bubble) return;
+  bubble.dataset.raw = text;
+  bubble.textContent = text;
+  bubble.closest(".chat-message")?.classList.toggle("failed", failed);
 }
 
 function setAgentRunning(running: boolean, status = i18n.t("taskpane.common.ready")): void {
@@ -2556,6 +2589,7 @@ async function consumeAgentSession(
   let streamingBubble: HTMLDivElement | null = null;
   let planRevisionRequested = false;
   let successfulWordWrites = 0;
+  const toolActivities = new Map<string, HTMLDivElement>();
   const approvedForAgentRun = new Set<string>();
   const writeToolNames = new Set(
     tools.list().filter((tool) => tool.isWriteOperation).map((tool) => tool.name),
@@ -2573,8 +2607,15 @@ async function consumeAgentSession(
         goal,
       });
     } else if (event.type === "plan_pending") {
+      const plan = event.data as { steps?: unknown } | undefined;
+      const steps = Array.isArray(plan?.steps)
+        ? plan.steps.filter((step): step is string => typeof step === "string" && step.trim().length > 0)
+        : [];
+      const planText = steps.length > 0
+        ? steps.map((step, index) => `${index + 1}. ${step}`).join("\n")
+        : event.message ?? requirement;
       const approved = await requestDecision(
-        i18n.t("taskpane.agent.planMessage", { plan: event.message ?? requirement }),
+        i18n.t("taskpane.agent.planMessage", { plan: planText }),
         i18n.t("taskpane.agent.approvePlan"),
         i18n.t("taskpane.agent.reviseRequirement"),
       );
@@ -2629,29 +2670,41 @@ async function consumeAgentSession(
         execution?: string;
         params: Record<string, unknown>;
       };
-      appendMessage(i18n.t("taskpane.agent.usingTool", { name: call.name }), "action");
+      const activity = appendMessage(
+        i18n.t("taskpane.agent.usingTool", { name: call.name }),
+        "activity",
+      );
+      toolActivities.set(call.callId, activity);
       if (call.execution === "bridge") continue;
       try {
         const result = await tools.execute(call.name, call.params || {});
         await runtime.submitToolResult(sessionId, call.callId, result);
+        updateActivity(activity, i18n.t("taskpane.agent.toolComplete", { name: call.name }));
         if (writeToolNames.has(call.name)) successfulWordWrites += 1;
       } catch (toolError) {
+        const message = toolError instanceof Error ? toolError.message : String(toolError);
         await runtime.submitToolResult(
           sessionId,
           call.callId,
-          toolError instanceof Error ? toolError.message : String(toolError),
+          message,
+          true,
+        );
+        updateActivity(
+          activity,
+          i18n.t("taskpane.agent.toolError", { name: call.name, result: message }),
           true,
         );
       }
     } else if (event.type === "tool_result") {
       streamingBubble = null;
-      const result = event.data as { name: string; result: string; isError: boolean };
-      appendMessage(
+      const result = event.data as { callId?: string; name: string; result: string; isError: boolean };
+      const text =
         result.isError
           ? i18n.t("taskpane.agent.toolError", { name: result.name, result: result.result })
-          : i18n.t("taskpane.agent.toolComplete", { name: result.name }),
-        result.isError ? "error-message" : "system",
-      );
+          : i18n.t("taskpane.agent.toolComplete", { name: result.name });
+      const activity = result.callId ? toolActivities.get(result.callId) : undefined;
+      if (activity) updateActivity(activity, text, result.isError);
+      else appendMessage(text, result.isError ? "error-message" : "activity");
     } else if (event.type === "completed" || event.type === "cancelled") {
       clearAgentRecovery();
       if (event.type === "completed" && successfulWordWrites > 0) {
@@ -2752,7 +2805,7 @@ async function runAgent(requirement: string): Promise<void> {
       allowMcpTools: currentAgentSettings.allowMcpTools || legacyExternalTools,
       permissionMode,
       languageMode: "auto",
-      uiLocale: i18n.resolvedLanguage === "zh-CN" ? "zh-CN" : "en-US",
+      uiLocale: i18n.resolvedLanguage?.toLowerCase().startsWith("zh") ? "zh-CN" : "en-US",
     });
     activeSessionId = session.sessionId;
     saveAgentRecovery({
@@ -2878,12 +2931,17 @@ function renderCommandMenu(): void {
     closeCommandMenu();
     return;
   }
-  customPrompts = loadCustomPrompts(localStorage);
+  if (bridgePaired && Date.now() - availableSkillsRefreshedAt > 2_000 && !skillRefreshPending) {
+    void refreshAvailableSkills()
+      .then(renderCommandMenu)
+      .catch((error) =>
+        appendDiagnostic("skills", `command refresh failed: ${error instanceof Error ? error.message : String(error)}`));
+  }
   const normalized = query.toLocaleLowerCase();
   const commands: Array<{ label: string; hint?: string; action: () => void }> = [
     { label: "/clear", hint: i18n.t("taskpane.agent.clearHint"), action: clearAgentView },
     {
-      label: "/newchat",
+      label: "/new",
       hint: i18n.t("taskpane.agent.newChatHint"),
       action: () => {
         void (async () => {
@@ -2894,26 +2952,63 @@ function renderCommandMenu(): void {
       },
     },
     {
-      label: "/review",
-      hint: i18n.t("taskpane.agent.reviewHint"),
-      action: () => { activateTab("review"); void loadReviewScope("selection").catch(showError); },
+      label: "/goal",
+      hint: i18n.t("taskpane.agent.goalHint"),
+      action: () => {
+        toggleAgentGoal.setAttribute("aria-expanded", "true");
+        agentGoalRow.hidden = false;
+        agentGoal.focus();
+      },
     },
     {
-      label: "/refreshskills",
-      hint: i18n.t("taskpane.agent.refreshSkillsHint"),
+      label: "/selection",
+      hint: i18n.t("taskpane.agent.selectionHint"),
       action: () => {
-        void refreshAvailableSkills()
-          .then(() => appendMessage(
-            i18n.t("taskpane.agent.refreshedSkills", { count: availableSkills.length }),
-            "system",
-          ))
+        void word.getSelection()
+          .then((selection) => {
+            const text = selection.text.trim();
+            agentRequirement.value = text
+              ? i18n.t("taskpane.agent.selectionPrompt", { text })
+              : "";
+            agentRequirement.focus();
+          })
           .catch(showError);
       },
     },
     {
-      label: "/prompts",
-      hint: i18n.t("taskpane.agent.promptsHint"),
-      action: () => openCustomPromptWorkspace(),
+      label: "/skills",
+      hint: i18n.t("taskpane.agent.skillsHint"),
+      action: () => {
+        const list = availableSkills.length
+          ? availableSkills.map((skill) => `- **${skill.name}**${skill.description ? ` — ${skill.description}` : ""}`).join("\n")
+          : i18n.t("taskpane.agent.noSkills");
+        const message = appendMessage(list, "agent");
+        message.innerHTML = markdownToHtml(list, currentMarkdownOptions());
+      },
+    },
+    {
+      label: "/status",
+      hint: i18n.t("taskpane.agent.statusHint"),
+      action: () => {
+        void runtime.getProviderSettings()
+          .then((settings) => {
+            const active = settings.profiles.find((profile) => profile.id === settings.activeProviderId);
+            const agentSettings = readLocalSettings("wordollama-agent-settings", {
+              executionMode: "TrackedChanges",
+              permissionMode: "request",
+            });
+            const text = i18n.t("taskpane.agent.statusSummary", {
+              model: active?.model || i18n.t("taskpane.agent.notConfigured"),
+              provider: active?.name || i18n.t("taskpane.agent.notConfigured"),
+              executionMode: agentSettings.executionMode,
+              permissionMode: agentSettings.permissionMode,
+              skills: availableSkills.length,
+            });
+            const message = appendMessage(text, "agent");
+            message.innerHTML = markdownToHtml(text, currentMarkdownOptions());
+          })
+          .catch(showError);
+      },
     },
     ...availableSkills.map((skill) => ({
       label: `/skill:${skill.name}`,
@@ -2922,11 +3017,6 @@ function renderCommandMenu(): void {
         agentRequirement.value = i18n.t("taskpane.agent.useSkill", { name: skill.name });
         agentRequirement.focus();
       },
-    })),
-    ...customPrompts.map((prompt) => ({
-      label: `/prompt:${prompt.name}`,
-      hint: customPromptOutputLabel(prompt.outputMode),
-      action: () => openCustomPromptWorkspace(prompt.id),
     })),
   ].filter((item) => item.label.toLocaleLowerCase().startsWith(normalized));
   commandMenuItems = commands;

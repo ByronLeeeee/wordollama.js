@@ -122,13 +122,29 @@ jobs:
           ./packaging/package-unified-release.ps1
           -Runtime ${{ matrix.runtime }}
           -Configuration Release
-          -Version ci-${{ github.run_number }}-${{ github.run_attempt }}
+          -Version test-ci-${{ github.run_number }}-${{ github.run_attempt }}
           -ManifestVersion 1.2.${{ github.run_number }}.${{ github.run_attempt }}
           -BaseUrl https://localhost:37421
           -BridgeUrl https://localhost:37421
           -UpdateIndexUrl https://updates.wordollama.invalid/ci-${{ github.run_number }}-${{ github.run_attempt }}/index.json
           -ExpectedUpdatePublisherSubject 'CN=WordOllama CI Unsigned Test'
           -OutputRoot ./ci-unified
+      - name: Build target-native test installer
+        shell: pwsh
+        run: |
+          $version = 'test-ci-${{ github.run_number }}-${{ github.run_attempt }}'
+          if ('${{ matrix.runtime }}' -eq 'win-x64') {
+            ./packaging/package-windows-installer.ps1 `
+              -ArtifactRoot ./ci-unified/bridge `
+              -Version $version `
+              -BuildUnsignedForTests
+          } else {
+            ./packaging/package-macos-installer.ps1 `
+              -Runtime osx-arm64 `
+              -ArtifactRoot ./ci-unified/bridge `
+              -Version $version `
+              -BuildUnsignedForTests
+          }
       - name: Upload unsigned build evidence
         uses: actions/upload-artifact@v7
         with:

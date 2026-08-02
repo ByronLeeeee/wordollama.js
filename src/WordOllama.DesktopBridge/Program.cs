@@ -316,6 +316,20 @@ app.Use(async (context, next) =>
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
     context.Response.Headers["Content-Security-Policy"] =
         "frame-ancestors 'self' https://*.office.com https://*.officeapps.live.com";
+    if (!context.Request.Headers.ContainsKey("Origin"))
+    {
+        // Browsers commonly omit Origin on same-origin GET/HEAD requests.
+        // Office WebView2 does so for settings reads even though it sends the
+        // bearer fallback correctly. Infer only this Bridge's own allowed HTTPS
+        // origin; cross-origin requests still carry and are checked against
+        // their browser-supplied Origin header.
+        var inferredOrigin = $"{context.Request.Scheme}://{context.Request.Host}";
+        var sessions = context.RequestServices.GetRequiredService<BridgeSessionStore>();
+        if (context.Request.IsHttps && sessions.IsOriginAllowed(inferredOrigin))
+        {
+            context.Request.Headers.Origin = inferredOrigin;
+        }
+    }
     if (!context.Request.Headers.ContainsKey(BridgeProtocol.SessionHeader) &&
         context.Request.Cookies.TryGetValue(BridgeSessionStore.CookieName, out var cookieToken) &&
         !string.IsNullOrWhiteSpace(cookieToken))
@@ -460,13 +474,21 @@ app.MapPost("/pair/automatic", (
         {
             HttpOnly = true,
             Secure = httpContext.Request.IsHttps,
-            SameSite = SameSiteMode.Strict,
+            // Office dialogs and task panes run inside an embedded WebView. Even
+            // when the add-in and Bridge share an origin, WebView2 can classify
+            // the cookie as third-party relative to the Office host. None keeps
+            // the HttpOnly session usable there; Secure, origin binding and the
+            // per-session CSRF token still protect authenticated operations.
+            SameSite = SameSiteMode.None,
             Path = "/",
             Expires = session.ExpiresAt,
         });
     return Results.Ok(new PairResponse(
         BridgeProtocol.CurrentVersion,
-        isSameOrigin ? "" : session.Token,
+        // Office WebView2 can block even SameSite=None cookies in a dialog.
+        // Return the short-lived token only to the already-verified same-origin
+        // loopback page as an in-memory fallback; the client never persists it.
+        session.Token,
         session.ExpiresAt,
         ["agent", "providers", "provider-settings", "mcp", "skills", "local-tools", .. agentRecoveryCapabilities],
         session.CsrfToken,

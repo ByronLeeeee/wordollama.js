@@ -24,11 +24,15 @@ for (const { name, resource, svg } of catalog) {
   const markup = readFileSync(svgPath, "utf8");
   assert(markup.includes('viewBox="0 0 24 24"'), `${name} SVG must be resolution independent`);
   assert(!/fill="(?:white|#fff(?:fff)?)"/iu.test(markup), `${name} SVG must not paint a light background`);
+  const colors = Array.from(markup.matchAll(/#([0-9a-f]{6})/giu), ([, hex]) => hex);
+  assert(colors.length > 0, `${name} SVG must declare a neutral Ribbon stroke`);
+  assert(colors.every((hex) => hex.slice(0, 2) === hex.slice(2, 4) && hex.slice(2, 4) === hex.slice(4, 6)), `${name} Ribbon icon must remain grayscale`);
+  assert(!markup.includes("#2563eb"), `${name} Ribbon icon must not use the branded blue stroke`);
   for (const size of [16, 32, 80]) {
     const file = resolve(addinRoot, `assets/ribbon/${name}-${size}.png`);
     assert(existsSync(file) && statSync(file).size > 100, `missing ${size}px Ribbon PNG for ${name}`);
     assert(manifest.includes(`id="${resource}.Icon${size}"`), `manifest resource missing ${resource}.Icon${size}`);
-    assert(manifest.includes(`assets/ribbon/${name}-${size}.png`), `manifest URL missing ${name}-${size}.png`);
+    assert(manifest.includes(`assets/ribbon/${name}-${size}.png?v=mono-1`), `manifest URL missing versioned ${name}-${size}.png`);
   }
 }
 
@@ -52,4 +56,4 @@ for (const name of ["general", "models", "agent", "markdown", "skills", "mcp", "
 }
 assert(main.includes("surface-feature-icon") && main.includes("surfaceFeatureName"), "deep-linked task panes must select the matching feature icon");
 
-console.log("Feature icon smoke passed (unique SVG sources, Ribbon PNG resources, and theme-aware task-pane rendering).");
+console.log("Feature icon smoke passed (grayscale SVG sources, Ribbon PNG resources, and theme-aware task-pane rendering).");
