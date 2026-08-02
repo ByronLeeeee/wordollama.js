@@ -97,6 +97,8 @@ internal static class Program
             }
             var trustLocalhostCertificate = options.ContainsKey(
                 "--trust-localhost-certificate");
+            var rotateLocalhostCertificate = options.ContainsKey(
+                "--rotate-localhost-certificate");
             var promptForLocalhostCertificateTrust =
                 !quiet && !trustLocalhostCertificate;
             Install(
@@ -105,7 +107,8 @@ internal static class Program
                 noStart,
                 skipRegistration,
                 trustLocalhostCertificate,
-                promptForLocalhostCertificateTrust);
+                promptForLocalhostCertificateTrust,
+                rotateLocalhostCertificate);
             Notify(InstallerText.Installed, quiet);
             if (!quiet && Process.GetProcessesByName("WINWORD").Length > 0)
             {
@@ -136,7 +139,8 @@ internal static class Program
         {
             var argument = args[index];
             if (argument is "--quiet" or "--no-start" or "--uninstall" or "--rollback" or
-                "--skip-registration" or "--trust-localhost-certificate")
+                "--skip-registration" or "--trust-localhost-certificate" or
+                "--rotate-localhost-certificate")
             {
                 result[argument] = null;
                 continue;
@@ -246,7 +250,8 @@ internal static class Program
         bool noStart,
         bool skipRegistration,
         bool trustLocalhostCertificate,
-        bool promptForLocalhostCertificateTrust)
+        bool promptForLocalhostCertificateTrust,
+        bool rotateLocalhostCertificate)
     {
         var assembly = Assembly.GetExecutingAssembly();
         var metadata = ReadMetadata(assembly);
@@ -300,6 +305,12 @@ internal static class Program
             payload.Position = 0;
             ExtractPayload(payload, staging);
             ValidatePayload(staging);
+
+            // A repair install or explicit certificate rotation can target the
+            // currently running version. Stop only this product's Bridge before
+            // replacing that directory so same-version maintenance remains
+            // atomic instead of failing on locked runtime files.
+            StopOwnedBridgeProcesses(installRoot);
 
             if (Directory.Exists(target))
             {
@@ -412,15 +423,14 @@ internal static class Program
                     new FileInfo(uninstallPath).Length / 1024d)));
         }
 
-        StopOwnedBridgeProcesses(installRoot);
-
         if (!skipRegistration &&
             (trustLocalhostCertificate || promptForLocalhostCertificateTrust))
         {
             ProvisionLocalhostCertificate(
                 installRoot,
                 target,
-                promptForLocalhostCertificateTrust);
+                promptForLocalhostCertificateTrust,
+                rotateLocalhostCertificate);
         }
 
         var certificatePath = Path.Combine(
@@ -834,10 +844,17 @@ internal static class Program
     private static void ProvisionLocalhostCertificate(
         string installRoot,
         string versionRoot,
-        bool promptForTrust)
+        bool promptForTrust,
+        bool forceRotation)
     {
         var certsRoot = Path.Combine(installRoot, "certs");
         Directory.CreateDirectory(certsRoot);
+        if (!forceRotation && TryReuseOwnedLocalhostCertificate(
+                installRoot,
+                versionRoot))
+        {
+            return;
+        }
         DeleteOwnedLocalhostCertificate(installRoot);
 
         using var rsa = RSA.Create(3072);
@@ -902,6 +919,129 @@ internal static class Program
             if (File.Exists(ownershipPath)) File.Delete(ownershipPath);
             throw;
         }
+    }
+
+    private static bool TryReuseOwnedLocalhostCertificate(
+        string installRoot,
+        string versionRoot)
+    {
+        var certsRoot = Path.Combine(installRoot, "certs");
+        var pfxPath = Path.Combine(certsRoot, "bridge.pfx");
+        var ownershipPath = Path.Combine(certsRoot, "ownership.json");
+        if (!File.Exists(pfxPath) || !File.Exists(ownershipPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(
+                File.ReadAllText(ownershipPath));
+            var root = document.RootElement;
+            var thumbprint = root.GetProperty("thumbprint").GetString();
+            var subject = root.GetProperty("subject").GetString();
+            var hosts = root.GetProperty("hosts")
+                .EnumerateArray()
+                .Select(value => value.GetString())
+                .ToArray();
+            if (string.IsNullOrWhiteSpace(thumbprint) ||
+                subject != "CN=WordOllama.JS localhost" ||
+                !hosts.SequenceEqual(new[] { "localhost", "127.0.0.1", "::1" }))
+            {
+                return false;
+            }
+
+            using var store = new X509Store(
+                StoreName.Root,
+                StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadOnly);
+            using var certificate = store.Certificates.Find(
+                    X509FindType.FindByThumbprint,
+                    thumbprint,
+                    validOnly: false)
+                .OfType<X509Certificate2>()
+                .FirstOrDefault(candidate =>
+                    candidate.Subject == subject);
+            if (certificate is null ||
+                certificate.NotBefore.ToUniversalTime() > DateTime.UtcNow ||
+                certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow.AddDays(30) ||
+                !IsLocalhostServerLeaf(certificate) ||
+                !VerifyHttpsCertificate(
+                    versionRoot,
+                    pfxPath,
+                    thumbprint))
+            {
+                return false;
+            }
+
+            ConfigureHttpsCertificate(versionRoot, pfxPath);
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is CryptographicException or IOException or
+            JsonException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsLocalhostServerLeaf(X509Certificate2 certificate)
+    {
+        var basicConstraints = certificate.Extensions
+            .OfType<X509BasicConstraintsExtension>()
+            .FirstOrDefault();
+        if (basicConstraints is null || basicConstraints.CertificateAuthority)
+        {
+            return false;
+        }
+        var keyUsage = certificate.Extensions
+            .OfType<X509KeyUsageExtension>()
+            .FirstOrDefault();
+        if (keyUsage is null ||
+            !keyUsage.KeyUsages.HasFlag(X509KeyUsageFlags.DigitalSignature))
+        {
+            return false;
+        }
+        var enhancedKeyUsage = certificate.Extensions
+            .OfType<X509EnhancedKeyUsageExtension>()
+            .FirstOrDefault();
+        return enhancedKeyUsage is not null &&
+               enhancedKeyUsage.EnhancedKeyUsages
+                   .OfType<Oid>()
+                   .Any(oid => oid.Value == "1.3.6.1.5.5.7.3.1");
+    }
+
+    private static bool VerifyHttpsCertificate(
+        string versionRoot,
+        string pfxPath,
+        string thumbprint)
+    {
+        var executable = Path.Combine(
+            versionRoot,
+            "WordOllama.DesktopBridge.exe");
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            WorkingDirectory = versionRoot,
+            UseShellExecute = false,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        startInfo.ArgumentList.Add("https-certificate-secret");
+        startInfo.ArgumentList.Add("verify-certificate");
+        startInfo.ArgumentList.Add(pfxPath);
+        startInfo.ArgumentList.Add(thumbprint);
+        using var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            return false;
+        }
+        if (!process.WaitForExit(30_000))
+        {
+            process.Kill(entireProcessTree: true);
+            return false;
+        }
+        return process.ExitCode == 0;
     }
 
     private static void StoreHttpsPassword(string versionRoot, string password)
@@ -1076,9 +1216,21 @@ internal static class Program
         {
             // The owning uninstaller has already exited.
         }
-        if (Directory.Exists(root))
+        for (var attempt = 0; Directory.Exists(root); attempt++)
         {
-            Directory.Delete(root, recursive: true);
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (Exception exception) when (
+                attempt < 39 &&
+                exception is IOException or UnauthorizedAccessException)
+            {
+                // Image locks from antivirus and process teardown can outlive
+                // the owner briefly. Retry for up to ten seconds before
+                // treating cleanup as failed.
+                Thread.Sleep(250);
+            }
         }
         var cleanupExecutable = Environment.ProcessPath;
         if (!string.IsNullOrWhiteSpace(cleanupExecutable))
@@ -1099,6 +1251,14 @@ internal static class Program
             ?? throw new InvalidOperationException(
                 "Unable to resolve the destination directory.");
         Directory.CreateDirectory(directory);
+        if (File.Exists(path) &&
+            string.Equals(
+                File.ReadAllText(path, encoding),
+                content,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         File.WriteAllText(temporary, content, encoding);
         File.Move(temporary, path, overwrite: true);

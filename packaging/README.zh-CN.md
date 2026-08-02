@@ -221,6 +221,10 @@ pwsh ./packaging/finalize-unified-release.ps1 `
 账户运行对应脚本；脚本默认拒绝执行，只有显式加入变更授权开关才会安装/卸载产品并
 修改本产品 localhost 证书的当前用户信任：
 
+Windows 生命周期要求普通升级保持原证书指纹不变，再通过安装器的显式
+`--rotate-localhost-certificate` 维护参数单独证明证书可轮换且旧证书被清理；不能把
+每次内容更新都当成证书轮换。
+
 ```powershell
 # Windows x64
 pwsh ./tools/record-windows-release-lifecycle.ps1 `

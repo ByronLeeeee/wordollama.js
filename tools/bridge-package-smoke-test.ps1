@@ -899,7 +899,9 @@ if ($hostRuntime -eq "win-x64") {
         $windowsInstallerProgram -notmatch 'IPAddress\.IPv6Loopback' -or
         $windowsInstallerProgram -notmatch 'StoreName\.Root, StoreLocation\.CurrentUser' -or
         $windowsInstallerProgram -notmatch 'ownership\.json' -or
-        $windowsInstallerProgram -notmatch 'https-certificate-secret') {
+        $windowsInstallerProgram -notmatch 'https-certificate-secret' -or
+        $windowsInstallerProgram -notmatch 'TryReuseOwnedLocalhostCertificate' -or
+        $windowsInstallerProgram -notmatch 'rotate-localhost-certificate') {
         throw "Bridge package smoke: Windows installer lacks owned current-user localhost certificate provisioning."
     }
     if ($signedCandidateWorkflow -notmatch 'LocalSelfSignedMacRelease' -or

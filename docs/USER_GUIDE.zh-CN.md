@@ -20,6 +20,11 @@ WordOllama.JS 首发支持 Windows x64 和 Apple Silicon Mac。Ollama 是可选�
 
 旧 COM/VSTO 版与 JS 版使用不同仓库、manifest 和设置目录，可以同时安装。
 
+普通版本升级会复用尚有至少 30 天有效期、用途正确且凭据完整的 localhost 证书，
+只替换 Bridge、前端和 manifest，不会重复修改证书信任。仅当证书缺失、损坏、临近
+过期，或执行明确的安全维护轮换时，安装器才会再次显示证书确认；卸载会删除本产品
+拥有的 localhost 证书和对应凭据。
+
 ## Apple Silicon Mac 安装
 
 首期本地自签名包无法取得 Apple Developer ID 公共身份，因此不能完成 Apple 公证、

@@ -52,13 +52,14 @@ if ($descriptor.runtime -eq "win-x64") {
         $report.observations.upgrade.version -ne $descriptor.version -or
         $report.observations.upgrade.previousVersion -ne $report.observations.initialInstall.version -or
         $report.observations.rollback.version -ne $report.observations.initialInstall.version -or
-        $report.observations.upgrade.certificateThumbprint -eq $report.observations.initialInstall.certificateThumbprint -or
+        $report.observations.upgrade.certificateThumbprint -ne $report.observations.initialInstall.certificateThumbprint -or
+        $report.observations.certificateRotation.certificateThumbprint -eq $report.observations.upgrade.certificateThumbprint -or
         $report.observations.uninstall.installRootRemoved -ne $true -or
         $report.observations.uninstall.startupRemoved -ne $true -or
         $report.observations.uninstall.registrationRemoved -ne $true -or
         $report.observations.uninstall.certificateRemoved -ne $true -or
         $report.observations.uninstall.credentialRemoved -ne $true) {
-        throw "Windows lifecycle evidence does not prove install, upgrade, certificate rotation, rollback, and uninstall."
+        throw "Windows lifecycle evidence does not prove install, certificate-preserving upgrade, explicit rotation, rollback, and uninstall."
     }
 }
 else {

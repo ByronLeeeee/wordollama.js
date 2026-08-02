@@ -22,6 +22,13 @@ Vite or a terminal.
 4. Fully quit and reopen Word, then add and activate a model in Settings. No
    Ollama or llama3.2 profile is created automatically.
 
+A normal update reuses the product-owned localhost certificate when it remains
+valid for at least 30 days and its purpose, PFX, private key, credential, and
+thumbprint are intact. It replaces the Bridge, frontend, and manifest without
+changing certificate trust. The installer rotates the certificate only when it
+is missing, damaged, near expiry, or an explicit security-maintenance rotation
+is requested. Uninstall removes the owned localhost certificate and credential.
+
 ## Install on Apple Silicon Mac
 
 The local self-signed release cannot obtain Apple notarization, stapling, or a

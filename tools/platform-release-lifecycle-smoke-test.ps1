@@ -48,7 +48,8 @@ try {
         $observations = if ($runtime -eq "win-x64") {
             [ordered]@{
                 initialInstall = [ordered]@{ version = $initial; certificateThumbprint = "A" }
-                upgrade = [ordered]@{ version = $version; previousVersion = $initial; certificateThumbprint = "B" }
+                upgrade = [ordered]@{ version = $version; previousVersion = $initial; certificateThumbprint = "A" }
+                certificateRotation = [ordered]@{ version = $version; certificateThumbprint = "B" }
                 rollback = [ordered]@{ version = $initial; previousVersion = $version }
                 uninstall = [ordered]@{ installRootRemoved = $true; startupRemoved = $true; registrationRemoved = $true; certificateRemoved = $true; credentialRemoved = $true }
             }
@@ -96,7 +97,7 @@ try {
 
         $report.sourceBuild.candidateInstallerSha256 = "a" * 64
         if ($runtime -eq "win-x64") {
-            $report.observations.upgrade.certificateThumbprint = "A"
+            $report.observations.certificateRotation.certificateThumbprint = "A"
         } else {
             $report.observations.agentSandbox.architecture = "x86_64"
         }

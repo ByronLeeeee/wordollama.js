@@ -3,6 +3,8 @@ using WordOllama.Contracts;
 using WordOllama.DesktopBridge;
 using WordOllama.Mcp;
 using System.Net;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 
@@ -177,6 +179,37 @@ try
            secretVerifyOutput.ToString().Contains("exists", StringComparison.OrdinalIgnoreCase) &&
            !secretVerifyOutput.ToString().Contains("pfx-password", StringComparison.Ordinal),
         "HTTPS PFX password presence is verified without revealing it");
+    using (var key = RSA.Create(2048))
+    {
+        var certificateRequest = new CertificateRequest(
+            "CN=WordOllama.JS localhost",
+            key,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+        using var certificate = certificateRequest.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            DateTimeOffset.UtcNow.AddDays(1));
+        var pfxPath = Path.Combine(root, "bridge.pfx");
+        File.WriteAllBytes(
+            pfxPath,
+            certificate.Export(X509ContentType.Pfx, "pfx-password"));
+        var certificateVerifyExit = HttpsCertificateSecretCommand.Execute(
+            ["https-certificate-secret", "verify-certificate", pfxPath, certificate.Thumbprint],
+            secrets,
+            TextReader.Null,
+            TextWriter.Null,
+            secretError,
+            inputIsRedirected: false);
+        var wrongCertificateVerifyExit = HttpsCertificateSecretCommand.Execute(
+            ["https-certificate-secret", "verify-certificate", pfxPath, "00"],
+            secrets,
+            TextReader.Null,
+            TextWriter.Null,
+            secretError,
+            inputIsRedirected: false);
+        Assert(certificateVerifyExit == 0 && wrongCertificateVerifyExit == 1,
+            "HTTPS PFX identity is verified through the platform secret without revealing it");
+    }
     var interactiveSecretExit = HttpsCertificateSecretCommand.Execute(
         ["https-certificate-secret", "set"],
         secrets,

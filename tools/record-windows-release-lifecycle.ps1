@@ -71,7 +71,7 @@ function Get-InstalledSnapshot {
     Assert-True ($LASTEXITCODE -eq 0) "HTTPS certificate secret is missing from Windows Credential Manager."
     Assert-True (Test-HttpsCredential) "HTTPS certificate credential target is missing from Windows Credential Manager."
     $health = Invoke-RestMethod -Uri "https://localhost:37421/health" -TimeoutSec 15
-    Assert-True ($health.status -eq "ok") "Installed Bridge health check failed."
+    Assert-True ($health.ready -eq $true) "Installed Bridge health check failed."
     $index = Invoke-WebRequest -UseBasicParsing -Uri "https://localhost:37421/index.html" -TimeoutSec 15
     Assert-True ($index.StatusCode -eq 200 -and $index.Content -match "WordOllama") "Installed frontend check failed."
     [ordered]@{
@@ -86,8 +86,13 @@ function Get-InstalledSnapshot {
 }
 
 function Invoke-Setup([string]$Path, [string[]]$Arguments) {
-    $process = Start-Process -FilePath $Path -ArgumentList $Arguments -Wait -PassThru
-    Assert-True ($process.ExitCode -eq 0) "Setup failed with exit code $($process.ExitCode): $Path $($Arguments -join ' ')"
+    # `Start-Process -Wait` follows the detached Bridge process tree, while
+    # direct PowerShell invocation returns immediately for this GUI executable.
+    # Waiting on the Process object itself tracks setup only.
+    $process = Start-Process -FilePath $Path -ArgumentList $Arguments -PassThru
+    $process.WaitForExit()
+    $exitCode = $process.ExitCode
+    Assert-True ($exitCode -eq 0) "Setup failed with exit code ${exitCode}: $Path $($Arguments -join ' ')"
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
         if (Test-Path -LiteralPath (Join-Path $installRoot "current.json")) { return }
         Start-Sleep -Milliseconds 250
@@ -142,8 +147,12 @@ try {
     $observations.upgrade = Get-InstalledSnapshot
     Assert-True ($observations.upgrade.version -eq [string]$descriptor.version) "Upgrade did not activate the candidate version."
     Assert-True ($observations.upgrade.previousVersion -eq $observations.initialInstall.version) "Upgrade did not retain the previous version."
-    Assert-True ($observations.upgrade.certificateThumbprint -ne $observations.initialInstall.certificateThumbprint) "Upgrade did not rotate the localhost certificate."
-    Assert-True ($null -eq (Get-ProductCertificate $observations.initialInstall.certificateThumbprint)) "Upgrade left the old localhost certificate trusted."
+    Assert-True ($observations.upgrade.certificateThumbprint -eq $observations.initialInstall.certificateThumbprint) "Normal upgrade unexpectedly rotated the localhost certificate."
+
+    Invoke-Setup $candidateInstallerPath @("--quiet", "--trust-localhost-certificate", "--rotate-localhost-certificate")
+    $observations.certificateRotation = Get-InstalledSnapshot
+    Assert-True ($observations.certificateRotation.certificateThumbprint -ne $observations.upgrade.certificateThumbprint) "Explicit maintenance did not rotate the localhost certificate."
+    Assert-True ($null -eq (Get-ProductCertificate $observations.upgrade.certificateThumbprint)) "Explicit maintenance left the old localhost certificate trusted."
 
     $uninstaller = Join-Path $installRoot "WordOllama.JS-Uninstall.exe"
     Invoke-Setup $uninstaller @("--rollback", "--quiet")
@@ -155,8 +164,11 @@ try {
     $observations.reinstall = Get-InstalledSnapshot
     $finalCertificateThumbprint = $observations.reinstall.certificateThumbprint
     $uninstaller = Join-Path $installRoot "WordOllama.JS-Uninstall.exe"
-    $process = Start-Process -FilePath $uninstaller -ArgumentList @("--uninstall", "--quiet") -Wait -PassThru
-    Assert-True ($process.ExitCode -eq 0) "Uninstall failed with exit code $($process.ExitCode)."
+    $process = Start-Process -FilePath $uninstaller `
+        -ArgumentList @("--uninstall", "--quiet") -PassThru
+    $process.WaitForExit()
+    $uninstallExitCode = $process.ExitCode
+    Assert-True ($uninstallExitCode -eq 0) "Uninstall failed with exit code $uninstallExitCode."
     for ($attempt = 0; $attempt -lt 60 -and (Test-Path -LiteralPath $installRoot); $attempt++) { Start-Sleep -Milliseconds 250 }
     Assert-True (-not (Test-Path -LiteralPath $installRoot)) "Uninstall did not remove the install root."
     Assert-True (-not (Test-Path -LiteralPath $startupPath)) "Uninstall did not remove Startup registration."
