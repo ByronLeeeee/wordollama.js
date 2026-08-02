@@ -72,7 +72,7 @@ pwsh ./packaging/sign-bridge-release.ps1 -Runtime osx-arm64 -ArtifactRoot ./arti
   -MacNotarizationEvidencePath ./artifacts/bridge/macos-arm64-notarization.json
 ```
 
-`-DryRun` 只打印将执行的签名命令；未提供证书/签名身份时，正式运行会失败，不会把未签名产物标记为发布版本。Windows 每个 PE 文件签名后还会立即执行 Authenticode policy verification，并强制使用 CA 签发的代码签名叶证书及 RFC 3161 时间戳；只有版本名含 `smoke`/`test` 且显式传入对应测试开关时才允许自签名或无时间戳测试签名，安装与正式终审仍会拒绝该产物。macOS 生产签名会先逐个签署 .NET 自包含发布中的原生 `.dylib`，最后签署并深度校验 Bridge 主程序；同时强制 `Developer ID Application:` 身份、notary profile 和严格 codesign 校验，仅 smoke/test 可显式使用 `-AllowUnnotarizedMacTestSignature`。macOS 正式归档强制使用 `ditto`，确保保留可执行权限和资源元数据。公证入口要求 `notarytool --output-format json --wait` 返回 `Accepted`，随后下载并校验公证日志，生成包含 submission ID、签名 Authority、Team ID、Hardened Runtime、安全时间戳、ZIP SHA-256 和日志 SHA-256 的可移植证据文件。ZIP 可以提交 Apple 公证，但不能直接 staple；Bridge 是裸命令行程序，也不能附加票据，因此终审使用该证据与 `spctl` 在线 Gatekeeper 评估共同验收，不能把未执行的 stapling 写成通过。
+`-DryRun` 只打印将执行的签名命令；未提供证书/签名身份时，正式运行会失败，不会把未签名产物标记为发布版本。Windows 每个 PE 文件签名后还会立即执行 Authenticode policy verification，并强制 RFC 3161 时间戳。首发允许使用非 CA、仅限 Code Signing EKU 的自签名发布证书；打包流程会导出与证据哈希绑定的 `.publisher.cer`，用户必须核对发布者和指纹后显式加入当前用户信任，更新器继续固定发布者、证书指纹和公钥哈希。无时间戳签名仍只允许版本名含 `smoke`/`test` 且显式启用测试开关的回归产物，不能进入终审。macOS 生产签名会先逐个签署 .NET 自包含发布中的原生 `.dylib`，最后签署并深度校验 Bridge 主程序；Developer ID 模式强制使用 `Developer ID Application:` 身份、notary profile 和严格 codesign 校验，本地自签名模式则必须显式传入 `-LocalSelfSignedMacRelease` 并保留用户本地信任证据。macOS 正式归档强制使用 `ditto`，确保保留可执行权限和资源元数据。Developer ID 公证入口要求 `notarytool --output-format json --wait` 返回 `Accepted`，随后下载并校验公证日志，生成包含 submission ID、签名 Authority、Team ID、Hardened Runtime、安全时间戳、ZIP SHA-256 和日志 SHA-256 的可移植证据文件。ZIP 可以提交 Apple 公证，但不能直接 staple；Bridge 是裸命令行程序，也不能附加票据，因此终审使用该证据与 `spctl` 在线 Gatekeeper 评估共同验收，不能把未执行的 stapling 写成通过。
 
 签署 Windows Bridge ZIP 后生成当前用户 EXE 安装器：
 
@@ -88,8 +88,10 @@ pwsh ./packaging/package-windows-installer.ps1 `
 “应用和功能”卸载登记，并用隐藏 VBS 启动器注册当前用户 Startup。重复安装同版本是幂等的，
 卸载只停止和删除该安装根目录内的 Bridge。可信 PFX 尚未配置时 launcher 安静退出；
 `provision-bridge-https.ps1` 完成 Credential Manager 写入后会自动启动。生产安装器自身必须
-通过 CA 签发证书 Authenticode、RFC 3161 时间戳和 publisher policy verification，并生成
-与签名后 Bridge ZIP 哈希绑定的证据 JSON；无签名构建开关只允许 `smoke`/`test` 回归。
+通过 Authenticode、RFC 3161 时间戳和 publisher policy verification；使用首发自签名
+发布证书时，证书必须是非 CA、仅限 Code Signing EKU，并要求用户显式建立当前用户信任。
+打包流程会生成与签名后 Bridge ZIP 哈希绑定的证据 JSON；无签名构建开关只允许
+`smoke`/`test` 回归。
 
 签名并公证 Bridge ZIP 后，使用独立的 Developer ID Installer 身份生成用户安装包：
 
@@ -159,7 +161,7 @@ pwsh ./packaging/provision-bridge-https.ps1 `
 
 加载项发布时用 `package-addin.ps1 -Version <产物版本> -ManifestVersion <四段递增版本>`；`ManifestVersion` 必须在每次 Ribbon/manifest 发布时单调递增，否则已经侧载或集中部署的 Word 可能继续使用旧命令缓存。
 
-Bridge 更新流程：两个受支持 runtime 都完成终审后，用 `create-update-index.ps1` 读取对应的 `releaseReady: true` 描述文件并生成 SHA-256 索引，再由签名/分发系统发布；正式模式还必须传入精确的 `-IndexUrl`，并要求两个描述文件中的 `updateIndexUrl` 与它完全一致，防止候选包误连到另一条更新通道。脚本会逐项核对版本、runtime、归档路径、哈希、大小、安装器发布者和分发信任模式，缺少任一 runtime 或描述文件都会拒绝。`-AllowUnsignedForTests` 只供仓库 smoke 使用。设置页的一键更新只接受当前 runtime 的 EXE/PKG；下载时限制 512 MB、逐字节核对大小与 SHA-256，并同时要求索引发布者、上一版 Bridge 配置中固定的发布者和平台签名发布者完全一致。Windows 还要求 CA 链与 RFC 3161 时间戳。Developer ID 模式的 macOS 包执行 `pkgutil --check-signature` 和安装类 Gatekeeper 评估；首发采用的本地自签名模式会在用户已显式信任固定身份后校验 PKG 签名发布者，但不会伪造 Gatekeeper/Apple 公证成功。任何失败都会删除下载文件且不会启动。旧索引或 ZIP 仍仅提供手动兼容下载。
+Bridge 更新流程：两个受支持 runtime 都完成终审后，用 `create-update-index.ps1` 读取对应的 `releaseReady: true` 描述文件并生成 SHA-256 索引，再由签名/分发系统发布；正式模式还必须传入精确的 `-IndexUrl`，并要求两个描述文件中的 `updateIndexUrl` 与它完全一致，防止候选包误连到另一条更新通道。脚本会逐项核对版本、runtime、归档路径、哈希、大小、安装器发布者和分发信任模式，缺少任一 runtime 或描述文件都会拒绝。`-AllowUnsignedForTests` 只供仓库 smoke 使用。设置页的一键更新只接受当前 runtime 的 EXE/PKG；下载时限制 512 MB、逐字节核对大小与 SHA-256，并同时要求索引发布者、上一版 Bridge 配置中固定的发布者和平台签名发布者完全一致。Windows 还要求当前用户已显式信任的有效 Authenticode 链与 RFC 3161 时间戳；首发自签名证书继续固定 Subject、指纹和公钥哈希。Developer ID 模式的 macOS 包执行 `pkgutil --check-signature` 和安装类 Gatekeeper 评估；首发采用的本地自签名模式会在用户已显式信任固定身份后校验 PKG 签名发布者，但不会伪造 Gatekeeper/Apple 公证成功。任何失败都会删除下载文件且不会启动。旧索引或 ZIP 仍仅提供手动兼容下载。
 
 离线/兼容 ZIP 安装时调用 `install-bridge-update.ps1` 做哈希校验、版本目录切换和保留旧版本，随后运行 `provision-bridge-https.ps1` 写入该安装根目录的证书路径，异常时用 `rollback-bridge.ps1` 原子回退。`ExpectedSha256` 是强制参数，不能用空值跳过完整性校验：
 
@@ -189,7 +191,7 @@ pwsh ./packaging/unregister-bridge-autostart.ps1 -InstallRoot <install-root>
 
 输出 ZIP 只是可复现的构建产物，不代表已经签名。正式发布前必须：
 
-- Windows 使用受信任证书签名安装器/可执行文件；打包流程同时导出受证据哈希保护的
+- Windows 使用 CA 签发或用户显式信任的产品自签名证书签名安装器/可执行文件；打包流程同时导出受证据哈希保护的
   `.publisher.cer`，由用户核对后显式加入当前用户信任，再把 Bridge 配置为回环 HTTPS；
 - macOS 使用 Developer ID Application/Installer 双签名和公证，或明确选择本地自签名模式并保留显式用户信任证据；
 - 将模型 API Key 放入平台密钥库，不把密钥写入 `appsettings.json`；
