@@ -50,7 +50,7 @@ function Stop-SmokeProcess {
     }
 }
 
-function Start-RedirectedProcess {
+function Start-SmokeProcess {
     param(
         [Parameter(Mandatory = $true)][string]$FileName,
         [string[]]$Arguments = @(),
@@ -62,8 +62,11 @@ function Start-RedirectedProcess {
     $startInfo.WorkingDirectory = $WorkingDirectory
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
+    # Let child output flow directly to the host. Redirecting without
+    # continuously draining both anonymous pipes can fill the smaller macOS
+    # pipe buffer and deadlock the Bridge halfway through this long smoke.
+    $startInfo.RedirectStandardOutput = $false
+    $startInfo.RedirectStandardError = $false
     foreach ($argument in $Arguments) { $startInfo.ArgumentList.Add($argument) }
     foreach ($entry in $Environment.GetEnumerator()) {
         $startInfo.Environment[[string]$entry.Key] = [string]$entry.Value
@@ -76,9 +79,7 @@ function Wait-BridgeReady {
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
         if ($null -ne $script:bridgeProcess -and $script:bridgeProcess.HasExited) {
-            $stdout = $script:bridgeProcess.StandardOutput.ReadToEnd()
-            $stderr = $script:bridgeProcess.StandardError.ReadToEnd()
-            throw "Live Bridge exited before readiness. stdout: $stdout stderr: $stderr"
+            throw "Live Bridge exited before readiness with code $($script:bridgeProcess.ExitCode); review the inherited process output above."
         }
         try {
             $health = Invoke-RestMethod -Method Get -Uri "$BaseUrl/health" -TimeoutSec 2
@@ -175,7 +176,7 @@ function Start-IsolatedBridge {
     $isFrameworkDependentAssembly = [IO.Path]::GetExtension($AssemblyPath) -eq ".dll"
     $fileName = if ($isFrameworkDependentAssembly) { $dotnet } else { $AssemblyPath }
     $arguments = if ($isFrameworkDependentAssembly) { @($AssemblyPath) } else { @() }
-    return Start-RedirectedProcess -FileName $fileName -Arguments $arguments `
+    return Start-SmokeProcess -FileName $fileName -Arguments $arguments `
         -Environment $environment -WorkingDirectory $repoRoot
 }
 
@@ -192,7 +193,7 @@ $bridgePort = Get-FreeLoopbackPort
 $baseUrl = "http://127.0.0.1:$bridgePort"
 
 try {
-    $providerProcess = Start-RedirectedProcess -FileName $node `
+    $providerProcess = Start-SmokeProcess -FileName $node `
         -Arguments @($providerFixture) `
         -Environment @{ PORT = $providerPort; TOOL_NAME = "get_selection"; TOOL_ARGS = "{}" } `
         -WorkingDirectory $repoRoot
