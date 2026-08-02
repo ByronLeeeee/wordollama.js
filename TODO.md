@@ -282,7 +282,8 @@ git status
   双平台生命周期证据防篡改门禁。
 - 独立 Bridge live API 已通过配对、Provider 模型读取、MCP、加密 Agent 恢复和
   重启持久化；此前 HTTP 405 已修复。macOS CI 的 live API 子进程输出改为直接继承
-  runner 输出，避免未持续排空的重定向管道写满后无日志死锁，并设置 8 分钟步骤超时。
+  runner 输出；非 Windows 重启不再调用可能卡在 MCP 子进程树枚举的
+  `Kill(entireProcessTree)`，并增加阶段日志、7 分钟子进程 watchdog 和 8 分钟步骤超时。
 - Bridge package smoke 已通过 win-x64 自包含包、安装/回滚、HTTPS 失败关闭、
   Windows/macOS 自启模拟、Windows 安装器和 macOS 签名/安装器 dry-run；测试脚本
   已修复为可重复执行。

@@ -102,7 +102,20 @@ jobs:
           } else {
             "./.build-bridge-package-smoke/smoke-${{ matrix.runtime }}/WordOllama.DesktopBridge"
           }
-          ./tools/bridge-live-api-smoke-test.ps1 -Configuration Release -BridgeAssemblyPath $executable
+          $pwsh = (Get-Command pwsh -ErrorAction Stop).Source
+          $process = Start-Process -FilePath $pwsh -NoNewWindow -PassThru -ArgumentList @(
+            "-NoProfile",
+            "-File", "./tools/bridge-live-api-smoke-test.ps1",
+            "-Configuration", "Release",
+            "-BridgeAssemblyPath", $executable
+          )
+          if (-not $process.WaitForExit(420000)) {
+            if ($IsWindows) { $process.Kill($true) } else { $process.Kill() }
+            throw "Target-native Bridge live API exceeded its 7-minute watchdog."
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Target-native Bridge live API failed with exit code $($process.ExitCode)."
+          }
       - name: Build unsigned unified artifacts
         shell: pwsh
         run: >

@@ -38,7 +38,16 @@ function Stop-SmokeProcess {
     if ($null -eq $Process) { return }
     try {
         if (-not $Process.HasExited) {
-            $Process.Kill($true)
+            if ($IsWindows) {
+                $Process.Kill($true)
+            }
+            else {
+                # Process.Kill(entireProcessTree: true) can block indefinitely
+                # while enumerating a macOS tree whose MCP children are still
+                # attached to stdio. Killing the Bridge closes those pipes;
+                # the fixture children then exit on EOF.
+                $Process.Kill()
+            }
             $Process.WaitForExit(10000) | Out-Null
         }
     }
@@ -200,6 +209,7 @@ try {
     $bridgeProcess = Start-IsolatedBridge -AssemblyPath $bridgeAssembly `
         -Port $bridgePort -ProviderPort $providerPort
     $health = Wait-BridgeReady -BaseUrl $baseUrl
+    Write-Host "Live smoke stage: Bridge ready."
     if (@($health.capabilities) -notcontains "encrypted-agent-recovery") {
         throw "Live Bridge did not enable encrypted Agent recovery."
     }
@@ -269,6 +279,7 @@ try {
     if (-not $unconfiguredUpdateInstallRejected) {
         throw "Live Bridge did not reject installer launch without a configured signed update."
     }
+    Write-Host "Live smoke stage: session and request security gates passed."
 
     $profile = @{
         id = "live-openai"
@@ -295,6 +306,7 @@ try {
     if ($providerTest.provider -ne "OpenAI" -or @($providerTest.models) -notcontains "fake-openai") {
         throw "Live Provider test did not reach the controlled OpenAI-compatible server."
     }
+    Write-Host "Live smoke stage: Provider passed."
 
     $mcp = Invoke-Bridge -BaseUrl $baseUrl -Token $token -Method Post `
         -Path "/mcp/servers" -Body @{
@@ -338,6 +350,7 @@ try {
     if ($secondMcp.toolCount -ne 1) {
         throw "Second live MCP stdio connection did not expose its tool."
     }
+    Write-Host "Live smoke stage: two MCP servers passed."
 
     Invoke-Bridge -BaseUrl $baseUrl -Token $token -Method Post -Path "/capabilities" -Body @{
         tools = @(@{
@@ -367,6 +380,7 @@ try {
         -not (Test-Path -LiteralPath (Join-Path $smokeRoot "agent-recovery.bin"))) {
         throw "Live Agent did not persist its encrypted checkpoint."
     }
+    Write-Host "Live smoke stage: encrypted Agent checkpoint persisted."
     # Simulate additional task panes establishing their own authenticated
     # sessions, then capture a loaded-state diagnostic snapshot.
     New-BridgeSession -BaseUrl $baseUrl | Out-Null
@@ -384,11 +398,13 @@ try {
     $token = $loadedToken
 
     $preRestartToken = $token
+    Write-Host "Live smoke stage: stopping Bridge for restart."
     Stop-SmokeProcess -Process $bridgeProcess
     $bridgeProcess = $null
     $bridgeProcess = Start-IsolatedBridge -AssemblyPath $bridgeAssembly `
         -Port $bridgePort -ProviderPort $providerPort
     Wait-BridgeReady -BaseUrl $baseUrl | Out-Null
+    Write-Host "Live smoke stage: Bridge restart completed."
     $restartInvalidatedSession = $false
     try {
         Invoke-Bridge -BaseUrl $baseUrl -Token $preRestartToken -Method Get `
@@ -448,6 +464,7 @@ try {
     }
     Invoke-Bridge -BaseUrl $baseUrl -Token $token -Method Post `
         -Path "/agent/sessions/$sessionId/cancel" | Out-Null
+    Write-Host "Live smoke stage: encrypted Agent recovery passed."
 
     Write-Host "Live Bridge API smoke passed: first-use auth, Office frame policy, restart invalidation, Provider, MCP, and encrypted Agent recovery."
 }
