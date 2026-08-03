@@ -158,6 +158,8 @@ export interface ProviderProfileView {
   maxTokens: number;
   keepAlive: string;
   apiMode: string;
+  reasoningEffort: string;
+  thinkingBudget: number;
 }
 
 export interface ProviderSettingsView {

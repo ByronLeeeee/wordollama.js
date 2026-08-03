@@ -69,7 +69,8 @@ public sealed record ChatMessage(
     string? ToolCallId = null,
     string? Name = null,
     IReadOnlyList<ProviderToolCall>? ToolCalls = null,
-    string? ImageDataUrl = null);
+    string? ImageDataUrl = null,
+    JsonElement? ProviderData = null);
 
 public sealed record ProviderToolCall(
     string Id,
@@ -90,7 +91,8 @@ public sealed record ProviderChatResponse(
     string Provider,
     string Model,
     string Content,
-    IReadOnlyList<ProviderToolCall>? ToolCalls = null);
+    IReadOnlyList<ProviderToolCall>? ToolCalls = null,
+    JsonElement? ProviderData = null);
 
 public sealed record ProviderChatChunk(
     string Provider,

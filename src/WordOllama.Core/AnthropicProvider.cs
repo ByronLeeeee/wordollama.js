@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using WordOllama.Contracts;
 
 namespace WordOllama.Core;
@@ -12,16 +13,23 @@ public sealed class AnthropicProvider : IModelProvider
 {
     private readonly HttpClient _httpClient;
     private readonly string _defaultModel;
+    private readonly string _reasoningEffort;
+    private readonly int _thinkingBudget;
 
     public AnthropicProvider(
         string endpoint,
         string apiKey,
         string defaultModel,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        HttpMessageHandler? messageHandler = null,
+        string reasoningEffort = "Auto",
+        int thinkingBudget = 4096)
     {
         ProviderType = "Claude";
         _defaultModel = defaultModel;
-        _httpClient = new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(5) })
+        _reasoningEffort = reasoningEffort.Trim();
+        _thinkingBudget = thinkingBudget;
+        _httpClient = new HttpClient(messageHandler ?? new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(5) })
         {
             BaseAddress = new Uri(NormalizeBaseUrl(endpoint), UriKind.Absolute),
             Timeout = timeout ?? TimeSpan.FromMinutes(10),
@@ -59,8 +67,11 @@ public sealed class AnthropicProvider : IModelProvider
             ["model"] = model,
             ["max_tokens"] = request.MaxTokens ?? 4096,
             ["messages"] = messages,
-            ["temperature"] = request.Temperature,
         };
+        if (!ApplyReasoning(payload, model) && request.Temperature.HasValue)
+        {
+            payload["temperature"] = request.Temperature.Value;
+        }
         if (system.Length > 0)
         {
             payload["system"] = string.Join("\n\n", system);
@@ -113,9 +124,12 @@ public sealed class AnthropicProvider : IModelProvider
             ["model"] = model,
             ["max_tokens"] = request.MaxTokens ?? 4096,
             ["messages"] = messages,
-            ["temperature"] = request.Temperature,
             ["stream"] = true,
         };
+        if (!ApplyReasoning(payload, model) && request.Temperature.HasValue)
+        {
+            payload["temperature"] = request.Temperature.Value;
+        }
         if (system.Length > 0)
         {
             payload["system"] = string.Join("\n\n", system);
@@ -255,7 +269,8 @@ public sealed class AnthropicProvider : IModelProvider
             }
         }
 
-        return new ProviderChatResponse(ProviderType, model, string.Join("\n", content), calls);
+        var providerData = blocks.ValueKind == JsonValueKind.Array ? blocks.Clone() : (JsonElement?)null;
+        return new ProviderChatResponse(ProviderType, model, string.Join("\n", content), calls, providerData);
     }
 
     private static IReadOnlyList<ProviderToolCall> FinishToolCalls(Dictionary<int, StreamingToolCall> calls) =>
@@ -338,6 +353,12 @@ public sealed class AnthropicProvider : IModelProvider
         }
 
         if (string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) &&
+            message.ProviderData is { ValueKind: JsonValueKind.Array } providerData)
+        {
+            return new { role = "assistant", content = providerData };
+        }
+
+        if (string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) &&
             message.ToolCalls is { Count: > 0 })
         {
             var blocks = new List<object>();
@@ -370,6 +391,38 @@ public sealed class AnthropicProvider : IModelProvider
         }
 
         return new { role = message.Role, content = message.Content };
+    }
+
+    private bool ApplyReasoning(IDictionary<string, object?> payload, string model)
+    {
+        var effort = _reasoningEffort.ToLowerInvariant();
+        if (effort is "" or "auto") return false;
+        if (effort == "none")
+        {
+            payload["thinking"] = new { type = "disabled" };
+            return false;
+        }
+        if (effort == "custom" || UsesManualThinking(model))
+        {
+            payload["thinking"] = new { type = "enabled", budget_tokens = _thinkingBudget };
+            return true;
+        }
+
+        payload["thinking"] = new { type = "adaptive" };
+        payload["output_config"] = new { effort };
+        return true;
+    }
+
+    private static bool UsesManualThinking(string model)
+    {
+        var match = Regex.Match(model, @"(?:^|-)(\d+)[.-](\d+)(?:-|$)", RegexOptions.CultureInvariant);
+        if (match.Success &&
+            int.TryParse(match.Groups[1].Value, out var major) &&
+            int.TryParse(match.Groups[2].Value, out var minor))
+        {
+            return major < 4 || major == 4 && minor <= 5;
+        }
+        return false;
     }
 
     private static string NormalizeBaseUrl(string endpoint)

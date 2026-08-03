@@ -5,7 +5,9 @@ public sealed record ModelProviderOptions(
     string Endpoint,
     string ApiKey,
     string Model,
-    string ApiMode = "Auto");
+    string ApiMode = "Auto",
+    string ReasoningEffort = "Auto",
+    int ThinkingBudget = 4096);
 
 public static class ModelProviderFactory
 {
@@ -18,27 +20,34 @@ public static class ModelProviderFactory
                 options.ApiKey,
                 options.Model,
                 "OpenAI",
-                apiMode: options.ApiMode),
+                apiMode: options.ApiMode,
+                reasoningEffort: options.ReasoningEffort),
             "lmstudio" => new OpenAiCompatibleProvider(
                 options.Endpoint,
                 options.ApiKey,
                 options.Model,
                 "LMStudio",
-                apiMode: options.ApiMode),
+                apiMode: options.ApiMode,
+                reasoningEffort: options.ReasoningEffort),
             "vllm" => new OpenAiCompatibleProvider(
                 options.Endpoint,
                 options.ApiKey,
                 options.Model,
                 "vLLM",
-                apiMode: options.ApiMode),
+                apiMode: options.ApiMode,
+                reasoningEffort: options.ReasoningEffort),
             "claude" or "anthropic" => new AnthropicProvider(
                 options.Endpoint,
                 options.ApiKey,
-                options.Model),
+                options.Model,
+                reasoningEffort: options.ReasoningEffort,
+                thinkingBudget: options.ThinkingBudget),
             "gemini" or "google" => new GeminiProvider(
                 options.Endpoint,
                 options.ApiKey,
-                options.Model),
+                options.Model,
+                reasoningEffort: options.ReasoningEffort,
+                thinkingBudget: options.ThinkingBudget),
             _ => throw new ArgumentException($"Unsupported model provider: {options.Type}"),
         };
 }

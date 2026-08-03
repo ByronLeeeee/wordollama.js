@@ -182,7 +182,7 @@ try
     using (var key = RSA.Create(2048))
     {
         var certificateRequest = new CertificateRequest(
-            "CN=WordOllama.JS localhost",
+            "CN=李伯阳/Boyang Li",
             key,
             HashAlgorithmName.SHA256,
             RSASignaturePadding.Pkcs1);

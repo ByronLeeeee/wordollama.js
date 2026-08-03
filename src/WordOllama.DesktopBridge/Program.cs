@@ -254,6 +254,11 @@ builder.Services.AddSingleton(reviewSettings);
 builder.Services.AddSingleton<IAgentRecoveryStore>(agentRecoveryStore);
 builder.Services.AddSingleton<IAgentCodeSandboxFactory>(sp => new AgentCodeSandboxFactory(
     sp.GetRequiredService<IProcessRunner>(), pythonExecutable, nodeExecutable));
+builder.Services.AddSingleton(sp => new AgentSandboxWarmupService(
+    sp.GetRequiredService<IAgentCodeSandboxFactory>(),
+    Path.Combine(settingsRoot, "agent-sandbox-warmup"),
+    sp.GetRequiredService<ILogger<AgentSandboxWarmupService>>()));
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentSandboxWarmupService>());
 builder.Services.AddSingleton<IAgentWorkspaceFactory>(sp => new AgentWorkspaceFactory(
     Path.Combine(settingsRoot, "agent-workspaces"),
     sp.GetRequiredService<IAgentCodeSandboxFactory>()));

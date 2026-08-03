@@ -296,7 +296,8 @@ public sealed class AgentSession
                 _messages.Add(new ChatMessage(
                     "assistant",
                     response.Content,
-                    ToolCalls: calls));
+                    ToolCalls: calls,
+                    ProviderData: response.ProviderData));
 
                 var results = new List<(ProviderToolCall Call, ToolResult Result)>();
                 foreach (var call in calls)

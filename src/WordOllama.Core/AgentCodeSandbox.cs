@@ -37,17 +37,28 @@ public sealed class AgentCodeSandboxFactory : IAgentCodeSandboxFactory
         _nodeExecutable = ResolveExecutable(nodeExecutable);
     }
 
-    public IAgentCodeSandbox Create(string sessionId, string workspaceRoot) =>
-        OperatingSystem.IsWindows()
+    public IAgentCodeSandbox Create(string sessionId, string workspaceRoot)
+    {
+        if (_pythonExecutable is null && _nodeExecutable is null)
+        {
+            return new UnsupportedCodeSandbox();
+        }
+        return OperatingSystem.IsWindows()
             ? new WindowsAppContainerSandbox(sessionId, workspaceRoot, _pythonExecutable, _nodeExecutable)
             : OperatingSystem.IsMacOS()
                 ? new MacSandboxExecCodeSandbox(_processRunner, workspaceRoot, _pythonExecutable, _nodeExecutable)
                 : new UnsupportedCodeSandbox();
+    }
 
     private static string? ResolveExecutable(string? executable)
     {
         if (string.IsNullOrWhiteSpace(executable)) return null;
-        if (Path.IsPathRooted(executable)) return File.Exists(executable) ? Path.GetFullPath(executable) : null;
+        if (Path.IsPathRooted(executable))
+        {
+            return File.Exists(executable)
+                ? AcceptRuntime(Path.GetFullPath(executable))
+                : null;
+        }
         var extensions = OperatingSystem.IsWindows() && string.IsNullOrEmpty(Path.GetExtension(executable))
             ? new[] { ".exe", ".cmd", ".bat", string.Empty }
             : new[] { string.Empty };
@@ -56,8 +67,28 @@ public sealed class AgentCodeSandboxFactory : IAgentCodeSandboxFactory
         foreach (var extension in extensions)
         {
             var candidate = Path.Combine(directory, executable + extension);
-            if (File.Exists(candidate)) return Path.GetFullPath(candidate);
+            if (File.Exists(candidate)) return AcceptRuntime(Path.GetFullPath(candidate));
         }
+        return null;
+    }
+
+    private static string? AcceptRuntime(string executable)
+    {
+        if (!OperatingSystem.IsWindows()) return executable;
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrWhiteSpace(userProfile)) return executable;
+        var userPrefix = Path.GetFullPath(userProfile).TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!Path.GetFullPath(executable).StartsWith(
+                userPrefix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return executable;
+        }
+        Console.Error.WriteLine(
+            $"Agent code execution disabled for user-profile runtime '{Path.GetFileName(executable)}'; " +
+            "use a system-readable runtime location to enable it safely.");
         return null;
     }
 }
@@ -185,7 +216,6 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
     private string? _executionWorkspace;
     private readonly string _profileName;
     private readonly IReadOnlyDictionary<string, string?> _runtimes;
-    private readonly List<AclGrant> _aclGrants = [];
     private IntPtr _appContainerSid;
     private bool _disposed;
 
@@ -253,17 +283,6 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
             Directory.CreateDirectory(_executionWorkspace);
         }
         finally { Marshal.FreeCoTaskMem(appContainerFolderPointer); }
-        foreach (var runtimeDirectory in _runtimes.Values
-                     .Where(value => value is not null)
-                     .Select(value => Path.GetDirectoryName(value!)!)
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (IsUserOwnedPath(runtimeDirectory))
-            {
-                GrantAcl(runtimeDirectory, sid, "(OI)(CI)RX", recursive: true);
-                _aclGrants.Add(new AclGrant(runtimeDirectory, Recursive: true));
-            }
-        }
     }
 
     private async Task<ProcessExecutionResult> RunAppContainerAsync(
@@ -433,14 +452,6 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
         return Encoding.UTF8.GetString(bytes);
     }
 
-    private static bool IsUserOwnedPath(string path)
-    {
-        var user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return !string.IsNullOrWhiteSpace(user) && Path.GetFullPath(path).StartsWith(
-            Path.GetFullPath(user).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
-            StringComparison.OrdinalIgnoreCase);
-    }
-
     private static void MirrorDirectory(string source, string destination, bool clearDestination)
     {
         MacSandboxExecCodeSandbox.EnforceWorkspaceLimit(source);
@@ -489,39 +500,6 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
         }
     }
 
-    private void GrantAcl(string path, string sid, string rights, bool recursive)
-    {
-        var args = new List<string> { path, "/grant", $"*{sid}:{rights}" };
-        if (recursive) args.AddRange(["/T", "/C"]);
-        RunIcacls(args);
-    }
-
-    private static void RunIcacls(IReadOnlyList<string> arguments)
-    {
-        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "icacls.exe"))
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        foreach (var argument in arguments) start.ArgumentList.Add(argument);
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("Unable to configure AppContainer access.");
-        if (!process.WaitForExit(30_000))
-        {
-            process.Kill(entireProcessTree: true);
-            throw new InvalidOperationException("Timed out while configuring AppContainer filesystem access.");
-        }
-        if (process.ExitCode != 0)
-        {
-            var detail = process.StandardError.ReadToEnd().Trim();
-            if (string.IsNullOrWhiteSpace(detail)) detail = process.StandardOutput.ReadToEnd().Trim();
-            throw new InvalidOperationException(
-                "Unable to configure AppContainer filesystem access: " +
-                (detail.Length <= 500 ? detail : detail[..500]));
-        }
-    }
-
     private static string SidToString(IntPtr sid)
     {
         if (!ConvertSidToStringSidW(sid, out var text)) ThrowLastWin32("format AppContainer SID");
@@ -535,17 +513,6 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
         _disposed = true;
         if (_appContainerSid != IntPtr.Zero)
         {
-            string? sid = null;
-            try { sid = SidToString(_appContainerSid); } catch { }
-            if (sid is not null)
-            {
-                foreach (var grant in _aclGrants.AsEnumerable().Reverse())
-                {
-                    var arguments = new List<string> { grant.Path, "/remove", $"*{sid}" };
-                    if (grant.Recursive) arguments.AddRange(["/T", "/C"]);
-                    try { RunIcacls(arguments); } catch { }
-                }
-            }
             if (_executionWorkspace is not null)
             {
                 try { Directory.Delete(_executionWorkspace, recursive: true); }
@@ -570,7 +537,6 @@ internal sealed class WindowsAppContainerSandbox : IAgentCodeSandbox
         throw new Win32Exception(Marshal.GetLastWin32Error(), $"Unable to {operation}.");
 
     private static readonly IntPtr InvalidHandle = new(-1);
-    private sealed record AclGrant(string Path, bool Recursive);
     private const uint GenericRead = 0x80000000, GenericWrite = 0x40000000;
     private const uint FileShareRead = 1, FileShareWrite = 2, CreateAlways = 2, OpenExisting = 3, NormalAttribute = 0x80;
     private const uint StartfUseStdHandles = 0x100;

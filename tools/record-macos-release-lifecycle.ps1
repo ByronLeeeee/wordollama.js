@@ -48,9 +48,9 @@ function Get-InstalledSnapshot {
     $state = Get-Json $statePath "Install state"
     $ownership = Get-Json $ownershipPath "Certificate ownership"
     Assert-True ($pointer -eq [string]$state.currentVersion) "current-version and current.json disagree."
-    Assert-True ([string]$ownership.subject -eq "CN=WordOllama.JS localhost") "Certificate ownership subject is invalid."
+    Assert-True ([string]$ownership.subject -eq "CN=李伯阳/Boyang Li") "Certificate ownership subject is invalid."
     Assert-True ((@($ownership.hosts) -join "|") -eq "localhost|127.0.0.1|::1") "Certificate ownership SAN list is invalid."
-    $certificateText = (& /usr/bin/security find-certificate -Z -c "WordOllama.JS localhost" $keychain 2>&1) -join "`n"
+    $certificateText = (& /usr/bin/security find-certificate -Z -c "李伯阳/Boyang Li" $keychain 2>&1) -join "`n"
     Assert-True ($LASTEXITCODE -eq 0 -and $certificateText -match [Regex]::Escape([string]$ownership.thumbprint)) "Owned localhost certificate is absent from the login keychain."
     $versionRoot = Join-Path $root ("versions/" + $pointer)
     $bridge = Join-Path $versionRoot "WordOllama.DesktopBridge"

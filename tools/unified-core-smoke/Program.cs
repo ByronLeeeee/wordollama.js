@@ -160,10 +160,12 @@ try
         "cloud", "Cloud", "OpenAI", "https://api.openai.com/v1", "gpt-test", "top-secret",
         Temperature: 0.7,
         MaxTokens: 8192,
-        ApiMode: "Responses"));
+        ApiMode: "Responses",
+        ReasoningEffort: "High"));
     Assert(view.Profiles.Count >= 1 &&
            view.Profiles.Single(profile => profile.Id == "cloud").HasApiKey &&
-           view.Profiles.Single(profile => profile.Id == "cloud").ApiMode == "Responses",
+           view.Profiles.Single(profile => profile.Id == "cloud").ApiMode == "Responses" &&
+           view.Profiles.Single(profile => profile.Id == "cloud").ReasoningEffort == "High",
         "provider profile, protocol, and secret presence are exposed without the secret");
     Assert(!File.ReadAllText(settingsPath).Contains("top-secret", StringComparison.Ordinal),
         "provider API key is never persisted in JSON");
@@ -175,7 +177,7 @@ try
     var agentDefaults = providerSettings.ApplyDefaults(new AgentStartRequest("test"));
     Assert(agentDefaults is { Temperature: 0.7, MaxTokens: 8192 },
         "active provider generation defaults apply to Agent");
-    Assert(providerSettings.GetActiveOptions() is { Type: "OpenAI", ApiKey: "top-secret", ApiMode: "Responses" },
+    Assert(providerSettings.GetActiveOptions() is { Type: "OpenAI", ApiKey: "top-secret", ApiMode: "Responses", ReasoningEffort: "High" },
         "active provider resolves its protocol and secret from the vault");
     var reloadable = new ReloadableModelProvider(providerSettings.GetActiveOptions());
     Assert(reloadable.ProviderType == "OpenAI", "reloadable provider uses active profile");
@@ -288,7 +290,8 @@ var responsesProvider = new OpenAiCompatibleProvider(
     "https://api.openai.com/v1",
     "test-key",
     "gpt-test",
-    httpMessageHandler: responsesHandler);
+    httpMessageHandler: responsesHandler,
+    reasoningEffort: "High");
 var responsesResult = await responsesProvider.ChatAsync(new ProviderChatRequest(
     [
         new ChatMessage("system", "You are concise."),
@@ -299,6 +302,7 @@ Assert(
     responsesHandler.LastPath == "/v1/responses" &&
     responsesHandler.LastRequestBody?.Contains("\"instructions\":\"You are concise.\"", StringComparison.Ordinal) == true &&
     responsesHandler.LastRequestBody.Contains("\"max_output_tokens\":120", StringComparison.Ordinal) &&
+    responsesHandler.LastRequestBody.Contains("\"reasoning\":{\"effort\":\"high\"}", StringComparison.Ordinal) &&
     responsesResult.Content == "Responses reply",
     "Responses API request mapping and response normalization");
 var streamedResponses = new List<ProviderChatChunk>();
@@ -313,6 +317,87 @@ Assert(
     streamedResponses.Any(chunk => chunk.Delta == "reply") &&
     streamedResponses.Last().Done,
     "Responses API SSE deltas are normalized to Bridge chunks");
+
+var chatReasoningHandler = new JsonCaptureHandler(
+    """{"choices":[{"message":{"content":"Chat reply"}}]}""");
+var chatReasoningProvider = new OpenAiCompatibleProvider(
+    "https://compatible.example/v1",
+    "test-key",
+    "reasoning-model",
+    apiMode: "ChatCompletions",
+    httpMessageHandler: chatReasoningHandler,
+    reasoningEffort: "Medium");
+_ = await chatReasoningProvider.ChatAsync(new ProviderChatRequest(
+    [new ChatMessage("user", "Think.")],
+    MaxTokens: 256));
+Assert(
+    chatReasoningHandler.LastRequestBody?.Contains("\"reasoning_effort\":\"medium\"", StringComparison.Ordinal) == true &&
+    chatReasoningHandler.LastRequestBody.Contains("\"max_completion_tokens\":256", StringComparison.Ordinal) &&
+    !chatReasoningHandler.LastRequestBody.Contains("\"max_tokens\"", StringComparison.Ordinal) &&
+    !chatReasoningHandler.LastRequestBody.Contains("\"temperature\"", StringComparison.Ordinal),
+    "Chat Completions reasoning uses reasoning_effort and max_completion_tokens");
+
+var claudeHandler = new JsonCaptureHandler(
+    """{"content":[{"type":"thinking","thinking":"summary","signature":"signed-thinking"},{"type":"tool_use","id":"call-1","name":"lookup","input":{"q":"x"}}]}""");
+var claudeProvider = new AnthropicProvider(
+    "https://api.anthropic.com/v1",
+    "test-key",
+    "claude-sonnet-4-6",
+    messageHandler: claudeHandler,
+    reasoningEffort: "Medium");
+var claudeResponse = await claudeProvider.ChatAsync(new ProviderChatRequest(
+    [new ChatMessage("user", "Use a tool.")],
+    MaxTokens: 4096));
+Assert(
+    claudeHandler.LastRequestBody?.Contains("\"thinking\":{\"type\":\"adaptive\"}", StringComparison.Ordinal) == true &&
+    claudeHandler.LastRequestBody.Contains("\"output_config\":{\"effort\":\"medium\"}", StringComparison.Ordinal) &&
+    !claudeHandler.LastRequestBody.Contains("\"temperature\"", StringComparison.Ordinal),
+    "Claude 4.6+ uses adaptive thinking with output_config.effort");
+_ = await claudeProvider.ChatAsync(new ProviderChatRequest([
+    new ChatMessage("user", "Use a tool."),
+    new ChatMessage("assistant", claudeResponse.Content, ToolCalls: claudeResponse.ToolCalls, ProviderData: claudeResponse.ProviderData),
+    new ChatMessage("tool", "result", ToolCallId: "call-1", Name: "lookup"),
+]));
+Assert(
+    claudeHandler.LastRequestBody?.Contains("\"signature\":\"signed-thinking\"", StringComparison.Ordinal) == true,
+    "Claude thinking blocks are preserved unchanged through Agent tool turns");
+
+var claudeManualHandler = new JsonCaptureHandler("""{"content":[{"type":"text","text":"ok"}]}""");
+var claudeManualProvider = new AnthropicProvider(
+    "https://api.anthropic.com/v1",
+    "test-key",
+    "claude-sonnet-4-5",
+    messageHandler: claudeManualHandler,
+    reasoningEffort: "Custom",
+    thinkingBudget: 2048);
+_ = await claudeManualProvider.ChatAsync(new ProviderChatRequest([new ChatMessage("user", "Think.")], MaxTokens: 4096));
+Assert(
+    claudeManualHandler.LastRequestBody?.Contains("\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":2048}", StringComparison.Ordinal) == true,
+    "Claude 4.5 and earlier use manual budget_tokens thinking");
+
+var gemini3Handler = new JsonCaptureHandler("""{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}""");
+var gemini3Provider = new GeminiProvider(
+    "https://generativelanguage.googleapis.com/v1beta",
+    "test-key",
+    "gemini-3-flash-preview",
+    messageHandler: gemini3Handler,
+    reasoningEffort: "Medium");
+_ = await gemini3Provider.ChatAsync(new ProviderChatRequest([new ChatMessage("user", "Think.")]));
+Assert(
+    gemini3Handler.LastRequestBody?.Contains("\"thinkingConfig\":{\"thinkingLevel\":\"medium\"}", StringComparison.Ordinal) == true,
+    "Gemini 3 generateContent uses thinkingLevel");
+
+var gemini25Handler = new JsonCaptureHandler("""{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}""");
+var gemini25Provider = new GeminiProvider(
+    "https://generativelanguage.googleapis.com/v1beta",
+    "test-key",
+    "gemini-2.5-flash",
+    messageHandler: gemini25Handler,
+    reasoningEffort: "Medium");
+_ = await gemini25Provider.ChatAsync(new ProviderChatRequest([new ChatMessage("user", "Think.")]));
+Assert(
+    gemini25Handler.LastRequestBody?.Contains("\"thinkingConfig\":{\"thinkingBudget\":8192}", StringComparison.Ordinal) == true,
+    "Gemini 2.5 generateContent maps medium to the documented thinkingBudget");
 
 var skillTestRoot = Path.Combine(Path.GetTempPath(), "wordollama-skill-import-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(skillTestRoot);
@@ -679,6 +764,20 @@ catch (InvalidOperationException)
 Assert(workspaceEscapeBlocked, "workspace traversal is blocked");
 workspaceFactory.Delete(workspaceSessionId);
 Assert(!Directory.Exists(Path.Combine(workspaceRoot, workspaceSessionId)), "workspace cleanup");
+var degradedWorkspaceFactory = new AgentWorkspaceFactory(
+    workspaceRoot,
+    new FailingAgentCodeSandboxFactory());
+var degradedWorkspaceSessionId = Guid.NewGuid().ToString("N");
+var degradedWorkspace = degradedWorkspaceFactory.Create(degradedWorkspaceSessionId);
+var degradedToolNames = degradedWorkspace.GetToolDescriptors()
+    .Select(tool => tool.Name)
+    .ToHashSet(StringComparer.Ordinal);
+Assert(
+    degradedToolNames.Contains("write_workspace_file") &&
+    !degradedToolNames.Contains("run_python") &&
+    !degradedToolNames.Contains("run_node"),
+    "Agent creation fails closed to workspace-only tools when code sandbox setup is unavailable");
+degradedWorkspaceFactory.Delete(degradedWorkspaceSessionId);
 var workspaceProvider = new CapturingProvider([
     new ProviderChatResponse("fake", "fake", "workspace ready"),
 ]);
@@ -844,6 +943,12 @@ sealed class NoopProcessRunner : IProcessRunner
         Task.FromResult(new ProcessExecutionResult(0, "", "", false));
 }
 
+sealed class FailingAgentCodeSandboxFactory : IAgentCodeSandboxFactory
+{
+    public IAgentCodeSandbox Create(string sessionId, string workspaceRoot) =>
+        throw new InvalidOperationException("sandbox setup fixture");
+}
+
 sealed class CapturingProvider : IModelProvider
 {
     private readonly Queue<ProviderChatResponse> _responses;
@@ -911,6 +1016,24 @@ sealed class ResponsesApiSmokeHandler : HttpMessageHandler
                 "{\"output_text\":\"Responses reply\",\"output\":[]}",
                 Encoding.UTF8,
                 "application/json"),
+        };
+    }
+}
+
+sealed class JsonCaptureHandler(string responseBody) : HttpMessageHandler
+{
+    public string? LastRequestBody { get; private set; }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        LastRequestBody = request.Content is null
+            ? null
+            : await request.Content.ReadAsStringAsync(cancellationToken);
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
         };
     }
 }

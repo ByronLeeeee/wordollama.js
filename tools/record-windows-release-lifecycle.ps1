@@ -30,7 +30,7 @@ function Get-ProductCertificate([string]$Thumbprint) {
     @(Get-ChildItem -LiteralPath Cert:\CurrentUser\Root |
         Where-Object {
             $_.Thumbprint -eq $Thumbprint -and
-            $_.Subject -eq "CN=WordOllama.JS localhost"
+            $_.Subject -eq "CN=李伯阳/Boyang Li"
         }) | Select-Object -First 1
 }
 
@@ -50,7 +50,7 @@ function Get-InstalledSnapshot {
     $ownership = Get-Json $ownershipPath "Certificate ownership"
     $pointer = (Get-Content -LiteralPath $pointerPath -Raw).Trim()
     Assert-True ($pointer -eq [string]$state.currentVersion) "current-version and current.json disagree."
-    Assert-True ([string]$ownership.subject -eq "CN=WordOllama.JS localhost") "Certificate ownership subject is invalid."
+    Assert-True ([string]$ownership.subject -eq "CN=李伯阳/Boyang Li") "Certificate ownership subject is invalid."
     Assert-True ((@($ownership.hosts) -join "|") -eq "localhost|127.0.0.1|::1") "Certificate ownership SAN list is invalid."
     $certificate = Get-ProductCertificate ([string]$ownership.thumbprint)
     Assert-True ($null -ne $certificate) "Owned localhost certificate is not trusted in CurrentUser Root."
@@ -115,7 +115,7 @@ if (Test-Path -LiteralPath $wefRegistryPath) {
     $existingManifest = (Get-ItemProperty -LiteralPath $wefRegistryPath -Name $productId -ErrorAction SilentlyContinue).$productId
     if (-not [string]::IsNullOrWhiteSpace([string]$existingManifest)) { throw "The WordOllama.JS Office registration already exists." }
 }
-if (@(Get-ChildItem Cert:\CurrentUser\Root | Where-Object Subject -eq "CN=WordOllama.JS localhost").Count -ne 0) {
+if (@(Get-ChildItem Cert:\CurrentUser\Root | Where-Object Subject -in @("CN=李伯阳/Boyang Li", "CN=WordOllama.JS localhost")).Count -ne 0) {
     throw "A WordOllama.JS localhost certificate already exists; use a clean current-user account."
 }
 

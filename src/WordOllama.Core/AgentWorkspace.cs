@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using WordOllama.Contracts;
 
 namespace WordOllama.Core;
@@ -30,7 +31,20 @@ public sealed class AgentWorkspaceFactory : IAgentWorkspaceFactory
         return _executors.GetOrAdd(sessionId, id =>
         {
             var workspace = Path.Combine(_root, id);
-            return new AgentWorkspaceToolExecutor(workspace, _sandboxFactory?.Create(id, workspace));
+            IAgentCodeSandbox? sandbox = null;
+            try
+            {
+                sandbox = _sandboxFactory?.Create(id, workspace);
+            }
+            catch (Exception exception) when (
+                exception is Win32Exception or IOException or UnauthorizedAccessException or
+                InvalidOperationException or NotSupportedException)
+            {
+                Console.Error.WriteLine(
+                    "Agent code sandbox is unavailable; continuing without Python/Node execution: " +
+                    exception.Message);
+            }
+            return new AgentWorkspaceToolExecutor(workspace, sandbox);
         });
     }
 

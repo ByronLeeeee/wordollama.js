@@ -17,6 +17,7 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
     private readonly HttpClient _httpClient;
     private readonly string _defaultModel;
     private readonly string _apiMode;
+    private readonly string? _reasoningEffort;
     private readonly bool _nativeOpenAiEndpoint;
 
     public OpenAiCompatibleProvider(
@@ -26,10 +27,12 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
         string providerType = "OpenAI",
         TimeSpan? timeout = null,
         string apiMode = "Auto",
-        HttpMessageHandler? httpMessageHandler = null)
+        HttpMessageHandler? httpMessageHandler = null,
+        string reasoningEffort = "Auto")
     {
         ProviderType = providerType;
         _apiMode = NormalizeApiMode(apiMode);
+        _reasoningEffort = NormalizeReasoningEffort(reasoningEffort);
         _defaultModel = defaultModel;
         _nativeOpenAiEndpoint = IsNativeOpenAiEndpoint(endpoint);
         _httpClient = httpMessageHandler is null
@@ -397,7 +400,7 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
         }
     }
 
-    private static Dictionary<string, object?> BuildResponsesPayload(
+    private Dictionary<string, object?> BuildResponsesPayload(
         ProviderChatRequest request,
         string model,
         bool stream = false)
@@ -432,13 +435,17 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
                 ? existing.Concat(toolOutputs).ToArray()
                 : toolOutputs;
         }
-        if (request.Temperature.HasValue)
+        if (request.Temperature.HasValue && (_reasoningEffort is null or "none"))
         {
             payload["temperature"] = request.Temperature.Value;
         }
         if (request.MaxTokens.HasValue)
         {
             payload["max_output_tokens"] = request.MaxTokens.Value;
+        }
+        if (_reasoningEffort is not null)
+        {
+            payload["reasoning"] = new { effort = _reasoningEffort };
         }
         if (stream)
         {
@@ -514,12 +521,19 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
         };
     }
 
-    private static void AddCommonChatOptions(
+    private void AddCommonChatOptions(
         IDictionary<string, object?> payload,
         ProviderChatRequest request)
     {
-        if (request.Temperature.HasValue) payload["temperature"] = request.Temperature.Value;
-        if (request.MaxTokens.HasValue) payload["max_tokens"] = request.MaxTokens.Value;
+        if (request.Temperature.HasValue && (_reasoningEffort is null or "none"))
+        {
+            payload["temperature"] = request.Temperature.Value;
+        }
+        if (request.MaxTokens.HasValue)
+        {
+            payload[_reasoningEffort is null ? "max_tokens" : "max_completion_tokens"] = request.MaxTokens.Value;
+        }
+        if (_reasoningEffort is not null) payload["reasoning_effort"] = _reasoningEffort;
         if (request.Tools is { Count: > 0 })
         {
             payload["tools"] = request.Tools.Select(tool => new
@@ -752,6 +766,19 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
             "responses" => "Responses",
             "chatcompletions" or "chat-completions" or "chat_completions" => "ChatCompletions",
             _ => "Auto",
+        };
+
+    private static string? NormalizeReasoningEffort(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "none" => "none",
+            "minimal" => "minimal",
+            "low" => "low",
+            "medium" => "medium",
+            "high" => "high",
+            "xhigh" => "xhigh",
+            "max" => "max",
+            _ => null,
         };
 
     private static void ValidateRequest(ProviderChatRequest request)

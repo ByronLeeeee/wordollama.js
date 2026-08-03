@@ -18,7 +18,9 @@ public sealed record ProviderProfileSettings(
     double Temperature = 0.5,
     int MaxTokens = 4096,
     string KeepAlive = "5m",
-    string ApiMode = "Auto");
+    string ApiMode = "Auto",
+    string ReasoningEffort = "Auto",
+    int ThinkingBudget = 4096);
 
 public sealed record ProviderProfileView(
     string Id,
@@ -35,7 +37,9 @@ public sealed record ProviderProfileView(
     double Temperature,
     int MaxTokens,
     string KeepAlive,
-    string ApiMode);
+    string ApiMode,
+    string ReasoningEffort,
+    int ThinkingBudget);
 
 public sealed record ProviderSettingsView(
     string ActiveProviderId,
@@ -57,7 +61,9 @@ public sealed record ProviderProfileUpdate(
     double Temperature = 0.5,
     int MaxTokens = 4096,
     string KeepAlive = "5m",
-    string ApiMode = "Auto");
+    string ApiMode = "Auto",
+    string ReasoningEffort = "Auto",
+    int ThinkingBudget = 4096);
 
 internal sealed record ProviderSettingsDocument(
     string ActiveProviderId,
@@ -258,7 +264,9 @@ public sealed partial class ProviderSettingsStore
                         Temperature: profile.Temperature,
                         MaxTokens: profile.MaxTokens <= 0 ? 4096 : profile.MaxTokens,
                         KeepAlive: string.IsNullOrWhiteSpace(profile.KeepAlive) ? "5m" : profile.KeepAlive,
-                        ApiMode: string.IsNullOrWhiteSpace(profile.ApiMode) ? "Auto" : profile.ApiMode),
+                        ApiMode: string.IsNullOrWhiteSpace(profile.ApiMode) ? "Auto" : profile.ApiMode,
+                        ReasoningEffort: string.IsNullOrWhiteSpace(profile.ReasoningEffort) ? "Auto" : profile.ReasoningEffort,
+                        ThinkingBudget: profile.ThinkingBudget <= 0 ? 4096 : profile.ThinkingBudget),
                         allowEmptyModel: true)).ToList();
                     var wasMigrated = loaded.SchemaVersion < CurrentSchemaVersion;
                     if (wasMigrated)
@@ -296,7 +304,9 @@ public sealed partial class ProviderSettingsStore
             profile.Endpoint,
             _secrets.Get(SecretName(profile.Id)) ?? string.Empty,
             profile.Model,
-            profile.ApiMode);
+            profile.ApiMode,
+            profile.ReasoningEffort,
+            profile.ThinkingBudget);
 
     private ProviderProfileView ToView(ProviderProfileSettings profile) =>
         new(
@@ -305,7 +315,7 @@ public sealed partial class ProviderSettingsStore
             profile.SupportsJsonOutput, profile.ContextWindow,
             !string.IsNullOrEmpty(_secrets.Get(SecretName(profile.Id))),
             profile.Temperature, profile.MaxTokens, profile.KeepAlive,
-            profile.ApiMode);
+            profile.ApiMode, profile.ReasoningEffort, profile.ThinkingBudget);
 
     private ProviderSettingsView GetViewUnsafe() =>
         new(_document.ActiveProviderId, _document.Profiles.Select(ToView).ToArray());
@@ -366,6 +376,32 @@ public sealed partial class ProviderSettingsStore
         {
             throw new ArgumentException("Max tokens must be between 1 and 1000000.");
         }
+        if (update.ThinkingBudget is < 1 or > 1_000_000)
+        {
+            throw new ArgumentException("Thinking budget must be between 1 and 1000000.");
+        }
+        var reasoningEffort = NormalizeReasoningEffort(update.ReasoningEffort);
+        var providerType = update.Type.Trim().ToLowerInvariant();
+        var modelName = update.Model.Trim().ToLowerInvariant();
+        if (reasoningEffort == "Custom" && (providerType is "claude" or "anthropic"))
+        {
+            if (update.ThinkingBudget < 1024 || update.ThinkingBudget >= update.MaxTokens)
+            {
+                throw new ArgumentException("Claude thinking budget must be at least 1024 and less than max tokens.");
+            }
+        }
+        if (reasoningEffort == "Custom" && (providerType is "gemini" or "google") &&
+            modelName.Contains("gemini-2.5", StringComparison.OrdinalIgnoreCase))
+        {
+            var minimum = modelName.Contains("pro", StringComparison.OrdinalIgnoreCase) ? 128
+                : modelName.Contains("flash-lite", StringComparison.OrdinalIgnoreCase) ? 512
+                : 1;
+            var maximum = modelName.Contains("pro", StringComparison.OrdinalIgnoreCase) ? 32768 : 24576;
+            if (update.ThinkingBudget < minimum || update.ThinkingBudget > maximum)
+            {
+                throw new ArgumentException($"Gemini 2.5 thinking budget must be between {minimum} and {maximum} for this model.");
+            }
+        }
         var keepAlive = (update.KeepAlive ?? "5m").Trim();
         if (!KeepAlivePattern().IsMatch(keepAlive))
         {
@@ -376,7 +412,9 @@ public sealed partial class ProviderSettingsStore
             update.Model.Trim(), update.ToolCallingMode.Trim(), update.SupportsStreaming,
             update.SupportsVision, update.SupportsJsonOutput, update.ContextWindow,
             update.Temperature, update.MaxTokens, keepAlive,
-            NormalizeApiMode(update.ApiMode));
+            NormalizeApiMode(update.ApiMode),
+            reasoningEffort,
+            update.ThinkingBudget);
     }
 
     private static string NormalizeApiMode(string? value) =>
@@ -384,6 +422,20 @@ public sealed partial class ProviderSettingsStore
         {
             "chatcompletions" or "chat-completions" or "chat_completions" => "ChatCompletions",
             "responses" => "Responses",
+            _ => "Auto",
+        };
+
+    private static string NormalizeReasoningEffort(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "none" => "None",
+            "minimal" => "Minimal",
+            "low" => "Low",
+            "medium" => "Medium",
+            "high" => "High",
+            "xhigh" => "XHigh",
+            "max" => "Max",
+            "custom" => "Custom",
             _ => "Auto",
         };
 

@@ -674,6 +674,8 @@ const emptyProvider: ProviderProfileUpdate = {
   maxTokens: 4096,
   keepAlive: "5m",
   apiMode: "Auto",
+  reasoningEffort: "Auto",
+  thinkingBudget: 4096,
 };
 
 type ProviderPreset = {
@@ -762,6 +764,47 @@ function presetForProfile(profile: ProviderProfileView): ProviderPreset {
       : undefined)
     ?? providerPresets.find((preset) => preset.type === profile.type)
     ?? providerPresets[providerPresets.length - 1];
+}
+
+function providerSupportsReasoning(type: string): boolean {
+  return /^(openai|lmstudio|vllm|claude|anthropic|gemini|google)$/iu.test(type.trim());
+}
+
+function modelVersion(model: string): [number, number] | null {
+  const match = model.match(/(?:^|-)(\d+)[.-](\d+)(?:-|$)/u);
+  return match ? [Number(match[1]), Number(match[2])] : null;
+}
+
+function reasoningOptions(profile: ProviderProfileUpdate): string[] {
+  const type = profile.type.trim().toLowerCase();
+  const model = profile.model.trim().toLowerCase();
+  if (["openai", "lmstudio", "vllm"].includes(type)) {
+    return ["Auto", "None", "Minimal", "Low", "Medium", "High", "XHigh", "Max"];
+  }
+  if (type === "claude" || type === "anthropic") {
+    const version = modelVersion(model);
+    if (version && (version[0] < 4 || (version[0] === 4 && version[1] <= 5))) {
+      return ["Auto", "None", "Custom"];
+    }
+    const options = ["Auto"];
+    if (!version || version[0] < 5) options.push("None");
+    options.push("Low", "Medium", "High");
+    if (version && (version[0] > 4 || (version[0] === 4 && version[1] >= 7))) options.push("XHigh");
+    if (version && (version[0] > 4 || (version[0] === 4 && version[1] >= 6))) options.push("Max");
+    return options;
+  }
+  if (type === "gemini" || type === "google") {
+    if (model.includes("gemini-2.5")) {
+      return model.includes("pro")
+        ? ["Auto", "Low", "Medium", "High", "Custom"]
+        : ["Auto", "None", "Low", "Medium", "High", "Custom"];
+    }
+    if (model.includes("flash-lite-image")) return ["Auto", "Minimal", "High"];
+    if (model.includes("gemini-3-pro-preview")) return ["Auto", "Low", "High"];
+    if (model.includes("pro")) return ["Auto", "Low", "Medium", "High"];
+    return ["Auto", "Minimal", "Low", "Medium", "High"];
+  }
+  return ["Auto"];
 }
 
 function ModelsPage() {
@@ -865,7 +908,7 @@ function ModelsPage() {
 
   const saveProvider = async () => {
     try {
-      applyView(await runtime.saveProviderProfile(form));
+      applyView(await runtime.saveProviderProfile({ ...form, reasoningEffort: selectedReasoningEffort }));
       setEditorOpen(false);
       setStatus(translatedStatus(
         editorMode === "new" ? "models.modelAdded" : "models.modelUpdated",
@@ -902,6 +945,10 @@ function ModelsPage() {
     form.endpoint.trim() &&
     form.model.trim(),
   );
+  const availableReasoningOptions = reasoningOptions(form);
+  const selectedReasoningEffort = availableReasoningOptions.includes(form.reasoningEffort)
+    ? form.reasoningEffort
+    : "Auto";
 
   return (
     <div className="settings-page">
@@ -1077,6 +1124,37 @@ function ModelsPage() {
                       {["Auto", "Native", "ReAct"].map((mode) => <option key={mode}>{mode}</option>)}
                     </select>
                   </fieldset>
+                  {providerSupportsReasoning(form.type) ? (
+                    <fieldset className="fieldset">
+                      <legend className="fieldset-legend">{t("models.reasoningEffort")}</legend>
+                      <select
+                        className="select select-sm w-full"
+                        value={selectedReasoningEffort}
+                        onChange={(event) => patch("reasoningEffort", event.currentTarget.value)}
+                      >
+                        {availableReasoningOptions.map((effort) => (
+                          <option key={effort} value={effort}>
+                            {t(`models.reasoningEfforts.${effort.toLowerCase()}`)}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="label">{t("models.reasoningEffortHint")}</p>
+                    </fieldset>
+                  ) : null}
+                  {selectedReasoningEffort === "Custom" ? (
+                    <fieldset className="fieldset">
+                      <legend className="fieldset-legend">{t("models.thinkingBudget")}</legend>
+                      <input
+                        className="input input-sm w-full"
+                        type="number"
+                        min={1}
+                        max={1_000_000}
+                        value={form.thinkingBudget}
+                        onChange={(event) => patch("thinkingBudget", Number(event.currentTarget.value))}
+                      />
+                      <p className="label">{t("models.thinkingBudgetHint")}</p>
+                    </fieldset>
+                  ) : null}
                   <fieldset className="fieldset">
                     <legend className="fieldset-legend">{t("models.contextWindow")}</legend>
                     <input className="input input-sm w-full" type="number" min={0} value={form.contextWindow} onChange={(event) => patch("contextWindow", Number(event.currentTarget.value))} />

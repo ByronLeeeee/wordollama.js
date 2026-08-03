@@ -394,6 +394,22 @@ ownership="$cert_root/ownership.json"
 keychain="$HOME/Library/Keychains/login.keychain-db"
 mkdir -p "$cert_root"
 chmod 700 "$cert_root"
+expected_subject='CN=李伯阳/Boyang Li'
+if [ -f "$pfx" ]; then
+  current_subject=""
+  old_fingerprint=""
+  if [ -f "$ownership" ]; then
+    current_subject=$(sed -n 's/.*"subject":"\([^"]*\)".*/\1/p' "$ownership" | head -n 1)
+    old_fingerprint=$(sed -n 's/.*"thumbprint":"\([0-9A-Fa-f]*\)".*/\1/p' "$ownership" | head -n 1)
+  fi
+  if [ "$current_subject" != "$expected_subject" ]; then
+    case "$old_fingerprint" in
+      ''|*[!0-9A-Fa-f]*) ;;
+      *) security delete-certificate -Z "$old_fingerprint" "$keychain" >/dev/null 2>&1 || true ;;
+    esac
+    rm -f "$pfx" "$ownership"
+  fi
+fi
 if [ ! -f "$pfx" ]; then
   command -v openssl >/dev/null 2>&1 || exit 20
   command -v security >/dev/null 2>&1 || exit 21
@@ -408,7 +424,7 @@ distinguished_name=dn
 x509_extensions=server_ext
 prompt=no
 [dn]
-CN=WordOllama.JS localhost
+CN=李伯阳/Boyang Li
 [server_ext]
 basicConstraints=critical,CA:FALSE
 keyUsage=critical,digitalSignature,keyEncipherment
@@ -430,7 +446,7 @@ WORDOLLAMA_OPENSSL_CONFIG
   case "$fingerprint" in ''|*[!0-9A-Fa-f]*) exit 22 ;; esac
   mv "$work/bridge.pfx" "$pfx"
   chmod 600 "$pfx"
-  printf '{"schemaVersion":1,"thumbprint":"%s","subject":"CN=WordOllama.JS localhost","hosts":["localhost","127.0.0.1","::1"]}\n' \
+  printf '{"schemaVersion":1,"thumbprint":"%s","subject":"CN=李伯阳/Boyang Li","hosts":["localhost","127.0.0.1","::1"]}\n' \
     "$fingerprint" > "$ownership"
   chmod 600 "$ownership"
   if ! printf '%s\n' "$password" | "$executable" https-certificate-secret set >/dev/null; then

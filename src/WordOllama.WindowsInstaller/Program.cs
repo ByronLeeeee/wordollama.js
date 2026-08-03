@@ -37,6 +37,8 @@ internal static class Program
         @"Software\Microsoft\Office\16.0\Wef\Developer";
     private const string OfficeAddinId =
         "4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701";
+    private const string LocalhostCertificateSubject = "CN=李伯阳/Boyang Li";
+    private const string LegacyLocalhostCertificateSubject = "CN=WordOllama.JS localhost";
 
     [STAThread]
     private static int Main(string[] args)
@@ -865,7 +867,7 @@ internal static class Program
 
         using var rsa = RSA.Create(3072);
         var request = new CertificateRequest(
-            "CN=WordOllama.JS localhost",
+            LocalhostCertificateSubject,
             rsa,
             HashAlgorithmName.SHA256,
             RSASignaturePadding.Pkcs1);
@@ -951,7 +953,7 @@ internal static class Program
                 .Select(value => value.GetString())
                 .ToArray();
             if (string.IsNullOrWhiteSpace(thumbprint) ||
-                subject != "CN=WordOllama.JS localhost" ||
+                subject != LocalhostCertificateSubject ||
                 !hosts.SequenceEqual(new[] { "localhost", "127.0.0.1", "::1" }))
             {
                 return false;
@@ -1104,7 +1106,7 @@ internal static class Program
             var thumbprint = document.RootElement.GetProperty("thumbprint").GetString();
             var subject = document.RootElement.GetProperty("subject").GetString();
             if (string.IsNullOrWhiteSpace(thumbprint) ||
-                subject != "CN=WordOllama.JS localhost") return;
+                !IsOwnedLocalhostCertificateSubject(subject)) return;
             using var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser);
             store.Open(OpenFlags.ReadWrite);
             foreach (var certificate in store.Certificates.Find(
@@ -1123,6 +1125,9 @@ internal static class Program
             // An absent or unreadable owned certificate must not block uninstall.
         }
     }
+
+    private static bool IsOwnedLocalhostCertificateSubject(string? subject) =>
+        subject is LocalhostCertificateSubject or LegacyLocalhostCertificateSubject;
 
     private static void StopOwnedBridgeProcesses(string installRoot)
     {

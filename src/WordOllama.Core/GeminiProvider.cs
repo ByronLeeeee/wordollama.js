@@ -14,6 +14,8 @@ public sealed class GeminiProvider : IModelProvider
     private readonly GoogleOAuthCredential? _oauthCredential;
     private readonly SemaphoreSlim _oauthGate = new(1, 1);
     private readonly string _defaultModel;
+    private readonly string _reasoningEffort;
+    private readonly int _thinkingBudget;
     private string _accessToken;
     private DateTimeOffset _accessTokenExpiresAt;
 
@@ -22,7 +24,9 @@ public sealed class GeminiProvider : IModelProvider
         string apiKey,
         string defaultModel,
         TimeSpan? timeout = null,
-        HttpMessageHandler? messageHandler = null)
+        HttpMessageHandler? messageHandler = null,
+        string reasoningEffort = "Auto",
+        int thinkingBudget = 4096)
     {
         ProviderType = "Gemini";
         if (GoogleOAuthCredentialCodec.TryDecode(apiKey, out var oauthCredential))
@@ -38,6 +42,8 @@ public sealed class GeminiProvider : IModelProvider
             _accessToken = string.Empty;
         }
         _defaultModel = defaultModel;
+        _reasoningEffort = reasoningEffort.Trim();
+        _thinkingBudget = thinkingBudget;
         _httpClient = messageHandler is null
             ? new HttpClient(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(5) })
             : new HttpClient(messageHandler, disposeHandler: true);
@@ -68,11 +74,7 @@ public sealed class GeminiProvider : IModelProvider
                 .Where(message => !string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase))
                 .Select(ToGeminiContent)
                 .ToArray(),
-            ["generationConfig"] = new
-            {
-                temperature = request.Temperature,
-                maxOutputTokens = request.MaxTokens,
-            },
+            ["generationConfig"] = BuildGenerationConfig(request, model),
         };
         if (system.Length > 0)
         {
@@ -142,11 +144,7 @@ public sealed class GeminiProvider : IModelProvider
                 .Where(message => !string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase))
                 .Select(ToGeminiContent)
                 .ToArray(),
-            ["generationConfig"] = new
-            {
-                temperature = request.Temperature,
-                maxOutputTokens = request.MaxTokens,
-            },
+            ["generationConfig"] = BuildGenerationConfig(request, model),
         };
         if (system.Length > 0)
         {
@@ -273,7 +271,16 @@ public sealed class GeminiProvider : IModelProvider
             }
         }
 
-        return new ProviderChatResponse(ProviderType, model, string.Join("\n", textParts), calls);
+        JsonElement? providerData = null;
+        if (root.TryGetProperty("candidates", out var responseCandidates) &&
+            responseCandidates.ValueKind == JsonValueKind.Array && responseCandidates.GetArrayLength() > 0 &&
+            responseCandidates[0].TryGetProperty("content", out var responseContent) &&
+            responseContent.TryGetProperty("parts", out var responseParts) &&
+            responseParts.ValueKind == JsonValueKind.Array)
+        {
+            providerData = responseParts.Clone();
+        }
+        return new ProviderChatResponse(ProviderType, model, string.Join("\n", textParts), calls, providerData);
     }
 
     public async Task<IReadOnlyList<string>> FetchModelsAsync(CancellationToken cancellationToken = default)
@@ -316,6 +323,11 @@ public sealed class GeminiProvider : IModelProvider
         var role = string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)
             ? "model"
             : "user";
+        if (role == "model" && message.ProviderData is JsonElement providerData &&
+            providerData.ValueKind == JsonValueKind.Array)
+        {
+            return new { role, parts = providerData };
+        }
         var parts = new List<object>();
         if (!string.IsNullOrWhiteSpace(message.Content))
         {
@@ -354,6 +366,40 @@ public sealed class GeminiProvider : IModelProvider
             });
         }
         return new { role, parts = parts.ToArray() };
+    }
+
+    private Dictionary<string, object?> BuildGenerationConfig(ProviderChatRequest request, string model)
+    {
+        var config = new Dictionary<string, object?>();
+        if (request.Temperature.HasValue) config["temperature"] = request.Temperature.Value;
+        if (request.MaxTokens.HasValue) config["maxOutputTokens"] = request.MaxTokens.Value;
+
+        var effort = _reasoningEffort.ToLowerInvariant();
+        if (effort is "" or "auto") return config;
+        if (model.Contains("gemini-2.5", StringComparison.OrdinalIgnoreCase))
+        {
+            int? budget = effort switch
+            {
+                "none" when !model.Contains("pro", StringComparison.OrdinalIgnoreCase) => 0,
+                "minimal" or "low" => 1024,
+                "medium" => 8192,
+                "high" => 24576,
+                "custom" => _thinkingBudget,
+                _ => null,
+            };
+            if (budget.HasValue) config["thinkingConfig"] = new { thinkingBudget = budget.Value };
+            return config;
+        }
+
+        var level = effort switch
+        {
+            "none" => "minimal",
+            "minimal" or "low" or "medium" or "high" => effort,
+            "xhigh" or "max" => "high",
+            _ => null,
+        };
+        if (level is not null) config["thinkingConfig"] = new { thinkingLevel = level };
+        return config;
     }
 
     private static JsonElement ParseToolResponse(string content)
