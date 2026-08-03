@@ -281,6 +281,7 @@ export interface AgentStartResponse {
 
 export interface AgentStartOptions {
   goal?: string;
+  skillName?: string;
   model?: string;
   imageDataUrl?: string;
   temperature?: number;

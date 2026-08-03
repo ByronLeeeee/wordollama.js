@@ -657,11 +657,24 @@ function Assert-WindowsInstallerLifecycle {
         "--startup-root", $startupRoot
     )
     foreach ($iteration in 1..2) {
+        if ($iteration -eq 2) {
+            $installedUninstaller = Join-Path $installRoot `
+                "WordOllama.JS-Uninstall.exe"
+            if (-not (Test-Path -LiteralPath $installedUninstaller -PathType Leaf)) {
+                throw "Bridge package smoke: Windows setup did not install its maintenance executable."
+            }
+            (Get-Item -LiteralPath $installedUninstaller).IsReadOnly = $true
+        }
         $process = Start-Process -FilePath $setupPath -ArgumentList $arguments `
             -WindowStyle Hidden -Wait -PassThru
         if ($process.ExitCode -ne 0) {
             throw "Bridge package smoke: Windows setup iteration $iteration failed."
         }
+    }
+    $installedUninstaller = Join-Path $installRoot `
+        "WordOllama.JS-Uninstall.exe"
+    if ((Get-Item -LiteralPath $installedUninstaller).IsReadOnly) {
+        throw "Bridge package smoke: Windows setup retained a read-only maintenance executable."
     }
     $state = Get-Content -LiteralPath (Join-Path $installRoot "current.json") `
         -Raw | ConvertFrom-Json
@@ -688,7 +701,10 @@ function Assert-WindowsInstallerLifecycle {
         $launcher -notlike "*current-version*" -or
         $launcher -notlike "*WordOllama.JS.xml*" -or
         $launcher -notlike "*Microsoft\Office\16.0\Wef\Developer*" -or
-        $launcher -notlike "*4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701*") {
+        $launcher -notlike "*4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701*" -or
+        $launcher -notlike '*UseDirectDebugger*REG_DWORD*/d 0*' -or
+        $launcher -notlike '*UseWebDebugger*REG_DWORD*/d 0*' -or
+        $launcher -notlike '*UseLiveReload*REG_DWORD*/d 0*') {
         throw "Bridge package smoke: Windows setup payload or version state is invalid."
     }
 

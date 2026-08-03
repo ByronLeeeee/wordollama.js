@@ -117,6 +117,10 @@ public sealed class AgentSession
                 "The active Microsoft Word document is available only through the Office tools " +
                 "such as get_selection, get_doc_overview, read_paragraphs, and read_large_chunk. " +
                  "Never use isolated-workspace file tools to read the active Word document. " +
+                 "Installed Skills are instruction packages that extend your workflow; they are not Office add-ins. " +
+                 "Use list_skills when the user asks for a Skill without an exact canonical name, and read_skill before following one. " +
+                 "If a Skill needs a tool that is not available in this session, state which Agent capability (local tools, network tools, or MCP) must be enabled. " +
+                 "Never dismiss a Skill request by saying that you are merely a Word plugin. " +
                  (_requirePlanConfirmation
                      ? "You may call update_plan when the task genuinely requires multiple meaningful steps. " +
                        "Use it to show a concise TODO plan before executing those steps. Do not call it for greetings, " +
@@ -257,6 +261,7 @@ public sealed class AgentSession
     {
         try
         {
+            if (!_isRecovered) await InitializeSkillContextAsync();
             while (!_cancellation.IsCancellationRequested && _iterations++ < _maxIterations)
             {
                 _checkpoint = new AgentCheckpoint(
@@ -503,7 +508,8 @@ public sealed class AgentSession
             return _permissionMode == "full" && _allowLocalTools;
         }
 
-        if (string.Equals(name, "read_skill", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(name, "list_skills", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "read_skill", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -533,6 +539,35 @@ public sealed class AgentSession
 
         return _allowLocalTools;
     }
+
+    private async Task InitializeSkillContextAsync()
+    {
+        var skillTools = _internalTools.FirstOrDefault(tool => tool.IsKnownTool("list_skills"));
+        if (skillTools is null) return;
+        var emptyArguments = JsonSerializer.SerializeToElement(new { });
+        var catalog = await skillTools.ExecuteAsync("list_skills", emptyArguments, _cancellation.Token);
+        var insertAt = Math.Max(1, _messages.Count - 1);
+        _messages.Insert(insertAt++, new ChatMessage(
+            "system",
+            "Installed Skill catalog (canonical names and descriptions):\n" + catalog + "\n" +
+            "Match requests against this catalog. Read the matching Skill before using it.\n" +
+            $"Session capabilities: local tools {EnabledLabel(_allowLocalTools)}, " +
+            $"network tools {EnabledLabel(_allowNetworkTools)}, MCP tools {EnabledLabel(_allowMcpTools)}. " +
+            "If required capability is disabled, identify that setting precisely instead of describing yourself as only a Word plugin."));
+
+        if (string.IsNullOrWhiteSpace(_request.SkillName)) return;
+        var selected = _request.SkillName.Trim();
+        var instructions = await skillTools.ExecuteAsync(
+            "read_skill",
+            JsonSerializer.SerializeToElement(new { skill_name = selected }),
+            _cancellation.Token);
+        _messages.Insert(insertAt, new ChatMessage(
+            "system",
+            $"The user explicitly selected Skill '{selected}'. Follow these instructions for this run. " +
+            $"When reading one of its references, pass skill_name '{selected}' together with reference.\n\n{instructions}"));
+    }
+
+    private static string EnabledLabel(bool value) => value ? "enabled" : "disabled";
 
     private static OfficeToolDescriptor CreateUpdatePlanTool() => new(
         "update_plan",

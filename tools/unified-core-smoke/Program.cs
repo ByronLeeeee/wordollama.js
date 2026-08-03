@@ -419,6 +419,46 @@ try
         Convert.ToBase64String(skillZip.ToArray())));
     Assert(imported.Name == "imported-skill" && localTools.ListSkills().Any(skill => skill.Name == imported.Name),
         "safe Skill ZIP import");
+    foreach (var alias in new[] { "legacy-folder", "duplicate-folder" })
+    {
+        var aliasRoot = Path.Combine(skillTestRoot, alias);
+        Directory.CreateDirectory(aliasRoot);
+        File.WriteAllText(
+            Path.Combine(aliasRoot, "SKILL.md"),
+            "---\nname: canonical-skill\ndescription: Canonical lookup smoke\n---\n\n# Canonical instructions");
+    }
+    Assert(localTools.ListSkills().Count(skill => skill.Name == "canonical-skill") == 1,
+        "Skill catalog deduplicates canonical names from legacy folders");
+    Assert((await localTools.ReadSkillAsync(new ReadSkillRequest("canonical-skill")))
+            .Contains("Canonical instructions", StringComparison.Ordinal),
+        "read_skill resolves the canonical SKILL.md name instead of requiring a matching folder");
+    var listedSkills = await localTools.ExecuteAsync(
+        "list_skills",
+        JsonSerializer.SerializeToElement(new { }));
+    Assert(listedSkills.Contains("canonical-skill", StringComparison.Ordinal),
+        "list_skills exposes the installed canonical catalog to Agent sessions");
+    var selectedSkillProvider = new CapturingProvider([
+        new ProviderChatResponse("fake", "fake", "skill loaded"),
+    ]);
+    var selectedSkillAgent = new AgentSession(
+        "selected-skill-smoke",
+        "https://localhost:3000",
+        new AgentStartRequest(
+            "use the selected skill",
+            Tools: localTools.GetToolDescriptors(),
+            SkillName: "canonical-skill"),
+        selectedSkillProvider,
+        [localTools]);
+    selectedSkillAgent.Start();
+    await foreach (var runtimeEvent in selectedSkillAgent.ReadEventsAsync())
+    {
+        if (runtimeEvent.Type == "completed") break;
+    }
+    Assert(selectedSkillProvider.LastRequest?.Messages.Any(message =>
+               message.Role == "system" &&
+               message.Content.Contains("explicitly selected Skill 'canonical-skill'", StringComparison.Ordinal) &&
+               message.Content.Contains("Canonical instructions", StringComparison.Ordinal)) == true,
+        "an explicitly selected Skill is preloaded before the first model turn");
     var traversalZip = CreateZip("../escape.txt", "escape");
     var traversalRejected = false;
     try
@@ -463,6 +503,10 @@ try
         "full-terminal audit stores only command hash and metadata, never sensitive arguments");
     localTools.DeleteSkill(imported.Name);
     Assert(!localTools.ListSkills().Any(skill => skill.Name == imported.Name), "Skill deletion");
+    localTools.DeleteSkill("canonical-skill");
+    Assert(!Directory.Exists(Path.Combine(skillTestRoot, "legacy-folder")) &&
+           !Directory.Exists(Path.Combine(skillTestRoot, "duplicate-folder")),
+        "deleting a canonical Skill cleans duplicate legacy directories");
 }
 finally
 {

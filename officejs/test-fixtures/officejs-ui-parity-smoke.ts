@@ -51,6 +51,7 @@ const taskpaneMarkup = `${html}\n${taskpaneApp}\n${taskpaneChrome}\n${contentWor
   .replaceAll("className=", "class=");
 const settingsHtml = readFileSync(resolve(repoRoot, "officejs/apps/addin/settings.html"), "utf8");
 const settingsApp = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/settings/SettingsApp.tsx"), "utf8");
+const setupAssistant = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/settings/SetupAssistant.tsx"), "utf8");
 const settingsDialogRpc = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/settings/dialog-rpc.ts"), "utf8");
 const runtimeClient = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/runtime-client.ts"), "utf8");
 const updateStatus = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/settings/update-status.ts"), "utf8");
@@ -61,10 +62,30 @@ const settingsChinese = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/
 const enLocale = JSON.parse(settingsEnglish) as { markdown?: Record<string, string> };
 const zhLocale = JSON.parse(settingsChinese) as { markdown?: Record<string, string> };
 const main = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/main.ts"), "utf8");
+const activeModel = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/active-model.ts"), "utf8");
 const manifest = readFileSync(resolve(repoRoot, "officejs/apps/addin/manifest.xml"), "utf8");
 const wordAdapter = readFileSync(
   resolve(repoRoot, "officejs/apps/addin/src/officejs-word-adapter.ts"),
   "utf8",
+);
+
+assert(
+  settingsApp.includes("<SetupAssistantDialog") &&
+    settingsApp.includes("<SetupHealthCenter") &&
+    setupAssistant.includes("inspectSetup") &&
+    setupAssistant.includes("runtime.fetchProviderModels") &&
+    setupAssistant.includes("runtime.activateProvider"),
+  "settings must keep the first-run guide and real diagnose/repair workflow",
+);
+
+assert(
+  activeModel.includes('[model.trim(), provider.trim()]') &&
+    main.includes("formatActiveModelLabel(") &&
+    settingsApp.includes('className="settings-active-model"') &&
+    settingsApp.includes("onProviderSettingsChange(view)") &&
+    settingsApp.includes("formatActiveModelLabel(activeModel.model, activeModel.provider)") &&
+    css.includes('.runtime-strip[data-state="connected"] { display: flex; }'),
+  "the active model must stay visible as model · provider in both settings and the task pane",
 );
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -411,8 +432,10 @@ assert(
 );
 assert(
   settingsApp.includes("runtime.autoPair()") &&
-    settingsApp.includes('t(`advanced.connection.${bridgeState}`)') &&
     settingsApp.includes("if (!runtime.hasPairing()) await runtime.autoPair()") &&
+    setupAssistant.includes("runtime.clearPairing()") &&
+    setupAssistant.includes("await runtime.autoPair()") &&
+    setupAssistant.includes("await inspectSetup(runtime)") &&
     main.includes("if (!runtime.hasPairing()) await runtime.autoPair()") &&
     main.includes("runtime.registerOfficeTools(tools.list())"),
   "the trusted local add-in must automatically pair with Desktop Bridge and register Word tools",
@@ -614,6 +637,8 @@ for (const interactionContract of [
   "restoreReviewState(",
   "buildReviewChunks(",
   "runtime.listSkills(",
+  "selectedAgentSkillName",
+  "skillName,",
   "word.applyPreciseRevision(",
   "loadTextPromptPresets(",
   "saveTextPromptPresets(",
@@ -801,6 +826,35 @@ assert(
 assert(
   wordAdapter.includes("this.askHumanHandler") && !wordAdapter.includes("globalThis.prompt"),
   "ask_human must use an in-pane handler because Word WebView does not reliably support window.prompt",
+);
+for (const [name, source] of [
+  ["settings", settingsApp],
+  ["setup assistant", setupAssistant],
+  ["content workflows", contentWorkflows],
+  ["translation", translationWorkspace],
+  ["custom prompts", legalWorkflows],
+] as const) {
+  const dialogCount = [...source.matchAll(/<dialog\b/gu)].length;
+  const modalDialogCount = [...source.matchAll(/<dialog\b[^>]*className="[^"]*\bmodal\b/gu)].length;
+  const modalBoxCount = [...source.matchAll(/className="modal-box\b/gu)].length;
+  assert(
+    dialogCount === modalDialogCount && dialogCount === modalBoxCount,
+    `${name} dialogs must use an outer modal with one inner modal-box`,
+  );
+  assert(
+    !/<dialog\b[^>]*className="[^"]*\bmodal-box\b/gu.test(source),
+    `${name} must not apply modal-box directly to a dialog element`,
+  );
+}
+assert(
+  main.includes('dialog.className = "human-prompt-dialog"') &&
+    main.includes('dialog.className = "human-prompt-dialog copy-fallback-dialog"') &&
+    !main.includes('dialog.className = "modal-box human-prompt-dialog') &&
+    [...main.matchAll(/document\.createElement\("dialog"\)/gu)].length === 3 &&
+    css.includes(".human-prompt-dialog {") &&
+    css.includes("opacity: 1;") &&
+    css.includes("scale: 1;"),
+  "native ask_human dialogs must remain visible instead of inheriting DaisyUI modal-box opacity",
 );
 assert(
   !main.includes("window.confirm(") && !main.includes("window.prompt("),

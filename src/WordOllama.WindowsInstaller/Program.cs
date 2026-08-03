@@ -37,6 +37,8 @@ internal static class Program
         @"Software\Microsoft\Office\16.0\Wef\Developer";
     private const string OfficeAddinId =
         "4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701";
+    private const string OfficeAddinDebugRegistryPath =
+        OfficeAddinRegistryPath + "\\" + OfficeAddinId;
     private const string LocalhostCertificateSubject = "CN=李伯阳/Boyang Li";
     private const string LegacyLocalhostCertificateSubject = "CN=WordOllama.JS localhost";
 
@@ -406,17 +408,18 @@ internal static class Program
             CreateStartupScript(launcherPath),
             Encoding.ASCII);
 
+        var processPath = Environment.ProcessPath
+            ?? throw new InvalidOperationException(
+                "Unable to resolve the setup executable.");
+        var uninstallPath = Path.Combine(
+            installRoot,
+            "WordOllama.JS-Uninstall.exe");
+        InstallUninstaller(processPath, uninstallPath);
+
         if (!skipRegistration)
         {
             RegisterOfficeAddin(
                 Path.Combine(target, "WordOllama.JS.xml"));
-            var processPath = Environment.ProcessPath
-                ?? throw new InvalidOperationException(
-                    "Unable to resolve the setup executable.");
-            var uninstallPath = Path.Combine(
-                installRoot,
-                "WordOllama.JS-Uninstall.exe");
-            File.Copy(processPath, uninstallPath, overwrite: true);
             RegisterUninstaller(
                 uninstallPath,
                 installRoot,
@@ -450,6 +453,34 @@ internal static class Program
                     WindowStyle = ProcessWindowStyle.Hidden,
                 });
             VerifyBridgeReadyAsync().GetAwaiter().GetResult();
+        }
+    }
+
+    private static void InstallUninstaller(
+        string setupPath,
+        string uninstallPath)
+    {
+        if (File.Exists(uninstallPath))
+        {
+            var existingAttributes = File.GetAttributes(uninstallPath);
+            if ((existingAttributes & FileAttributes.ReadOnly) != 0)
+            {
+                File.SetAttributes(
+                    uninstallPath,
+                    existingAttributes & ~FileAttributes.ReadOnly);
+            }
+        }
+
+        File.Copy(setupPath, uninstallPath, overwrite: true);
+
+        // File.Copy preserves source attributes. Downloaded or transferred setup
+        // executables can be read-only, which must not make the next upgrade fail.
+        var installedAttributes = File.GetAttributes(uninstallPath);
+        if ((installedAttributes & FileAttributes.ReadOnly) != 0)
+        {
+            File.SetAttributes(
+                uninstallPath,
+                installedAttributes & ~FileAttributes.ReadOnly);
         }
     }
 
@@ -571,6 +602,11 @@ internal static class Program
         rem discard a developer value while refreshing its WEF cache; login startup
         rem must restore it without reinstalling or touching COM/VSTO registrations.
         reg.exe add "HKCU\{OfficeAddinRegistryPath}" /v "{OfficeAddinId}" /t REG_SZ /d "%WORDOLLAMA_MANIFEST%" /f >nul 2>&1
+        rem Production startup must explicitly disable debugger wait flags left by
+        rem office-addin-debugging; Cancel only suppresses the prompt per instance.
+        reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseDirectDebugger" /t REG_DWORD /d 0 /f >nul 2>&1
+        reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseWebDebugger" /t REG_DWORD /d 0 /f >nul 2>&1
+        reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseLiveReload" /t REG_DWORD /d 0 /f >nul 2>&1
         start "WordOllama.JS Desktop Bridge" /b "%WORDOLLAMA_BRIDGE_EXE%" >>"%WORDOLLAMA_BRIDGE_ROOT%bridge.log" 2>&1
         """;
 
@@ -678,6 +714,24 @@ internal static class Program
             OfficeAddinId,
             Path.GetFullPath(manifestPath),
             RegistryValueKind.String);
+
+        using var debugKey = Registry.CurrentUser.CreateSubKey(
+            OfficeAddinDebugRegistryPath,
+            writable: true)
+            ?? throw new InvalidOperationException(
+                "Unable to create the Office Add-in debug registration.");
+        debugKey.SetValue(
+            "UseDirectDebugger",
+            0,
+            RegistryValueKind.DWord);
+        debugKey.SetValue(
+            "UseWebDebugger",
+            0,
+            RegistryValueKind.DWord);
+        debugKey.SetValue(
+            "UseLiveReload",
+            0,
+            RegistryValueKind.DWord);
     }
 
     private static void DeleteOfficeAddinRegistration(string installRoot)
@@ -698,6 +752,9 @@ internal static class Program
                 StringComparison.OrdinalIgnoreCase))
         {
             key.DeleteValue(OfficeAddinId, throwOnMissingValue: false);
+            key.DeleteSubKeyTree(
+                OfficeAddinId,
+                throwOnMissingSubKey: false);
         }
     }
 

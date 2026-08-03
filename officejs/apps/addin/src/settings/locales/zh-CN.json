@@ -1,7 +1,78 @@
 {
   "app": {
     "title": "WordOllama.JS",
-    "settings": "设置"
+    "settings": "设置",
+    "currentModel": "当前模型：{{model}}",
+    "noActiveModel": "未配置模型"
+  },
+  "setup": {
+    "open": "使用向导",
+    "eyebrow": "首次使用向导",
+    "progress": "设置进度",
+    "start": "开始设置",
+    "continue": "继续",
+    "retry": "重试",
+    "back": "上一步",
+    "later": "稍后再说",
+    "steps": {
+      "0": { "title": "欢迎使用 WordOllama.JS" },
+      "1": { "title": "检查本机连接" },
+      "2": { "title": "选择并连接模型" },
+      "3": { "title": "已经可以使用" }
+    },
+    "welcome": {
+      "description": "只需完成一次连接设置，翻译、写作和 Agent 就能直接使用当前模型。",
+      "private": "API Key 保存在系统密钥库中，不会显示在诊断报告里。",
+      "fast": "向导只显示开始使用所需的选项，高级参数以后仍可调整。",
+      "reversible": "所有设置都可以在“模型”和“诊断修复”中更改。"
+    },
+    "connection": {
+      "description": "先确认 Word 加载项可以安全连接本机 Desktop Bridge。",
+      "failed": "暂时无法连接本机服务。请确认 WordOllama.JS 已安装并正在运行，然后重试。"
+    },
+    "checks": {
+      "bridge": "本机服务",
+      "bridgeReady": "Desktop Bridge {{version}} 正常运行。",
+      "bridgeHelp": "未检测到 Desktop Bridge；请重新启动 WordOllama.JS 或运行安装程序修复。",
+      "pairing": "安全连接",
+      "pairingReady": "已自动建立当前 Word 会话的安全连接。",
+      "pairingHelp": "自动配对失败；点击“检查并修复”重新建立连接。",
+      "model": "当前模型",
+      "modelReady": "{{provider}} · {{model}} 已就绪。",
+      "modelHelp": "还没有可用模型；使用向导即可完成配置。",
+      "updates": "更新源",
+      "updatesReady": "已配置可信更新源。",
+      "updatesHelp": "当前安装包未配置自动更新源；不影响本机功能，可稍后手动更新。"
+    },
+    "model": {
+      "description": "选择您已经在使用的模型服务。向导会自动填写常用地址，并读取可用模型。",
+      "keyStoredLocally": "密钥只会发送给本机 Bridge，并加密保存到系统密钥库。",
+      "ollamaHint": "Ollama 在本机运行，不需要 API Key；请先确保 Ollama 已启动。",
+      "modelPlaceholder": "输入模型名称，或先读取模型",
+      "noModels": "连接成功，但没有返回可用模型。也可以手动输入模型名称。",
+      "fetchFailed": "无法读取模型",
+      "saveFailed": "无法保存模型",
+      "errorHint": "连接没有成功。请检查地址、密钥和网络后重试。",
+      "openAdvanced": "使用完整模型设置",
+      "saveAndUse": "保存并使用"
+    },
+    "complete": {
+      "description": "{{provider}} · {{model}} 已设为当前模型。以后打开 WordOllama.JS 时会自动完成本机初始化。",
+      "tryTitle": "现在可以试试",
+      "tryExample": "在 Word 中选中一段文字，点击“翻译”；或打开 Agent 输入“总结当前选区”。",
+      "finish": "完成"
+    },
+    "health": {
+      "title": "检查并修复",
+      "description": "一次检查本机服务、自动配对、当前模型和更新配置。",
+      "repair": "检查并修复",
+      "configureModel": "配置模型",
+      "copy": "复制诊断报告",
+      "copied": "诊断报告已复制",
+      "copyFailed": "复制失败",
+      "copyFallback": "浏览器阻止了自动复制。请在下面的报告中按 Ctrl+A，再按 Ctrl+C。",
+      "technicalDetails": "技术详情"
+    }
   },
   "common": {
     "save": "保存",
@@ -42,7 +113,7 @@
     "markdown": "Markdown",
     "skills": "Skills",
     "mcp": "MCP",
-    "advanced": "进阶",
+    "advanced": "诊断修复",
     "updates": "更新",
     "about": "关于",
     "openMenu": "打开设置分类",
@@ -298,7 +369,7 @@
     "save": "保存 Markdown 设置"
   },
   "advanced": {
-    "title": "进阶",
+    "title": "诊断修复",
     "localService": "本机服务",
     "reconnect": "重新连接",
     "resources": {
@@ -825,7 +896,12 @@
       "recoveryFound": "发现未完成的 Agent 任务",
       "resume": "继续任务",
       "discard": "放弃",
-      "emptyHint": "在下方输入指令，或通过菜单调用工具扩展",
+      "emptyHint": "从一个常用任务开始，或在下方直接告诉 Agent 要做什么。",
+      "configureModel": "配置模型",
+      "examples": {
+        "summarize": "总结当前选区的要点",
+        "polish": "润色当前选区并保留原意"
+      },
       "imageAlt": "待发送图片",
       "removeImage": "移除图片",
       "addImage": "添加图片",
@@ -890,7 +966,7 @@
       "pairRequired": "本机服务未连接",
       "providerRequired": "请配置模型提供商",
       "unavailable": "本机服务未连接",
-      "activeProvider": "{{provider}} · {{model}}",
+      "activeProvider": "{{model}} · {{provider}}",
       "activeProviderDetail": "当前模型提供商：{{provider}}；模型：{{model}}",
       "noLoadedModel": "未载入模型"
     },

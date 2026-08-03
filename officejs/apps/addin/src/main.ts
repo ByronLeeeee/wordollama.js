@@ -25,6 +25,7 @@ import {
   validateCompareFiles,
 } from "./document-compare";
 import { RuntimeClient } from "./runtime-client";
+import { formatActiveModelLabel } from "./active-model";
 import type {
   PairResponse,
   LawArticleResult,
@@ -347,6 +348,7 @@ let selectedCommandIndex = -1;
 let availableSkills: Array<{ name: string; description: string }> = [];
 let availableSkillsRefreshedAt = 0;
 let skillRefreshPending: Promise<void> | null = null;
+let selectedAgentSkillName = "";
 let bridgePaired = false;
 let bridgeCatalog: ToolCatalogResponse | null = null;
 let bridgeActivation: Promise<ToolCatalogResponse> | null = null;
@@ -464,10 +466,10 @@ async function refreshRuntimeStatus(): Promise<void> {
   try {
     const active = await runtime.getProviderRuntime();
     const model = active.models.join(", ");
-    const text = i18n.t("taskpane.runtime.activeProvider", {
-      provider: active.provider,
-      model: model || i18n.t("taskpane.runtime.noLoadedModel"),
-    });
+    const text = formatActiveModelLabel(
+      model || i18n.t("taskpane.runtime.noLoadedModel"),
+      active.provider,
+    );
     runtimeStatus.dataset.state = "connected";
     runtimeStatusText.textContent = text;
     runtimeStatus.title = i18n.t("taskpane.runtime.activeProviderDetail", {
@@ -606,6 +608,15 @@ async function handleReactSettingsMessage(
 
 required<HTMLButtonElement>("#open-settings").addEventListener("click", openReactSettingsDialog);
 required<HTMLButtonElement>("#close-settings").addEventListener("click", () => settingsDialog.close());
+required<HTMLButtonElement>("#agent-empty-setup").addEventListener("click", openReactSettingsDialog);
+document.querySelectorAll<HTMLButtonElement>("[data-agent-example-key]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const key = button.dataset.agentExampleKey;
+    if (!key) return;
+    agentRequirement.value = i18n.t(key);
+    agentRequirement.focus();
+  });
+});
 
 function activateUtilityPanel(name: "advanced" | "diagnostics"): void {
   document.querySelectorAll<HTMLElement>(".settings-panel").forEach((panel) => {
@@ -2361,7 +2372,7 @@ function requestPermissionDecision(message: string): Promise<PermissionDecision>
 function requestHumanInput(question: string): Promise<string | null> {
   return new Promise((resolve) => {
     const dialog = document.createElement("dialog");
-    dialog.className = "modal-box human-prompt-dialog";
+    dialog.className = "human-prompt-dialog";
     dialog.setAttribute("aria-labelledby", "human-prompt-title");
 
     const title = document.createElement("h2");
@@ -2425,7 +2436,7 @@ function requestConfirmation(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     const dialog = document.createElement("dialog");
-    dialog.className = "modal-box human-prompt-dialog";
+    dialog.className = "human-prompt-dialog";
 
     const title = document.createElement("h2");
     title.textContent = i18n.t("taskpane.dialog.confirmTitle");
@@ -2467,7 +2478,7 @@ function requestConfirmation(
 function showCopyFallback(titleText: string, value: string): Promise<void> {
   return new Promise((resolve) => {
     const dialog = document.createElement("dialog");
-    dialog.className = "modal-box human-prompt-dialog copy-fallback-dialog";
+    dialog.className = "human-prompt-dialog copy-fallback-dialog";
     const title = document.createElement("h2");
     title.textContent = titleText;
     const message = document.createElement("p");
@@ -2740,6 +2751,8 @@ async function runAgent(requirement: string): Promise<void> {
   activateTab("chat");
   const imageDataUrl = agentImageDataUrl;
   const goal = agentGoal.value.trim();
+  const skillName = selectedAgentSkillName.trim() || undefined;
+  selectedAgentSkillName = "";
   appendMessage(requirement, "user", imageDataUrl);
   agentRequirement.value = "";
   clearAgentImage();
@@ -2793,6 +2806,7 @@ async function runAgent(requirement: string): Promise<void> {
     }
     const session = await runtime.startAgent(requirement, tools.list(), {
       goal: goal || undefined,
+      skillName,
       imageDataUrl: imageDataUrl || undefined,
       requirePlanConfirmation: !currentGeneralSettings.suppressPlan,
       maxIterations: currentAgentSettings.unlimited
@@ -2920,6 +2934,7 @@ function executeCommandMenuItem(index: number): void {
   const item = commandMenuItems[index];
   if (!item) return;
   closeCommandMenu();
+  selectedAgentSkillName = "";
   agentRequirement.value = "";
   item.action();
 }
@@ -3014,6 +3029,7 @@ function renderCommandMenu(): void {
       label: `/skill:${skill.name}`,
       hint: skill.description || "Skill",
       action: () => {
+        selectedAgentSkillName = skill.name;
         agentRequirement.value = i18n.t("taskpane.agent.useSkill", { name: skill.name });
         agentRequirement.focus();
       },

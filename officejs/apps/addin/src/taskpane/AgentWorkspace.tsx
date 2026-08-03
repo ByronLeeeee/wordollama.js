@@ -67,6 +67,17 @@ export function AgentWorkspace() {
             <p className="muted" data-i18n="taskpane.agent.emptyHint">
               Enter an instruction below, or use the menu to invoke tools
             </p>
+            <div className="agent-empty-actions">
+              <button className="btn btn-sm agent-example-button" type="button" data-agent-example-key="taskpane.agent.examples.summarize" data-i18n="taskpane.agent.examples.summarize">
+                Summarize the selection
+              </button>
+              <button className="btn btn-sm agent-example-button" type="button" data-agent-example-key="taskpane.agent.examples.polish" data-i18n="taskpane.agent.examples.polish">
+                Polish the selection
+              </button>
+              <button id="agent-empty-setup" className="btn btn-ghost btn-sm" type="button" data-i18n="taskpane.agent.configureModel">
+                Configure a model
+              </button>
+            </div>
           </div>
         </div>
 

@@ -1,7 +1,78 @@
 {
   "app": {
     "title": "WordOllama.JS",
-    "settings": "Settings"
+    "settings": "Settings",
+    "currentModel": "Current model: {{model}}",
+    "noActiveModel": "No model configured"
+  },
+  "setup": {
+    "open": "Setup guide",
+    "eyebrow": "First-time setup",
+    "progress": "Setup progress",
+    "start": "Start setup",
+    "continue": "Continue",
+    "retry": "Try again",
+    "back": "Back",
+    "later": "Maybe later",
+    "steps": {
+      "0": { "title": "Welcome to WordOllama.JS" },
+      "1": { "title": "Check the local connection" },
+      "2": { "title": "Choose and connect a model" },
+      "3": { "title": "You're ready" }
+    },
+    "welcome": {
+      "description": "Connect a model once, then translation, writing, and Agent are ready whenever you open Word.",
+      "private": "API keys stay in your system credential vault and are never included in diagnostics.",
+      "fast": "The guide shows only what is needed to get started; advanced controls remain available later.",
+      "reversible": "You can change everything later under Models and Diagnose & repair."
+    },
+    "connection": {
+      "description": "First, verify that the Word add-in can securely reach the local Desktop Bridge.",
+      "failed": "The local service could not be reached. Make sure WordOllama.JS is installed and running, then try again."
+    },
+    "checks": {
+      "bridge": "Local service",
+      "bridgeReady": "Desktop Bridge {{version}} is running.",
+      "bridgeHelp": "Desktop Bridge was not detected. Restart WordOllama.JS or run the installer to repair it.",
+      "pairing": "Secure connection",
+      "pairingReady": "This Word session was paired automatically.",
+      "pairingHelp": "Automatic pairing failed. Run Diagnose & repair to reconnect.",
+      "model": "Current model",
+      "modelReady": "{{provider}} · {{model}} is ready.",
+      "modelHelp": "No working model is configured yet. The setup guide can configure one.",
+      "updates": "Update source",
+      "updatesReady": "A trusted update source is configured.",
+      "updatesHelp": "This package has no automatic update source. Local features still work; update manually when needed."
+    },
+    "model": {
+      "description": "Choose a model service you already use. The guide fills common endpoints and reads its available models.",
+      "keyStoredLocally": "The key is sent only to the local Bridge and encrypted in your system credential vault.",
+      "ollamaHint": "Ollama runs locally and needs no API key. Make sure Ollama is running first.",
+      "modelPlaceholder": "Enter a model name, or fetch models first",
+      "noModels": "The connection worked but returned no models. You can enter a model name manually.",
+      "fetchFailed": "Models could not be loaded",
+      "saveFailed": "The model could not be saved",
+      "errorHint": "The connection did not succeed. Check the endpoint, key, and network, then try again.",
+      "openAdvanced": "Use full model settings",
+      "saveAndUse": "Save and use"
+    },
+    "complete": {
+      "description": "{{provider}} · {{model}} is now active. WordOllama.JS will initialize the local connection automatically from now on.",
+      "tryTitle": "Try it now",
+      "tryExample": "Select text in Word and choose Translate, or open Agent and ask it to summarize the selection.",
+      "finish": "Finish"
+    },
+    "health": {
+      "title": "Diagnose & repair",
+      "description": "Check the local service, automatic pairing, active model, and update configuration in one place.",
+      "repair": "Check and repair",
+      "configureModel": "Configure a model",
+      "copy": "Copy diagnostic report",
+      "copied": "Diagnostic report copied",
+      "copyFailed": "Copy failed",
+      "copyFallback": "The browser blocked automatic copying. Select the report below with Ctrl+A, then press Ctrl+C.",
+      "technicalDetails": "Technical details"
+    }
   },
   "common": {
     "save": "Save",
@@ -42,7 +113,7 @@
     "markdown": "Markdown",
     "skills": "Skills",
     "mcp": "MCP",
-    "advanced": "Advanced",
+    "advanced": "Diagnose & repair",
     "updates": "Updates",
     "about": "About",
     "openMenu": "Open settings sections",
@@ -298,7 +369,7 @@
     "save": "Save Markdown settings"
   },
   "advanced": {
-    "title": "Advanced",
+    "title": "Diagnose & repair",
     "localService": "Local service",
     "reconnect": "Reconnect",
     "resources": {
@@ -825,7 +896,12 @@
       "recoveryFound": "Unfinished Agent task found",
       "resume": "Resume",
       "discard": "Discard",
-      "emptyHint": "Enter an instruction below, or use the menu to invoke tools",
+      "emptyHint": "Start with a common task, or tell Agent what you need below.",
+      "configureModel": "Configure a model",
+      "examples": {
+        "summarize": "Summarize the key points in the selection",
+        "polish": "Polish the selection while preserving its meaning"
+      },
       "imageAlt": "Image to send",
       "removeImage": "Remove image",
       "addImage": "Add image",
@@ -890,7 +966,7 @@
       "pairRequired": "Local service is not connected",
       "providerRequired": "Configure a model provider",
       "unavailable": "Local service is not connected",
-      "activeProvider": "{{provider}} · {{model}}",
+      "activeProvider": "{{model}} · {{provider}}",
       "activeProviderDetail": "Active provider: {{provider}}; model: {{model}}",
       "noLoadedModel": "No model loaded"
     },

@@ -141,7 +141,8 @@ public sealed record AgentStartRequest(
     string UiLocale = "en-US",
     string WritingProfile = "",
     string Goal = "",
-    string PermissionMode = "request");
+    string PermissionMode = "request",
+    string? SkillName = null);
 
 public sealed record AgentStartResponse(string SessionId, string Status);
 

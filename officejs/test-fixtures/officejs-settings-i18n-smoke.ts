@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 const repoRoot = resolve(import.meta.dirname, "../..");
 const settingsRoot = resolve(repoRoot, "officejs/apps/addin/src/settings");
 const app = readFileSync(resolve(settingsRoot, "SettingsApp.tsx"), "utf8");
+const setupAssistant = readFileSync(resolve(settingsRoot, "SetupAssistant.tsx"), "utf8");
 const bootstrap = readFileSync(resolve(settingsRoot, "main.tsx"), "utf8");
 const localeRuntime = readFileSync(resolve(settingsRoot, "i18n.ts"), "utf8");
 const sharedLocaleRuntime = readFileSync(
@@ -49,7 +50,7 @@ const missingEnglish = [...zh.keys()].filter((key) => !en.has(key));
 assert(missingChinese.length === 0, `zh-CN is missing keys: ${missingChinese.join(", ")}`);
 assert(missingEnglish.length === 0, `en-US is missing keys: ${missingEnglish.join(", ")}`);
 
-const usedKeys = [...app.matchAll(/\bt\(\s*"([^"]+)"/gu)].map((match) => match[1]);
+const usedKeys = [...`${app}\n${setupAssistant}`.matchAll(/\bt\(\s*"([^"]+)"/gu)].map((match) => match[1]);
 const runtimeKeys = [...runtimeClient.matchAll(/\btr\(\s*"([^"]+)"/gu)].map((match) => match[1]);
 const taskpaneRuntimeKeys = [...taskpaneRuntime.matchAll(/"(taskpane\.[^"]+)"/gu)]
   .map((match) => match[1]);
@@ -72,7 +73,7 @@ for (const [key, value] of en) {
   assert(zh.get(key)?.trim(), `zh-CN contains an empty value: ${key}`);
 }
 
-const implementationSource = `${app}\n${bootstrap}\n${localeRuntime}\n${sharedLocaleRuntime}\n${settingsHtml}`;
+const implementationSource = `${app}\n${setupAssistant}\n${bootstrap}\n${localeRuntime}\n${sharedLocaleRuntime}\n${settingsHtml}`;
 assert(!/[\u3400-\u9fff]/u.test(implementationSource), "settings implementation contains hard-coded CJK text");
 assert(
   !/[\u3400-\u9fff]/u.test(runtimeClient),

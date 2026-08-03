@@ -29,6 +29,7 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  WandSparkles,
   X,
 } from "lucide-react";
 import { ADDIN_VERSION } from "../contracts";
@@ -39,6 +40,7 @@ import type {
   MemoryItemView,
   ProviderProfileUpdate,
   ProviderProfileView,
+  ProviderSettingsView,
   ReviewSettingsView,
   ResourceDiagnosticsSnapshot,
   SkillSummary,
@@ -46,6 +48,11 @@ import type {
   UpdateRollbackStatus,
 } from "../contracts";
 import { RuntimeClient, RuntimeRequestError } from "../runtime-client";
+import {
+  activeModelFromSettings,
+  formatActiveModelLabel,
+  type ActiveModelIdentity,
+} from "../active-model";
 import {
   DEFAULT_MARKDOWN_SETTINGS,
   type MarkdownSettings,
@@ -62,6 +69,11 @@ import {
 } from "./dialog-rpc";
 import { FeatureIcon, type FeatureIconName } from "../taskpane/FeatureIcon";
 import { classifyUpdateResult } from "./update-status";
+import {
+  SETUP_DISMISSED_KEY,
+  SetupAssistantDialog,
+  SetupHealthCenter,
+} from "./SetupAssistant";
 
 type PageId =
   | "general"
@@ -807,7 +819,9 @@ function reasoningOptions(profile: ProviderProfileUpdate): string[] {
   return ["Auto"];
 }
 
-function ModelsPage() {
+function ModelsPage({ onProviderSettingsChange }: {
+  onProviderSettingsChange: (view: ProviderSettingsView) => void;
+}) {
   const { t, i18n } = useTranslation();
   const [profiles, setProfiles] = useState<ProviderProfileView[]>([]);
   const [activeId, setActiveId] = useState("");
@@ -827,6 +841,7 @@ function ModelsPage() {
       const view = await runtime.getProviderSettings();
       setProfiles(view.profiles);
       setActiveId(view.activeProviderId);
+      onProviderSettingsChange(view);
       setStatus(null);
     } catch (error) {
       setStatus(toStatus(error, "common.notConnected"));
@@ -838,9 +853,10 @@ function ModelsPage() {
   const patch = <K extends keyof ProviderProfileUpdate>(key: K, value: ProviderProfileUpdate[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
-  const applyView = (view: { profiles: ProviderProfileView[]; activeProviderId: string }) => {
+  const applyView = (view: ProviderSettingsView) => {
     setProfiles(view.profiles);
     setActiveId(view.activeProviderId);
+    onProviderSettingsChange(view);
   };
 
   const refreshModels = async () => {
@@ -1913,7 +1929,7 @@ function MarkdownPage() {
   );
 }
 
-function AdvancedPage() {
+function AdvancedPage({ onConfigureModel }: { onConfigureModel: () => void }) {
   const { t } = useTranslation();
   const [bridgeState, setBridgeState] = useState<"checking" | "connected" | "disconnected">("checking");
   const [resources, setResources] = useState<ResourceDiagnosticsSnapshot | null>(null);
@@ -1948,17 +1964,7 @@ function AdvancedPage() {
     <div className="settings-page">
       <PageHeading title={t("advanced.title")} />
       <div className="settings-grid">
-        <Card title={t("advanced.localService")}>
-          <div className={`alert ${bridgeState === "connected" ? "alert-success" : bridgeState === "disconnected" ? "alert-warning" : "alert-info"}`}>
-            <span>
-              <strong>{t(`advanced.connection.${bridgeState}`)}</strong>
-              <small className="block opacity-70">{t(`advanced.connection.${bridgeState}Hint`)}</small>
-            </span>
-          </div>
-          <div className="settings-actions">
-            <button className="btn btn-primary btn-sm" type="button" disabled={bridgeState === "checking"} onClick={() => void checkBridge()}>{t("advanced.reconnect")}</button>
-          </div>
-        </Card>
+        <SetupHealthCenter runtime={runtime} onConfigureModel={onConfigureModel} />
         <Card
           title={t("advanced.resources.title")}
           actions={<button className="btn btn-ghost btn-sm" type="button" disabled={resourcesLoading || bridgeState !== "connected"} onClick={() => void loadResources()}><RefreshCw size={14} className={resourcesLoading ? "animate-spin" : ""} />{t("advanced.resources.refresh")}</button>}
@@ -2172,7 +2178,21 @@ export function SettingsApp() {
   const [footerStatus, setFooterStatus] = useState<StatusState>(null);
   const [closeConfirmationOpen, setCloseConfirmationOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [activeModel, setActiveModel] = useState<ActiveModelIdentity | null>(null);
   const contentRef = useRef<HTMLElement>(null);
+
+  const updateActiveModel = useCallback((view: ProviderSettingsView) => {
+    setActiveModel(activeModelFromSettings(view));
+  }, []);
+
+  const refreshActiveModel = useCallback(async () => {
+    try {
+      updateActiveModel(await runtime.getProviderSettings());
+    } catch {
+      setActiveModel(null);
+    }
+  }, [updateActiveModel]);
 
   const register = useCallback((id: string, save: () => Promise<void>) => {
     const current = registrations.current.get(id);
@@ -2250,10 +2270,28 @@ export function SettingsApp() {
   }, [darkTheme]);
 
   useEffect(() => {
-    if (!runtime.hasPairing()) {
-      void runtime.autoPair().catch(() => undefined);
-    }
-  }, []);
+    const initialize = async () => {
+      try {
+        if (!runtime.hasPairing()) await runtime.autoPair();
+        const providers = await runtime.getProviderSettings();
+        updateActiveModel(providers);
+        const hasActiveModel = providers.profiles.some((profile) =>
+          profile.id === providers.activeProviderId && Boolean(profile.model.trim()));
+        if (!hasActiveModel && window.localStorage.getItem(SETUP_DISMISSED_KEY) !== "1") {
+          setSetupOpen(true);
+        }
+      } catch {
+        if (window.localStorage.getItem(SETUP_DISMISSED_KEY) !== "1") setSetupOpen(true);
+      }
+    };
+    void initialize();
+  }, [updateActiveModel]);
+
+  useEffect(() => {
+    const refresh = () => { void refreshActiveModel(); };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [refreshActiveModel]);
 
   useEffect(() => {
     if (!mobileNavOpen) return undefined;
@@ -2279,18 +2317,34 @@ export function SettingsApp() {
   ];
   const currentNavItem = groups.flatMap((group) => group.items).find((item) => item.id === page);
   const currentNavIcon = currentNavItem?.icon ?? "settings-general";
+  const activeModelLabel = activeModel
+    ? formatActiveModelLabel(activeModel.model, activeModel.provider)
+    : t("app.noActiveModel");
 
   return (
     <SettingsSaveContext.Provider value={saveContext}>
       <div className="settings-app" data-theme={darkTheme ? "wordollama-dark" : "wordollama"}>
         <header className="settings-header">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <span className="settings-brand-mark" aria-hidden="true">W</span>
             <div>
               <strong className="block text-sm">{t("app.title")}</strong>
               <span className="block text-[10px] opacity-55">{t("app.settings")}</span>
             </div>
           </div>
+          <div
+            className="settings-active-model"
+            role="status"
+            aria-live="polite"
+            aria-label={t("app.currentModel", { model: activeModelLabel })}
+            title={t("app.currentModel", { model: activeModelLabel })}
+          >
+            <span className="settings-active-model-dot" aria-hidden="true" />
+            <span className="settings-active-model-label">{activeModelLabel}</span>
+          </div>
+          <button className="btn btn-ghost btn-sm settings-setup-trigger" type="button" onClick={() => setSetupOpen(true)}>
+            <WandSparkles size={15} />{t("setup.open")}
+          </button>
         </header>
         <aside className={`settings-sidebar${mobileNavOpen ? " mobile-open" : ""}`} aria-label={t("app.settings")}>
           <button
@@ -2338,12 +2392,12 @@ export function SettingsApp() {
         </aside>
         <main ref={contentRef} className="settings-content">
           {visitedPages.has("general") ? <section hidden={page !== "general"}><GeneralPage onThemeChange={setDarkTheme} /></section> : null}
-          {visitedPages.has("models") ? <section hidden={page !== "models"}><ModelsPage /></section> : null}
+          {visitedPages.has("models") ? <section hidden={page !== "models"}><ModelsPage onProviderSettingsChange={updateActiveModel} /></section> : null}
           {visitedPages.has("agent") ? <section hidden={page !== "agent"}><AgentPage /></section> : null}
           {visitedPages.has("markdown") ? <section hidden={page !== "markdown"}><MarkdownPage /></section> : null}
           {visitedPages.has("skills") ? <section hidden={page !== "skills"}><SkillsPage /></section> : null}
           {visitedPages.has("mcp") ? <section hidden={page !== "mcp"}><McpPage /></section> : null}
-          {visitedPages.has("advanced") ? <section hidden={page !== "advanced"}><AdvancedPage /></section> : null}
+          {visitedPages.has("advanced") ? <section hidden={page !== "advanced"}><AdvancedPage onConfigureModel={() => navigateTo("models")} /></section> : null}
           {visitedPages.has("updates") ? <section hidden={page !== "updates"}><UpdatesPage /></section> : null}
           {visitedPages.has("about") ? <section hidden={page !== "about"}><AboutPage /></section> : null}
         </main>
@@ -2383,6 +2437,13 @@ export function SettingsApp() {
             </form>
           </dialog>
         ) : null}
+        <SetupAssistantDialog
+          runtime={runtime}
+          open={setupOpen}
+          onClose={() => setSetupOpen(false)}
+          onComplete={() => { setSetupOpen(false); void refreshActiveModel(); }}
+          onOpenModels={() => { setSetupOpen(false); navigateTo("models"); }}
+        />
       </div>
     </SettingsSaveContext.Provider>
   );

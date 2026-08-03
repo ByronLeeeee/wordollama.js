@@ -42,7 +42,7 @@ public sealed class LocalToolService : IInternalToolExecutor
     public string SkillsRoot => Path.GetFullPath(_policy.SkillsRoot);
 
     public bool IsKnownTool(string name) =>
-        name is "execute_command" or "run_python_script" or "run_terminal" or "grep" or "read_skill" ||
+        name is "execute_command" or "run_python_script" or "run_terminal" or "grep" or "list_skills" or "read_skill" ||
         (name == "fetch_url" && _policy.AllowHttpRequests);
 
     public IReadOnlyList<OfficeToolDescriptor> GetToolDescriptors()
@@ -112,8 +112,17 @@ public sealed class LocalToolService : IInternalToolExecutor
                 required = new[] { "root", "pattern" },
             })),
         new OfficeToolDescriptor(
+            "list_skills",
+            "List installed Skills by their canonical SKILL.md names and descriptions. Use this before choosing a Skill when the user did not specify an exact name.",
+            false,
+            JsonSerializer.SerializeToElement(new
+            {
+                type = "object",
+                properties = new { },
+            })),
+        new OfficeToolDescriptor(
             "read_skill",
-            "Read an authorized Skill.md file.",
+            "Read an installed Skill by its canonical name from SKILL.md. The canonical name may differ from its directory name.",
             false,
             JsonSerializer.SerializeToElement(new
             {
@@ -151,7 +160,10 @@ public sealed class LocalToolService : IInternalToolExecutor
         JsonElement arguments,
         CancellationToken cancellationToken = default)
     {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        };
         return name switch
         {
             "execute_command" => JsonSerializer.Serialize(await ExecuteCommandAsync(
@@ -166,6 +178,7 @@ public sealed class LocalToolService : IInternalToolExecutor
                 JsonSerializer.Deserialize<GrepRequest>(arguments.GetRawText(), options)
                     ?? throw new ArgumentException("Invalid grep arguments."),
                 cancellationToken)),
+            "list_skills" => JsonSerializer.Serialize(ListSkills(), options),
             "read_skill" => await ReadSkillAsync(
                 JsonSerializer.Deserialize<ReadSkillRequest>(arguments.GetRawText(), options)
                     ?? throw new ArgumentException("Invalid read_skill arguments."),
@@ -412,38 +425,12 @@ public sealed class LocalToolService : IInternalToolExecutor
         return await File.ReadAllTextAsync(referencePath, cancellationToken);
     }
 
-    public IReadOnlyList<SkillSummary> ListSkills()
-    {
-        if (!Directory.Exists(_policy.SkillsRoot))
-        {
-            return Array.Empty<SkillSummary>();
-        }
-
-        var skills = new List<SkillSummary>();
-        foreach (var file in Directory.EnumerateFiles(_policy.SkillsRoot, "SKILL.md", SearchOption.AllDirectories))
-        {
-            try
-            {
-                var authorizedFile = ValidateAuthorizedFile(file);
-                var content = File.ReadAllText(authorizedFile);
-                var name = Regex.Match(content, "(?m)^name:\\s*(?<value>.+?)\\s*$").Groups["value"].Value.Trim().Trim('"', '\'');
-                var description = Regex.Match(content, "(?m)^description:\\s*(?<value>.+?)\\s*$").Groups["value"].Value.Trim().Trim('"', '\'');
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    skills.Add(new SkillSummary(name, description));
-                }
-            }
-            catch (IOException)
-            {
-                // A changing skill is skipped from the catalog.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // Authorization is enforced when reading the skill.
-            }
-        }
-        return skills.OrderBy(skill => skill.Name, StringComparer.OrdinalIgnoreCase).ToArray();
-    }
+    public IReadOnlyList<SkillSummary> ListSkills() => DiscoverSkills()
+        .GroupBy(skill => skill.Name, StringComparer.OrdinalIgnoreCase)
+        .Select(group => group.First())
+        .OrderBy(skill => skill.Name, StringComparer.OrdinalIgnoreCase)
+        .Select(skill => new SkillSummary(skill.Name, skill.Description))
+        .ToArray();
 
     public SkillSummary ImportSkill(ImportSkillRequest request)
     {
@@ -521,22 +508,20 @@ public sealed class LocalToolService : IInternalToolExecutor
     {
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Skill name is required.");
         var skillsRoot = Path.GetFullPath(_policy.SkillsRoot);
-        var match = Directory.Exists(skillsRoot)
-            ? Directory.EnumerateFiles(skillsRoot, "SKILL.md", SearchOption.AllDirectories)
-                .Select(path => (path, content: File.ReadAllText(path)))
-                .FirstOrDefault(candidate =>
-                    string.Equals(
-                        Regex.Match(candidate.content, "(?m)^name:\\s*(?<value>.+?)\\s*$").Groups["value"].Value.Trim().Trim('"', '\''),
-                        name,
-                        StringComparison.OrdinalIgnoreCase))
-            : default;
-        if (string.IsNullOrEmpty(match.path)) throw new KeyNotFoundException($"Skill was not found: {name}");
-        var directory = Path.GetFullPath(Path.GetDirectoryName(match.path)!);
-        if (!IsUnderRoot(directory, skillsRoot) || string.Equals(directory, skillsRoot, StringComparison.OrdinalIgnoreCase))
+        var matches = DiscoverSkills()
+            .Where(skill => string.Equals(skill.Name, name, StringComparison.OrdinalIgnoreCase))
+            .Select(skill => skill.Directory)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (matches.Length == 0) throw new KeyNotFoundException($"Skill was not found: {name}");
+        foreach (var directory in matches)
         {
-            throw new LocalToolPolicyException("Skill deletion target is outside the skills root.");
+            if (!IsUnderRoot(directory, skillsRoot) || string.Equals(directory, skillsRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new LocalToolPolicyException("Skill deletion target is outside the skills root.");
+            }
         }
-        Directory.Delete(directory, recursive: true);
+        foreach (var directory in matches) Directory.Delete(directory, recursive: true);
     }
 
     private static string FindCommonArchiveRoot(IEnumerable<string> paths)
@@ -606,8 +591,53 @@ public sealed class LocalToolService : IInternalToolExecutor
         {
             throw new LocalToolPolicyException("Invalid skill name.");
         }
-        return ValidateAuthorizedPath(Path.Combine(_policy.SkillsRoot, skillName), mustExist: true);
+        var skills = DiscoverSkills();
+        var match = skills.FirstOrDefault(skill =>
+            string.Equals(skill.Name, skillName, StringComparison.OrdinalIgnoreCase));
+        match ??= skills.FirstOrDefault(skill =>
+            string.Equals(Path.GetFileName(skill.Directory), skillName, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+        {
+            throw new KeyNotFoundException($"Skill was not found: {skillName}");
+        }
+        return ValidateAuthorizedPath(match.Directory, mustExist: true);
     }
+
+    private IReadOnlyList<SkillEntry> DiscoverSkills()
+    {
+        if (!Directory.Exists(_policy.SkillsRoot)) return Array.Empty<SkillEntry>();
+        var skills = new List<SkillEntry>();
+        foreach (var file in Directory.EnumerateFiles(_policy.SkillsRoot, "SKILL.md", SearchOption.AllDirectories)
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var authorizedFile = ValidateAuthorizedFile(file);
+                var content = File.ReadAllText(authorizedFile);
+                var name = ReadFrontmatterValue(content, "name");
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                skills.Add(new SkillEntry(
+                    name,
+                    ReadFrontmatterValue(content, "description"),
+                    Path.GetFullPath(Path.GetDirectoryName(authorizedFile)!)));
+            }
+            catch (IOException)
+            {
+                // A changing skill is skipped from the catalog.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Authorization is enforced when reading the skill.
+            }
+        }
+        return skills;
+    }
+
+    private static string ReadFrontmatterValue(string content, string key) =>
+        Regex.Match(content, $"(?m)^{Regex.Escape(key)}:\\s*(?<value>.+?)\\s*$")
+            .Groups["value"].Value.Trim().Trim('"', '\'');
+
+    private sealed record SkillEntry(string Name, string Description, string Directory);
 
     private string ValidateOptionalWorkingDirectory(string? workingDirectory)
     {

@@ -4,6 +4,18 @@ WordOllama.JS 首发支持 Windows x64 和 Apple Silicon Mac。Ollama 是可选�
 使用在线模型时不需要安装 Ollama。安装后 Desktop Bridge 随当前用户登录启动，Word
 中的任务窗格不需要另开终端或 Vite。
 
+## 3 分钟开始使用
+
+1. 安装完成后完全退出 Word，再重新打开。
+2. 在 Word 的 `WordOllama.JS` 功能区打开任意功能；第一次进入设置时会自动出现“首次使用向导”。
+3. 向导会自动检查 Desktop Bridge 和安全配对。选择您已经使用的模型服务，填写 API Key
+   （本机 Ollama 不需要），点击“读取模型”，选择一个模型并完成设置。
+4. 在 Word 中选中一段文字并点击“翻译”验证，或打开 Agent 选择一个示例任务。
+
+如果某一步失败，打开“设置 > 诊断修复”，点击“检查并修复”。它会重新建立安全配对、
+检查当前模型和更新配置；仍无法解决时，点击“复制诊断报告”发给维护者。诊断报告不会包含
+API Key。下面的证书、哈希和平台说明主要供发布者或需要手动核验离线安装包的用户参考。
+
 ## Windows 安装
 
 1. 从正式下载页取得同一版本的安装器、SHA-256 和 WordOllama.JS 代码签名证书。
@@ -44,8 +56,9 @@ Mac 仅支持 Apple Silicon，不提供 Intel 构建。若以后改用 Developer
 
 ## 模型与首次使用
 
-- 打开“设置 > 模型 > 新增模型”，选择提供商，读取 `/models`（Ollama 使用其专用
-  模型接口），选择模型并保存。一个提供商可以保存任意多个模型。
+- 新用户优先使用自动出现的“首次使用向导”；也可以随时点击设置窗口右上角的“使用向导”。
+- 需要完整参数时，打开“设置 > 模型 > 新增模型”，选择提供商并读取模型（Ollama 使用其
+  专用模型接口），选择模型并保存。一个提供商可以保存任意多个模型。
 - 模型列表可切换、查看详情、修改或删除；没有激活模型时，AI 功能会要求先激活，
   不会静默回退到默认 Ollama。
 - API Key 保存到 Windows Credential Manager 或 macOS Keychain，不写入普通设置 JSON。
@@ -77,7 +90,7 @@ pwsh ./packaging/rollback-bridge.ps1 -InstallRoot <DesktopBridge 安装目录>
 - 已配置的 Ollama、本地 Word 工具、Skills、本地 MCP、隔离 Python/Node 工作区可离线
   使用；在线 Provider、网页读取和 Search MCP 会快速失败并保持其他本地功能可用。
 - 离线前应提前安装所需 Python/Node runtime、Ollama 模型、Skills 和 MCP 依赖。
-- Ollama 内存单独显示，不计入 Bridge 资源；可在“设置 > 进阶”按需刷新。
+- Ollama 内存单独显示，不计入 Bridge 资源；可在“设置 > 诊断修复”按需刷新。
 
 除上述 Office 宿主引导脚本外，任务窗格的 React/CSS/SVG、设置、Bridge API 和本地
 功能均随安装包在 localhost 提供；构建门禁会拒绝新增的远程字体、图片、脚本或样式。
