@@ -132,6 +132,7 @@ export function AgentWorkspace() {
               className="input input-sm"
               type="text"
               maxLength={500}
+              data-prompt-enhance
               placeholder="Define an outcome that may take multiple steps…"
               data-i18n-placeholder="taskpane.agent.goalPlaceholder"
               aria-label="Agent goal"
@@ -155,6 +156,7 @@ export function AgentWorkspace() {
               aria-label="Agent instruction"
               data-i18n-placeholder="taskpane.agent.instructionPlaceholder"
               data-i18n-aria-label="taskpane.agent.instruction"
+              data-prompt-enhance
             />
             <button
               id="agent-run"

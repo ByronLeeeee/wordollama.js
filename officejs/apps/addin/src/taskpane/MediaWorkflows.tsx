@@ -19,6 +19,7 @@ function HtmlAppWorkflow() {
           rows={4}
           placeholder="Describe the page, interactions, and visual requirements…"
           data-i18n-placeholder="taskpane.html.requirementsPlaceholder"
+          data-prompt-enhance
         />
       </div>
       <div className="task-primary-actions">
@@ -186,6 +187,7 @@ function ImageWorkflow() {
           rows={3}
           placeholder="For example: Extract the table and explain anomalous data…"
           data-i18n-placeholder="taskpane.image.requirementsPlaceholder"
+          data-prompt-enhance
         />
       </div>
       <div className="task-primary-actions">

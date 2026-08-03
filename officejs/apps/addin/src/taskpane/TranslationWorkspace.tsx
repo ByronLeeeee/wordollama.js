@@ -71,6 +71,7 @@ export function TranslationWorkspace() {
           type="text"
           placeholder="For example: use formal legal terminology"
           data-i18n-placeholder="taskpane.translation.instructionsPlaceholder"
+          data-prompt-enhance
         />
       </section>
 
@@ -194,7 +195,7 @@ export function TranslationWorkspace() {
           <ul id="translation-prompt-list" className="list bg-base-100 rounded-box workflow-prompt-list" />
           <div className="divider" />
           <label className="form-control"><span className="label-text" data-i18n="taskpane.text.promptName">Name</span><input id="translation-prompt-name" className="input input-bordered input-sm" type="text" /></label>
-          <label className="form-control"><span className="label-text" data-i18n="taskpane.text.promptContent">Prompt content</span><textarea id="translation-prompt-content" className="textarea textarea-bordered" rows={5} /></label>
+          <label className="form-control"><span className="label-text" data-i18n="taskpane.text.promptContent">Prompt content</span><textarea id="translation-prompt-content" className="textarea textarea-bordered" rows={5} data-prompt-enhance /></label>
           <div className="modal-action">
             <button id="translation-prompt-create" className="btn btn-primary btn-sm" type="button"><Plus size={14} aria-hidden="true" /><span data-i18n="taskpane.common.save">Save</span></button>
             <button id="translation-prompt-close" className="btn btn-ghost btn-sm" type="button" data-i18n="taskpane.common.close">Close</button>

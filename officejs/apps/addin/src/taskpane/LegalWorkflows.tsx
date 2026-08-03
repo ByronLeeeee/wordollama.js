@@ -267,7 +267,7 @@ function CustomPromptWorkflow() {
             </label>
             <label className="fieldset">
               <span className="fieldset-legend" data-i18n="taskpane.prompts.prompt">Prompt</span>
-              <textarea id="custom-prompt-text" className="textarea textarea-sm" rows={7} maxLength={20_000} data-i18n-placeholder="taskpane.prompts.promptPlaceholder" />
+              <textarea id="custom-prompt-text" className="textarea textarea-sm" rows={7} maxLength={20_000} data-i18n-placeholder="taskpane.prompts.promptPlaceholder" data-prompt-enhance />
             </label>
             <label className="label prompt-favorite-option"><input id="custom-prompt-favorite" className="checkbox checkbox-primary checkbox-sm" type="checkbox" /><span data-i18n="taskpane.prompts.favorite">Add to favorites</span></label>
           </div>

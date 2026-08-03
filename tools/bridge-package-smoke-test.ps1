@@ -704,7 +704,9 @@ function Assert-WindowsInstallerLifecycle {
         $launcher -notlike "*4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701*" -or
         $launcher -notlike '*UseDirectDebugger*REG_DWORD*/d 0*' -or
         $launcher -notlike '*UseWebDebugger*REG_DWORD*/d 0*' -or
-        $launcher -notlike '*UseLiveReload*REG_DWORD*/d 0*') {
+        $launcher -notlike '*UseLiveReload*REG_DWORD*/d 0*' -or
+        $launcher.IndexOf('Wef\Developer', [StringComparison]::OrdinalIgnoreCase) -gt
+            $launcher.IndexOf('certs\bridge.pfx', [StringComparison]::OrdinalIgnoreCase)) {
         throw "Bridge package smoke: Windows setup payload or version state is invalid."
     }
 
@@ -920,7 +922,9 @@ if ($hostRuntime -eq "win-x64") {
         $windowsInstallerProgram -notmatch 'ownership\.json' -or
         $windowsInstallerProgram -notmatch 'https-certificate-secret' -or
         $windowsInstallerProgram -notmatch 'TryReuseOwnedLocalhostCertificate' -or
-        $windowsInstallerProgram -notmatch 'rotate-localhost-certificate') {
+        $windowsInstallerProgram -notmatch 'rotate-localhost-certificate' -or
+        $windowsInstallerProgram -notmatch 'ScheduleOfficeAddinRegistrationRepair' -or
+        $windowsInstallerProgram -notmatch 'RepairOfficeAddinRegistrationAfterWordExit') {
         throw "Bridge package smoke: Windows installer lacks owned current-user localhost certificate provisioning."
     }
     if ($signedCandidateWorkflow -notmatch 'LocalSelfSignedMacRelease' -or

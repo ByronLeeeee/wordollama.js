@@ -423,6 +423,16 @@
     "noArtifact": "No installer is available for this platform"
   },
   "taskpane": {
+    "promptEnhance": {
+      "action": "Improve",
+      "optimizing": "Improving…",
+      "title": "Ask the current AI model to improve this prompt",
+      "required": "Enter a prompt before improving it.",
+      "empty": "The model returned an empty improved prompt.",
+      "tooLong": "The improved prompt exceeds the {{maxLength}} character limit.",
+      "system": "You are a prompt editor. Improve the user's instruction so another AI can execute it accurately. Preserve the user's intent, language, factual constraints, output format, and safety boundaries. Add useful context, success criteria, and an explicit output expectation only when they are implied. Do not answer or perform the instruction. Return only the improved prompt, with no preface, quotation marks, analysis, or Markdown fence.",
+      "request": "Improve the following prompt. Keep it within {{maxLength}} characters.\n\n{{prompt}}"
+    },
     "common": {
       "connectingWord": "Connecting to Word…",
       "stop": "Stop",

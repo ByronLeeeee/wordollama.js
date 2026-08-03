@@ -137,6 +137,7 @@ export function LegacyReviewWorkspace() {
           rows={3}
           placeholder="Add review priorities or writing requirements…"
           data-i18n-placeholder="taskpane.review.customRequirementsPlaceholder"
+          data-prompt-enhance
         />
       </div>
 
@@ -249,7 +250,7 @@ function LongDocumentReviewWorkspace() {
 
         <div className="form-group task-instructions review-instructions">
           <label htmlFor="review-instruction" data-i18n="taskpane.review.customRequirements">Custom requirements</label>
-          <textarea id="review-instruction" className="textarea textarea-bordered" rows={3} placeholder="Add review priorities or writing requirements…" data-i18n-placeholder="taskpane.review.customRequirementsPlaceholder" />
+          <textarea id="review-instruction" className="textarea textarea-bordered" rows={3} placeholder="Add review priorities or writing requirements…" data-i18n-placeholder="taskpane.review.customRequirementsPlaceholder" data-prompt-enhance />
         </div>
         <div className="review-run-actions">
           <button id="review-document" className="btn btn-primary btn-sm" type="button" data-i18n="taskpane.review.scanIssues">Scan issues</button>

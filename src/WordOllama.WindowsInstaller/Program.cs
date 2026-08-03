@@ -82,6 +82,15 @@ internal static class Program
             var startupRoot = ResolveStartupRoot(
                 options,
                 skipRegistration);
+            if (options.ContainsKey("--repair-office-registration"))
+            {
+                RepairOfficeAddinRegistrationAfterWordExit(
+                    installRoot,
+                    options.TryGetValue("--wait-pids", out var waitPids)
+                        ? waitPids
+                        : null);
+                return 0;
+            }
             if (options.ContainsKey("--uninstall"))
             {
                 Uninstall(
@@ -105,6 +114,9 @@ internal static class Program
                 "--rotate-localhost-certificate");
             var promptForLocalhostCertificateTrust =
                 !quiet && !trustLocalhostCertificate;
+            var runningWordProcessIds = Process.GetProcessesByName("WINWORD")
+                .Select(process => process.Id)
+                .ToArray();
             Install(
                 installRoot,
                 startupRoot,
@@ -113,8 +125,14 @@ internal static class Program
                 trustLocalhostCertificate,
                 promptForLocalhostCertificateTrust,
                 rotateLocalhostCertificate);
+            if (!skipRegistration && runningWordProcessIds.Length > 0)
+            {
+                ScheduleOfficeAddinRegistrationRepair(
+                    installRoot,
+                    runningWordProcessIds);
+            }
             Notify(InstallerText.Installed, quiet);
-            if (!quiet && Process.GetProcessesByName("WINWORD").Length > 0)
+            if (!quiet && runningWordProcessIds.Length > 0)
             {
                 Notify(InstallerText.RestartWord, quiet: false);
             }
@@ -144,7 +162,7 @@ internal static class Program
             var argument = args[index];
             if (argument is "--quiet" or "--no-start" or "--uninstall" or "--rollback" or
                 "--skip-registration" or "--trust-localhost-certificate" or
-                "--rotate-localhost-certificate")
+                "--rotate-localhost-certificate" or "--repair-office-registration")
             {
                 result[argument] = null;
                 continue;
@@ -159,7 +177,7 @@ internal static class Program
                 result[argument] = args[++index];
                 continue;
             }
-            if (argument is "--cleanup-root" or "--wait-pid")
+            if (argument is "--cleanup-root" or "--wait-pid" or "--wait-pids")
             {
                 if (index + 1 >= args.Length ||
                     args[index + 1].StartsWith("--", StringComparison.Ordinal))
@@ -262,10 +280,7 @@ internal static class Program
         if (metadata.SchemaVersion != 1 ||
             metadata.Product != "WordOllama.JS Desktop Bridge" ||
             metadata.Runtime != "win-x64" ||
-            string.IsNullOrWhiteSpace(metadata.Version) ||
-            !System.Text.RegularExpressions.Regex.IsMatch(
-                metadata.Version,
-                "^[0-9A-Za-z][0-9A-Za-z._-]*$") ||
+            !IsValidVersion(metadata.Version) ||
             !System.Text.RegularExpressions.Regex.IsMatch(
                 metadata.ArchiveSha256,
                 "^[0-9a-fA-F]{64}$"))
@@ -591,7 +606,6 @@ internal static class Program
         @echo off
         setlocal
         set "WORDOLLAMA_BRIDGE_ROOT=%~dp0"
-        if not exist "%WORDOLLAMA_BRIDGE_ROOT%certs\bridge.pfx" exit /b 0
         set /p "WORDOLLAMA_BRIDGE_VERSION="<"%WORDOLLAMA_BRIDGE_ROOT%current-version"
         if not defined WORDOLLAMA_BRIDGE_VERSION exit /b 2
         set "WORDOLLAMA_BRIDGE_EXE=%WORDOLLAMA_BRIDGE_ROOT%versions\%WORDOLLAMA_BRIDGE_VERSION%\WordOllama.DesktopBridge.exe"
@@ -607,6 +621,7 @@ internal static class Program
         reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseDirectDebugger" /t REG_DWORD /d 0 /f >nul 2>&1
         reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseWebDebugger" /t REG_DWORD /d 0 /f >nul 2>&1
         reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseLiveReload" /t REG_DWORD /d 0 /f >nul 2>&1
+        if not exist "%WORDOLLAMA_BRIDGE_ROOT%certs\bridge.pfx" exit /b 0
         start "WordOllama.JS Desktop Bridge" /b "%WORDOLLAMA_BRIDGE_EXE%" >>"%WORDOLLAMA_BRIDGE_ROOT%bridge.log" 2>&1
         """;
 
@@ -733,6 +748,84 @@ internal static class Program
             0,
             RegistryValueKind.DWord);
     }
+
+    private static void ScheduleOfficeAddinRegistrationRepair(
+        string installRoot,
+        IReadOnlyList<int> wordProcessIds)
+    {
+        var maintenanceExecutable = Path.Combine(
+            installRoot,
+            "WordOllama.JS-Uninstall.exe");
+        if (!File.Exists(maintenanceExecutable) || wordProcessIds.Count == 0)
+        {
+            return;
+        }
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = maintenanceExecutable,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+        };
+        startInfo.ArgumentList.Add("--quiet");
+        startInfo.ArgumentList.Add("--repair-office-registration");
+        startInfo.ArgumentList.Add("--wait-pids");
+        startInfo.ArgumentList.Add(string.Join(',', wordProcessIds));
+        _ = Process.Start(startInfo);
+    }
+
+    private static void RepairOfficeAddinRegistrationAfterWordExit(
+        string installRoot,
+        string? processIds)
+    {
+        foreach (var value in (processIds ?? string.Empty).Split(
+                     ',',
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!int.TryParse(value, out var processId) || processId <= 0)
+            {
+                continue;
+            }
+            try
+            {
+                using var process = Process.GetProcessById(processId);
+                if (string.Equals(
+                        process.ProcessName,
+                        "WINWORD",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    process.WaitForExit();
+                }
+            }
+            catch (ArgumentException)
+            {
+                // Word already exited before the repair helper started.
+            }
+        }
+
+        var currentVersionPath = Path.Combine(installRoot, "current-version");
+        if (!File.Exists(currentVersionPath))
+        {
+            throw new InvalidDataException("The installed version pointer is missing.");
+        }
+        var version = File.ReadAllText(currentVersionPath).Trim();
+        if (!IsValidVersion(version))
+        {
+            throw new InvalidDataException("The installed version pointer is invalid.");
+        }
+        var manifestPath = Path.Combine(
+            installRoot,
+            "versions",
+            version,
+            "WordOllama.JS.xml");
+        RegisterOfficeAddin(manifestPath);
+    }
+
+    private static bool IsValidVersion(string? version) =>
+        !string.IsNullOrWhiteSpace(version) &&
+        System.Text.RegularExpressions.Regex.IsMatch(
+            version,
+            "^[0-9A-Za-z][0-9A-Za-z._-]*$");
 
     private static void DeleteOfficeAddinRegistration(string installRoot)
     {

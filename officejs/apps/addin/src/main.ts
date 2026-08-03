@@ -163,6 +163,7 @@ function localizeStaticDocument(): void {
 localizeStaticDocument();
 i18n.on("languageChanged", () => {
   localizeStaticDocument();
+  localizePromptEnhancers();
   if (activeTextWorkflow) {
     renderWorkflowPromptSelect(required<HTMLSelectElement>("#workflow-prompt-select").value);
     renderWorkflowPromptList();
@@ -174,6 +175,90 @@ i18n.on("languageChanged", () => {
 const word = new OfficeJsWordAdapter(requestHumanInput);
 const tools = new OfficeJsToolRegistry(word);
 const runtime = new RuntimeClient();
+
+type PromptEnhanceField = HTMLInputElement | HTMLTextAreaElement;
+
+function localizePromptEnhancers(): void {
+  for (const button of document.querySelectorAll<HTMLButtonElement>(".prompt-enhance-button")) {
+    const label = button.querySelector<HTMLElement>(".prompt-enhance-label");
+    const text = button.dataset.loading === "true"
+      ? i18n.t("taskpane.promptEnhance.optimizing")
+      : i18n.t("taskpane.promptEnhance.action");
+    if (label) label.textContent = text;
+    button.title = i18n.t("taskpane.promptEnhance.title");
+    button.setAttribute("aria-label", button.title);
+  }
+}
+
+async function enhancePrompt(field: PromptEnhanceField, button: HTMLButtonElement): Promise<void> {
+  const prompt = field.value.trim();
+  if (!prompt) {
+    showError(new Error(i18n.t("taskpane.promptEnhance.required")));
+    field.focus();
+    return;
+  }
+
+  clearError();
+  button.disabled = true;
+  button.dataset.loading = "true";
+  localizePromptEnhancers();
+  try {
+    if (!runtime.hasPairing()) await activateBridgeSession();
+    const maxLength = field.maxLength > 0 ? field.maxLength : 20_000;
+    const result = await runtime.chat([
+      {
+        role: "system",
+        content: i18n.t("taskpane.promptEnhance.system"),
+      },
+      {
+        role: "user",
+        content: i18n.t("taskpane.promptEnhance.request", { prompt, maxLength }),
+      },
+    ]);
+    const enhanced = result.content.trim();
+    if (!enhanced) throw new Error(i18n.t("taskpane.promptEnhance.empty"));
+    if (enhanced.length > maxLength) {
+      throw new Error(i18n.t("taskpane.promptEnhance.tooLong", { maxLength }));
+    }
+    field.value = enhanced;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+    field.focus();
+    field.setSelectionRange(enhanced.length, enhanced.length);
+  } catch (error) {
+    showError(error);
+  } finally {
+    button.disabled = false;
+    delete button.dataset.loading;
+    localizePromptEnhancers();
+  }
+}
+
+function initializePromptEnhancers(): void {
+  for (const field of document.querySelectorAll<PromptEnhanceField>("[data-prompt-enhance]")) {
+    if (field.parentElement?.classList.contains("prompt-enhance-field")) continue;
+    const wrapper = document.createElement("div");
+    wrapper.className = "prompt-enhance-field";
+    field.before(wrapper);
+    wrapper.append(field);
+
+    const button = document.createElement("button");
+    button.className = "btn btn-ghost btn-xs prompt-enhance-button";
+    button.type = "button";
+    const icon = document.createElement("span");
+    icon.className = "prompt-enhance-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "✨";
+    const label = document.createElement("span");
+    label.className = "prompt-enhance-label";
+    button.append(icon, label);
+    button.addEventListener("click", () => void enhancePrompt(field, button));
+    wrapper.append(button);
+  }
+  localizePromptEnhancers();
+}
+
+initializePromptEnhancers();
 
 async function getReleaseTestIdentity(): Promise<ReleaseTestIdentity> {
   try {

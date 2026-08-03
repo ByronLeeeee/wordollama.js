@@ -21,6 +21,16 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Office.js Ribbon smoke failed: ${message}`);
 }
 
+assert(
+  compactManifest.includes('<bt:SetName="AddinCommands"MinVersion="1.1"/>') &&
+    !compactManifest.includes('<bt:SetName="WordApi"MinVersion="1.1"/>'),
+  "Ribbon VersionOverrides must require AddinCommands 1.1 instead of repeating WordApi",
+);
+assert(
+  compactManifest.includes('<CustomTabid="WordOllama.JS.Tab">'),
+  "WordOllama.JS commands must be installed as a persistent custom Ribbon tab",
+);
+
 for (const baseline of [
   "CreateButton",
   "BtnModifyText",

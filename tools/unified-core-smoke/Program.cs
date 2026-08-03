@@ -336,6 +336,17 @@ Assert(
     !chatReasoningHandler.LastRequestBody.Contains("\"max_tokens\"", StringComparison.Ordinal) &&
     !chatReasoningHandler.LastRequestBody.Contains("\"temperature\"", StringComparison.Ordinal),
     "Chat Completions reasoning uses reasoning_effort and max_completion_tokens");
+using (var compatibleRequest = JsonDocument.Parse(chatReasoningHandler.LastRequestBody!))
+{
+    var message = compatibleRequest.RootElement.GetProperty("messages")[0];
+    Assert(
+        message.GetProperty("role").GetString() == "user" &&
+        message.GetProperty("content").GetString() == "Think." &&
+        !message.TryGetProperty("tool_call_id", out _) &&
+        !message.TryGetProperty("name", out _) &&
+        !message.TryGetProperty("tool_calls", out _),
+        "OpenAI-compatible plain messages omit null tool fields for strict llama.cpp parsers");
+}
 
 var claudeHandler = new JsonCaptureHandler(
     """{"content":[{"type":"thinking","thinking":"summary","signature":"signed-thinking"},{"type":"tool_use","id":"call-1","name":"lookup","input":{"q":"x"}}]}""");

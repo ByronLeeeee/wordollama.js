@@ -49,6 +49,7 @@ const taskpaneApp = readFileSync(
 );
 const taskpaneMarkup = `${html}\n${taskpaneApp}\n${taskpaneChrome}\n${contentWorkflows}\n${translationWorkspace}\n${mediaWorkflows}\n${legalWorkflows}\n${agentWorkspace}\n${reviewWorkspace}\n${utilityDialog}`
   .replaceAll("className=", "class=");
+const compactTaskpaneMarkup = taskpaneMarkup.replace(/\s+/g, " ");
 const settingsHtml = readFileSync(resolve(repoRoot, "officejs/apps/addin/settings.html"), "utf8");
 const settingsApp = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/settings/SettingsApp.tsx"), "utf8");
 const setupAssistant = readFileSync(resolve(repoRoot, "officejs/apps/addin/src/settings/SetupAssistant.tsx"), "utf8");
@@ -91,6 +92,34 @@ assert(
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Office.js UI parity smoke failed: ${message}`);
 }
+
+for (const promptFieldId of [
+  "agent-goal",
+  "agent-requirement",
+  "workflow-instruction",
+  "workflow-prompt-content",
+  "table-requirement",
+  "translation-instructions",
+  "translation-prompt-content",
+  "html-app-prompt",
+  "image-prompt",
+  "custom-prompt-text",
+  "review-instruction",
+]) {
+  assert(
+    new RegExp(`<(?:input|textarea)[^>]*id="${promptFieldId}"[^>]*data-prompt-enhance`).test(compactTaskpaneMarkup),
+    `prompt input ${promptFieldId} must expose the AI improve action`,
+  );
+}
+assert(
+  main.includes("initializePromptEnhancers()") &&
+    main.includes("await runtime.chat([") &&
+    main.includes('field.dispatchEvent(new Event("input"') &&
+    css.includes(".prompt-enhance-button") &&
+    settingsEnglish.includes('"promptEnhance"') &&
+    settingsChinese.includes('"promptEnhance"'),
+  "prompt improvement must call the active model, write back the result, and stay localized",
+);
 
 assert(
   html.includes('src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"'),

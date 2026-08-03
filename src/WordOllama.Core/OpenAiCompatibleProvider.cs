@@ -506,19 +506,29 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
                 new { type = "image_url", image_url = new { url = message.ImageDataUrl } },
             };
         }
-        return new
+        var payload = new Dictionary<string, object?>
         {
-            role = message.Role,
-            content,
-            tool_call_id = message.ToolCallId,
-            name = message.Name,
-            tool_calls = message.ToolCalls?.Select(call => new
+            ["role"] = message.Role,
+            ["content"] = content,
+        };
+        if (!string.IsNullOrWhiteSpace(message.ToolCallId))
+        {
+            payload["tool_call_id"] = message.ToolCallId;
+        }
+        if (!string.IsNullOrWhiteSpace(message.Name))
+        {
+            payload["name"] = message.Name;
+        }
+        if (message.ToolCalls is { Count: > 0 })
+        {
+            payload["tool_calls"] = message.ToolCalls.Select(call => new
             {
                 id = call.Id,
                 type = "function",
                 function = new { name = call.Name, arguments = call.Arguments.GetRawText() },
-            }),
-        };
+            }).ToArray();
+        }
+        return payload;
     }
 
     private void AddCommonChatOptions(

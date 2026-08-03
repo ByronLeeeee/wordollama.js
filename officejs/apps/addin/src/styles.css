@@ -92,6 +92,44 @@ button { cursor: pointer; }
 .textarea {
   resize: vertical;
 }
+.prompt-enhance-field {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.prompt-enhance-field > :is(input, textarea) {
+  width: 100%;
+  padding-right: 72px;
+}
+.prompt-enhance-field > textarea {
+  padding-bottom: 32px;
+}
+.prompt-enhance-button {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 1;
+  display: inline-flex;
+  min-height: 24px;
+  gap: 3px;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--canvas) 92%, transparent);
+  color: var(--accent);
+  backdrop-filter: blur(4px);
+}
+.prompt-enhance-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+  background: var(--accent-soft);
+}
+.prompt-enhance-button[data-loading="true"] .prompt-enhance-icon {
+  animation: prompt-enhance-pulse 900ms ease-in-out infinite alternate;
+}
+@keyframes prompt-enhance-pulse {
+  to { transform: scale(1.18); opacity: .55; }
+}
 * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 *::-webkit-scrollbar { width: 6px; height: 6px; }
 *::-webkit-scrollbar-track { background: transparent; }
@@ -296,9 +334,11 @@ button { cursor: pointer; }
 .command-item strong { font-size: 11px; }
 .command-item span { color: #64748b; font-size: 10px; }
 .composer-row { min-width: 0; align-items: flex-end; gap: 6px; padding: 2px 7px 7px 10px; }
+.composer-row .prompt-enhance-field { flex: 1 1 auto; }
 .goal-toggle { margin-left: auto; gap: 5px; min-height: 28px; height: 28px; }
 .agent-goal-row { padding: 3px 8px 5px; }
 .agent-goal-row .input { width: 100%; }
+.agent-goal-row .prompt-enhance-button { top: 50%; bottom: auto; transform: translateY(-50%); }
 .composer textarea { flex: 1 1 auto; width: auto; min-width: 0; min-height: 42px; max-height: 140px; margin: 0; padding: 8px 2px; resize: vertical; border: 0; outline: 0; background: transparent; }
 .send-button { width: 34px; height: 34px; padding: 0; border-radius: 10px; }
 
@@ -652,6 +692,7 @@ button.translation-swap-button:hover {
 .task-instructions > textarea {
   min-height: 36px;
 }
+.task-instructions > .prompt-enhance-field :is(input, textarea) { min-height: 36px; }
 .task-primary-actions,
 .task-result-actions {
   display: flex;

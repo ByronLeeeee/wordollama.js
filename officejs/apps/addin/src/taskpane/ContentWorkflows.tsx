@@ -64,6 +64,7 @@ function TextWorkflow() {
             rows={4}
             placeholder="Add tone, length, terminology, or formatting requirements…"
             data-i18n-placeholder="taskpane.text.instructionsPlaceholder"
+            data-prompt-enhance
           />
         </div>
         <div className="workflow-prompt-preferences">
@@ -154,7 +155,7 @@ function TextWorkflow() {
           </label>
           <label className="form-control">
             <span className="label-text" data-i18n="taskpane.text.promptContent">Prompt content</span>
-            <textarea id="workflow-prompt-content" className="textarea textarea-bordered" rows={6} />
+            <textarea id="workflow-prompt-content" className="textarea textarea-bordered" rows={6} data-prompt-enhance />
           </label>
           <div className="modal-action">
             <button id="workflow-prompt-create" className="btn btn-primary btn-sm" type="button">
@@ -250,6 +251,7 @@ function TableWorkflow() {
           rows={3}
           placeholder="Add column names, sorting, merging, or wording requirements…"
           data-i18n-placeholder="taskpane.table.requirementsPlaceholder"
+          data-prompt-enhance
         />
         </div>
       </details>
