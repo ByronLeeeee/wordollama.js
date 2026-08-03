@@ -282,6 +282,8 @@ builder.Services.AddSingleton<ResourceDiagnosticsService>();
 builder.Services.AddSingleton<IDocumentComparer, OpenXmlDocumentComparer>();
 builder.Services.AddSingleton<LegalArticleService>();
 builder.Services.AddSingleton<AutomaticMemoryService>();
+builder.Services.AddSingleton<SkillGenerationService>();
+builder.Services.AddSingleton<ProviderCapabilityProbeService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AutomaticMemoryService>());
 builder.Services.AddSingleton<IAgentRuntime>(sp => new AgentRuntime(
     sp.GetRequiredService<IModelProvider>(),
@@ -1314,6 +1316,46 @@ app.MapPost("/skills/import", (
     }
     catch (Exception exception) when (
         exception is ArgumentException or InvalidDataException or InvalidOperationException or IOException)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/providers/probe", async (
+    HttpRequest httpRequest,
+    ProviderCapabilityProbeRequest request,
+    BridgeSessionStore sessions,
+    ProviderCapabilityProbeService probe,
+    CancellationToken cancellationToken) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers["Origin"].FirstOrDefault();
+    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
+    try { return Results.Ok(await probe.ProbeAsync(request.ProviderProfileId, cancellationToken)); }
+    catch (KeyNotFoundException exception) { return Results.NotFound(new { error = exception.Message }); }
+    catch (OperationCanceledException) { return Results.Problem("Provider capability probe timed out.", statusCode: 504); }
+});
+
+app.MapPost("/skills/generate", async (
+    HttpRequest httpRequest,
+    GenerateSkillRequest request,
+    BridgeSessionStore sessions,
+    SkillGenerationService generator,
+    CancellationToken cancellationToken) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers["Origin"].FirstOrDefault();
+    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
+    try
+    {
+        return Results.Ok(await generator.GenerateAsync(request, cancellationToken));
+    }
+    catch (NoActiveModelException exception)
+    {
+        return Results.Problem(exception.Message, statusCode: StatusCodes.Status409Conflict);
+    }
+    catch (Exception exception) when (
+        exception is ArgumentException or InvalidOperationException or JsonException)
     {
         return Results.BadRequest(new { error = exception.Message });
     }

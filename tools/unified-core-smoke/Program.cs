@@ -430,6 +430,16 @@ try
         Convert.ToBase64String(skillZip.ToArray())));
     Assert(imported.Name == "imported-skill" && localTools.ListSkills().Any(skill => skill.Name == imported.Name),
         "safe Skill ZIP import");
+    var created = localTools.CreateSkill(new CreateSkillRequest(
+        "Contract Review Helper",
+        "Review contracts with the available Word tools when the user requests a repeatable contract-risk workflow.",
+        "---\nname: ignored\ndescription: ignored\nextra: rejected\n---\n\n# Contract review\n\nRead the document before making changes. Cite evidence and verify every write."));
+    var createdContent = await localTools.ReadSkillAsync(new ReadSkillRequest(created.Name));
+    Assert(created.Name == "contract-review-helper" &&
+           createdContent.StartsWith("---\nname: contract-review-helper\n", StringComparison.Ordinal) &&
+           !createdContent.Contains("extra:", StringComparison.Ordinal) &&
+           localTools.GetToolDescriptors().Any(tool => tool.Name == "create_skill" && tool.IsWriteOperation),
+        "AI-created Skills use normalized names, strict frontmatter, and an explicit write tool");
     foreach (var alias in new[] { "legacy-folder", "duplicate-folder" })
     {
         var aliasRoot = Path.Combine(skillTestRoot, alias);

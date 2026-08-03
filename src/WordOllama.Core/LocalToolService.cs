@@ -42,7 +42,7 @@ public sealed class LocalToolService : IInternalToolExecutor
     public string SkillsRoot => Path.GetFullPath(_policy.SkillsRoot);
 
     public bool IsKnownTool(string name) =>
-        name is "execute_command" or "run_python_script" or "run_terminal" or "grep" or "list_skills" or "read_skill" ||
+        name is "execute_command" or "run_python_script" or "run_terminal" or "grep" or "list_skills" or "read_skill" or "create_skill" ||
         (name == "fetch_url" && _policy.AllowHttpRequests);
 
     public IReadOnlyList<OfficeToolDescriptor> GetToolDescriptors()
@@ -133,6 +133,22 @@ public sealed class LocalToolService : IInternalToolExecutor
                     reference = new { type = "string" },
                 },
                 required = new[] { "skill_name" },
+            })),
+        new OfficeToolDescriptor(
+            "create_skill",
+            "Create or update a reusable WordOllama Skill after the user explicitly asks for one. The SKILL.md must describe when it triggers and how to use the available Office tools; do not include chat history or task-specific secrets.",
+            true,
+            JsonSerializer.SerializeToElement(new
+            {
+                type = "object",
+                properties = new
+                {
+                    name = new { type = "string", description = "Lowercase hyphen-case name, at most 64 characters." },
+                    description = new { type = "string", description = "What the Skill does and the requests that should trigger it." },
+                    skill_markdown = new { type = "string", description = "Complete SKILL.md with only name and description in YAML frontmatter." },
+                    overwrite = new { type = "boolean" },
+                },
+                required = new[] { "name", "description", "skill_markdown" },
             }))
         };
         if (_policy.AllowHttpRequests)
@@ -183,6 +199,9 @@ public sealed class LocalToolService : IInternalToolExecutor
                 JsonSerializer.Deserialize<ReadSkillRequest>(arguments.GetRawText(), options)
                     ?? throw new ArgumentException("Invalid read_skill arguments."),
                 cancellationToken),
+            "create_skill" => JsonSerializer.Serialize(CreateSkill(
+                JsonSerializer.Deserialize<CreateSkillRequest>(arguments.GetRawText(), options)
+                    ?? throw new ArgumentException("Invalid create_skill arguments.")), options),
             "fetch_url" when _policy.AllowHttpRequests => JsonSerializer.Serialize(await SafeWebFetcher.FetchAsync(
                 JsonSerializer.Deserialize<FetchUrlToolRequest>(arguments.GetRawText(), options)
                     ?? throw new ArgumentException("Invalid fetch_url arguments."),
@@ -431,6 +450,61 @@ public sealed class LocalToolService : IInternalToolExecutor
         .OrderBy(skill => skill.Name, StringComparer.OrdinalIgnoreCase)
         .Select(skill => new SkillSummary(skill.Name, skill.Description))
         .ToArray();
+
+    public SkillSummary CreateSkill(CreateSkillRequest request)
+    {
+        var name = NormalizeSkillName(request.Name);
+        var description = request.Description?.Trim() ?? string.Empty;
+        if (description.Length is < 12 or > 1000)
+            throw new ArgumentException("Skill description must contain 12 to 1000 characters.");
+        var markdown = NormalizeSkillMarkdown(request.SkillMarkdown, name, description);
+        Directory.CreateDirectory(_policy.SkillsRoot);
+        var root = Path.GetFullPath(_policy.SkillsRoot);
+        var directory = Path.GetFullPath(Path.Combine(root, name));
+        if (!IsUnderRoot(directory, root)) throw new LocalToolPolicyException("Skill target escaped the Skills root.");
+        if (Directory.Exists(directory) && !request.Overwrite)
+            throw new InvalidOperationException($"Skill already exists: {name}");
+
+        var staging = Path.Combine(root, ".create-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(staging);
+            File.WriteAllText(Path.Combine(staging, "SKILL.md"), markdown, new UTF8Encoding(false));
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+            Directory.Move(staging, directory);
+            staging = string.Empty;
+            return new SkillSummary(name, description);
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(staging) && Directory.Exists(staging)) Directory.Delete(staging, recursive: true);
+        }
+    }
+
+    private static string NormalizeSkillName(string? value)
+    {
+        var name = Regex.Replace((value ?? string.Empty).Trim().ToLowerInvariant(), "[^a-z0-9-]+", "-").Trim('-');
+        name = Regex.Replace(name, "-{2,}", "-");
+        if (name.Length is < 2 or > 64 || !Regex.IsMatch(name, "^[a-z0-9]+(?:-[a-z0-9]+)*$"))
+            throw new ArgumentException("Skill name must use lowercase letters, digits and hyphens and be at most 64 characters.");
+        return name;
+    }
+
+    private static string NormalizeSkillMarkdown(string? value, string name, string description)
+    {
+        var markdown = (value ?? string.Empty).Trim();
+        if (markdown.StartsWith("```", StringComparison.Ordinal))
+        {
+            markdown = Regex.Replace(markdown, "^```(?:markdown|md)?\\s*", string.Empty, RegexOptions.IgnoreCase);
+            markdown = Regex.Replace(markdown, "\\s*```$", string.Empty);
+        }
+        if (markdown.Length is < 80 or > 64 * 1024)
+            throw new ArgumentException("SKILL.md must contain 80 bytes to 64 KiB of focused instructions.");
+        var body = Regex.Replace(markdown, "\\A---\\s*[\\s\\S]*?\\s*---\\s*", string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(body)) throw new ArgumentException("SKILL.md body is empty.");
+        var safeDescription = description.Replace("\r", " ").Replace("\n", " ").Replace("\"", "\\\"");
+        return $"---\nname: {name}\ndescription: \"{safeDescription}\"\n---\n\n{body}\n";
+    }
 
     public SkillSummary ImportSkill(ImportSkillRequest request)
     {

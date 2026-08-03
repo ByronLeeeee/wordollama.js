@@ -121,6 +121,19 @@ public sealed record ProviderRuntimeResponse(
     string Type,
     IReadOnlyList<string> Models);
 
+public sealed record ProviderCapabilityProbeRequest(string ProviderProfileId);
+
+public sealed record ProviderCapabilityProbeResponse(
+    string ProviderProfileId,
+    bool Models,
+    bool Chat,
+    bool Streaming,
+    bool ToolCalling,
+    bool VisionConfigured,
+    bool JsonConfigured,
+    long LatencyMilliseconds,
+    IReadOnlyDictionary<string, string> Errors);
+
 public sealed record AgentStartRequest(
     string UserRequirement,
     string? Model = null,
@@ -231,6 +244,27 @@ public sealed record SkillSummary(string Name, string Description);
 
 public sealed record ImportSkillRequest(string FileName, string ZipBase64);
 
+public sealed record CreateSkillRequest(
+    string Name,
+    string Description,
+    string SkillMarkdown,
+    bool Overwrite = false);
+
+public sealed record GenerateSkillRequest(
+    string Requirement,
+    string TaskResult = "",
+    string UserFeedback = "",
+    string? SuggestedName = null,
+    IReadOnlyList<string>? ToolsUsed = null,
+    IReadOnlyList<OfficeToolDescriptor>? OfficeTools = null,
+    string UiLocale = "en-US");
+
+public sealed record GeneratedSkillResponse(
+    string Name,
+    string Description,
+    string SkillMarkdown,
+    bool Saved);
+
 public sealed record LocalToolResponse(
     int ExitCode,
     string Stdout,
@@ -307,3 +341,9 @@ public sealed record RuntimeEvent(
     string? RequestId = null,
     string? Message = null,
     JsonElement? Data = null);
+
+public sealed record AgentSource(
+    string Url,
+    string Title,
+    string Tool,
+    DateTimeOffset RetrievedAt);

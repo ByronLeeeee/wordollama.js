@@ -2273,3 +2273,25 @@ progress::-webkit-progress-value {
   background: var(--color-error);
   border-color: color-mix(in oklab, var(--color-error) 70%, black);
 }
+.agent-sources {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.agent-sources ul {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.agent-source-link {
+  display: inline;
+  height: auto;
+  max-width: 100%;
+  min-height: 0;
+  overflow-wrap: anywhere;
+  padding: 0;
+  text-align: left;
+  white-space: normal;
+}

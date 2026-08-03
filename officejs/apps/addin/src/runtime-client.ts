@@ -14,8 +14,11 @@ import {
   type AgentCheckpoint,
   type AgentRecoveryDescriptor,
   type SkillSummary,
+  type GenerateSkillRequest,
+  type GeneratedSkillResponse,
   type ProviderModelsResponse,
   type ProviderRuntimeResponse,
+  type ProviderCapabilityProbeResponse,
   type OllamaModelProgress,
   type ReviewSettingsView,
   type ProviderProfileUpdate,
@@ -740,6 +743,22 @@ export class RuntimeClient {
 
   async listMcpServers(): Promise<McpServerView[]> {
     return this.settingsRequest("/mcp/servers");
+  }
+
+  async probeProvider(providerProfileId: string): Promise<ProviderCapabilityProbeResponse> {
+    return this.settingsRequest("/providers/probe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ providerProfileId }),
+    });
+  }
+
+  async generateSkill(request: GenerateSkillRequest): Promise<GeneratedSkillResponse> {
+    return this.settingsRequest("/skills/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
   }
 
   async importMcpJson(json: string): Promise<McpImportResult> {

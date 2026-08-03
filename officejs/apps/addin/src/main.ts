@@ -434,6 +434,7 @@ let availableSkills: Array<{ name: string; description: string }> = [];
 let availableSkillsRefreshedAt = 0;
 let skillRefreshPending: Promise<void> | null = null;
 let selectedAgentSkillName = "";
+let forceSkillCreationForNextRun = false;
 let bridgePaired = false;
 let bridgeCatalog: ToolCatalogResponse | null = null;
 let bridgeActivation: Promise<ToolCatalogResponse> | null = null;
@@ -2687,6 +2688,9 @@ async function consumeAgentSession(
   let successfulWordWrites = 0;
   const toolActivities = new Map<string, HTMLDivElement>();
   const approvedForAgentRun = new Set<string>();
+  const sources = new Map<string, { url: string; title: string; tool: string }>();
+  const usedTools = new Set<string>();
+  let latestAgentText = "";
   const writeToolNames = new Set(
     tools.list().filter((tool) => tool.isWriteOperation).map((tool) => tool.name),
   );
@@ -2723,6 +2727,21 @@ async function consumeAgentSession(
         appendMessage(i18n.t("taskpane.agent.planCancelled"), "system");
       }
       await runtime.confirmAgentPlan(sessionId, approved);
+    } else if (event.type === "plan_updated") {
+      const plan = event.data as { steps?: string[] } | undefined;
+      const steps = Array.isArray(plan?.steps) ? plan.steps : [];
+      appendMessage(i18n.t("taskpane.agent.planUpdated", {
+        plan: steps.map((step, index) => `${index + 1}. ${step}`).join("\n"),
+      }), "system");
+    } else if (event.type === "context_compacted") {
+      appendMessage(i18n.t("taskpane.agent.contextCompacted"), "system");
+    } else if (event.type === "source") {
+      const source = event.data as { url?: string; title?: string; tool?: string };
+      if (source.url) sources.set(source.url, {
+        url: source.url,
+        title: source.title || source.url,
+        tool: source.tool || "external",
+      });
     } else if (event.type === "permission_request") {
       const permission = event.data as { callId: string; name: string; params: unknown };
       const permissionScopeKey = buildPermissionScopeKey(permission.name, permission.params);
@@ -2756,6 +2775,7 @@ async function consumeAgentSession(
       if (!streamingBubble) streamingBubble = appendMessage("", "agent");
       const raw = (streamingBubble.dataset.raw ?? "") + event.message;
       streamingBubble.dataset.raw = raw;
+      latestAgentText = raw;
       streamingBubble.innerHTML = markdownToHtml(raw, currentMarkdownOptions());
       agentOutput.scrollTop = agentOutput.scrollHeight;
     } else if (event.type === "tool_call") {
@@ -2771,6 +2791,7 @@ async function consumeAgentSession(
         "activity",
       );
       toolActivities.set(call.callId, activity);
+      usedTools.add(call.name);
       if (call.execution === "bridge") continue;
       try {
         const result = await tools.execute(call.name, call.params || {});
@@ -2803,6 +2824,13 @@ async function consumeAgentSession(
       else appendMessage(text, result.isError ? "error-message" : "activity");
     } else if (event.type === "completed" || event.type === "cancelled") {
       clearAgentRecovery();
+      if (event.type === "completed" && sources.size > 0) appendAgentSources([...sources.values()]);
+      if (event.type === "completed") appendCreateSkillAction({
+        requirement,
+        taskResult: latestAgentText || event.message || "",
+        toolsUsed: [...usedTools],
+      }, forceSkillCreationForNextRun);
+      forceSkillCreationForNextRun = false;
       if (event.type === "completed" && successfulWordWrites > 0) {
         const settings = readLocalSettings("wordollama-general-settings", {
           suppressDiff: false,
@@ -2828,6 +2856,70 @@ async function consumeAgentSession(
       throw new Error(event.message || i18n.t("taskpane.agent.executionFailed"));
     }
   }
+}
+
+function openAgentSource(url: string): void {
+  const officeUi = typeof Office === "undefined" ? undefined : Office.context?.ui as Office.UI & {
+    openBrowserWindow?: (target: string) => void;
+  };
+  if (officeUi?.openBrowserWindow) officeUi.openBrowserWindow(url);
+  else window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function appendAgentSources(sources: Array<{ url: string; title: string; tool: string }>): void {
+  const bubble = appendMessage("", "system");
+  bubble.classList.add("agent-sources");
+  const heading = document.createElement("strong");
+  heading.textContent = i18n.t("taskpane.agent.sourcesTitle");
+  const list = document.createElement("ul");
+  for (const source of sources) {
+    const item = document.createElement("li");
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "btn btn-link btn-xs agent-source-link";
+    link.textContent = source.title || source.url;
+    link.title = `${source.url} · ${source.tool}`;
+    link.addEventListener("click", () => openAgentSource(source.url));
+    item.append(link);
+    list.append(item);
+  }
+  bubble.append(heading, list);
+}
+
+function appendCreateSkillAction(
+  task: { requirement: string; taskResult: string; toolsUsed: string[] },
+  runImmediately = false,
+): void {
+  const bubble = appendMessage(i18n.t("taskpane.agent.skillReviewHint"), "action");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn btn-primary btn-sm";
+  button.textContent = i18n.t("taskpane.agent.createSkillFromTask");
+  const feedback = document.createElement("textarea");
+  feedback.className = "textarea textarea-sm w-full";
+  feedback.rows = 2;
+  feedback.placeholder = i18n.t("taskpane.agent.skillFeedbackPlaceholder");
+  const generate = async () => {
+    button.disabled = true;
+    button.textContent = i18n.t("taskpane.agent.creatingSkill");
+    try {
+      const result = await runtime.generateSkill({
+        ...task,
+        userFeedback: feedback.value.trim(),
+        officeTools: tools.list(),
+        uiLocale: i18n.resolvedLanguage?.toLowerCase().startsWith("zh") ? "zh-CN" : "en-US",
+      });
+      await refreshAvailableSkills();
+      bubble.textContent = i18n.t("taskpane.agent.skillCreated", { name: result.name });
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = i18n.t("taskpane.agent.createSkillFromTask");
+      showError(error);
+    }
+  };
+  button.addEventListener("click", () => void generate());
+  bubble.append(feedback, button);
+  if (runImmediately) void generate();
 }
 
 async function runAgent(requirement: string): Promise<void> {
@@ -2896,7 +2988,7 @@ async function runAgent(requirement: string): Promise<void> {
       requirePlanConfirmation: !currentGeneralSettings.suppressPlan,
       maxIterations: currentAgentSettings.unlimited
         ? 0
-        : Math.max(1, Math.min(1000, Number(currentAgentSettings.iterations ?? currentAgentSettings.maxIterations) || 20)),
+        : Math.max(1, Math.min(200, Number(currentAgentSettings.iterations ?? currentAgentSettings.maxIterations) || 20)),
       executionMode,
       allowExternalTools: legacyExternalTools,
       allowLocalTools: currentAgentSettings.allowLocalTools || legacyExternalTools,
@@ -3073,6 +3165,15 @@ function renderCommandMenu(): void {
             agentRequirement.focus();
           })
           .catch(showError);
+      },
+    },
+    {
+      label: "/make-skill",
+      hint: i18n.t("taskpane.agent.makeSkillHint"),
+      action: () => {
+        forceSkillCreationForNextRun = true;
+        agentRequirement.value = i18n.t("taskpane.agent.makeSkillPrompt");
+        agentRequirement.focus();
       },
     },
     {

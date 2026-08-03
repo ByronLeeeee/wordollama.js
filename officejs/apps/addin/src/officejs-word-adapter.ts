@@ -16,6 +16,7 @@ export interface SearchResult {
   keyword: string;
   count: number;
   matches: string[];
+  locations: Array<{ paragraph: number; text: string; context: string }>;
 }
 
 export interface DocumentOverview {
@@ -334,10 +335,28 @@ export class OfficeJsWordAdapter {
         matchWholeWord: false,
       });
       results.load("items/text");
+      const paragraphs = context.document.body.paragraphs;
+      paragraphs.load("items");
       await context.sync();
-
       const matches = results.items.slice(0, 10).map((range) => range.text);
-      return { keyword, count: results.items.length, matches };
+      const locations: Array<{ paragraph: number; text: string; context: string }> = [];
+      for (const [index, paragraph] of paragraphs.items.entries()) {
+        paragraph.load("text");
+        if (locations.length >= 20) break;
+      }
+      await context.sync();
+      for (const [index, paragraph] of paragraphs.items.entries()) {
+        const text = paragraph.text.replace(/[\r\a]+$/g, "");
+        const matchAt = text.toLocaleLowerCase().indexOf(keyword.toLocaleLowerCase());
+        if (matchAt < 0) continue;
+        locations.push({
+          paragraph: index + 1,
+          text: text.slice(matchAt, matchAt + Math.max(keyword.length, 120)),
+          context: text.slice(Math.max(0, matchAt - 80), matchAt + keyword.length + 80),
+        });
+        if (locations.length >= 20) break;
+      }
+      return { keyword, count: results.items.length, matches, locations };
     });
   }
 
@@ -345,13 +364,15 @@ export class OfficeJsWordAdapter {
     return Word.run(async (context) => {
       const body = context.document.body;
       const paragraphs = body.paragraphs;
-      body.load("text");
-      paragraphs.load("items/text");
+      paragraphs.load("items");
+      await context.sync();
+      const previewParagraphs = paragraphs.items.slice(0, 2);
+      previewParagraphs.forEach((paragraph) => paragraph.load("text"));
       await context.sync();
 
       return {
         paragraphCount: paragraphs.items.length,
-        preview: paragraphs.items.slice(0, 2).map((paragraph) => paragraph.text.trim()),
+        preview: previewParagraphs.map((paragraph) => paragraph.text.trim()),
       };
     });
   }
@@ -373,17 +394,19 @@ export class OfficeJsWordAdapter {
     }
     return Word.run(async (context) => {
       const paragraphs = context.document.body.paragraphs;
-      paragraphs.load("items/text");
+      paragraphs.load("items");
       await context.sync();
       const boundedEnd = Math.min(end, paragraphs.items.length);
       if (start > paragraphs.items.length) {
         throw new Error(`paragraph ${start} is out of range (total ${paragraphs.items.length})`);
       }
+      const selected = paragraphs.items.slice(start - 1, boundedEnd);
+      selected.forEach((paragraph) => paragraph.load("text"));
+      await context.sync();
       return {
         start,
         end: boundedEnd,
-        paragraphs: paragraphs.items
-          .slice(start - 1, boundedEnd)
+        paragraphs: selected
           .map((paragraph) => paragraph.text.replace(/[\r\a]+$/g, "")),
       };
     });
@@ -396,7 +419,7 @@ export class OfficeJsWordAdapter {
   ): Promise<void> {
     await Word.run(async (context) => {
       const paragraphs = context.document.body.paragraphs;
-      paragraphs.load("items/text");
+      paragraphs.load("items/text,items/style");
       await context.sync();
       if (paragraphIndex > 0) {
         const resolved = resolveReviewAnchorIndex(
@@ -726,13 +749,19 @@ export class OfficeJsWordAdapter {
       paragraphs.load("items/text");
       await context.sync();
       const entries: Array<{ start: number; end: number; summary: string }> = [];
-      for (let index = 0; index < paragraphs.items.length; index += 10) {
-        const chunk = paragraphs.items.slice(index, index + 10);
-        const summary = (chunk[0]?.text ?? "").replace(/[\r\a]+$/g, "").trim();
+      const headingIndexes = paragraphs.items
+        .map((paragraph, index) => ({ index, style: paragraph.style, text: paragraph.text.replace(/[\r\a]+$/g, "").trim() }))
+        .filter((item) => /^(?:Heading|标题)\s*[1-9]$/i.test(item.style));
+      const boundaries = headingIndexes.length ? headingIndexes.map((item) => item.index) :
+        paragraphs.items.map((_, index) => index).filter((index) => index % 10 === 0);
+      for (let boundary = 0; boundary < boundaries.length; boundary += 1) {
+        const index = boundaries[boundary];
+        const next = boundaries[boundary + 1] ?? paragraphs.items.length;
+        const summary = paragraphs.items[index]?.text.replace(/[\r\a]+$/g, "").trim() ?? "";
         entries.push({
           start: index + 1,
-          end: Math.min(index + 10, paragraphs.items.length),
-          summary: summary.length > 80 ? `${summary.slice(0, 80)}...` : summary,
+          end: next,
+          summary: summary.length > 120 ? `${summary.slice(0, 120)}...` : summary,
         });
       }
       return { paragraphCount: paragraphs.items.length, entries };
@@ -1101,13 +1130,20 @@ export class OfficeJsWordAdapter {
   async checkCrossReferences(): Promise<Array<{ reference: string; found: boolean }>> {
     return Word.run(async (context) => {
       const body = context.document.body;
+      const paragraphs = body.paragraphs;
       body.load("text");
+      paragraphs.load("items/text");
       await context.sync();
       const text = body.text;
       const references = new Set<string>();
       const pattern = /(?:第\s*[一二三四五六七八九十百千万\d]+条|Section\s+[\d.]+)/gi;
       for (const match of text.matchAll(pattern)) references.add(match[0]);
-      return [...references].map((reference) => ({ reference, found: true }));
+      const normalizedStarts = paragraphs.items
+        .map((paragraph) => paragraph.text.trim().replace(/\s+/g, "").toLocaleLowerCase());
+      return [...references].map((reference) => ({
+        reference,
+        found: normalizedStarts.some((text) => text.startsWith(reference.replace(/\s+/g, "").toLocaleLowerCase())),
+      }));
     });
   }
 
@@ -1117,6 +1153,7 @@ export class OfficeJsWordAdapter {
       const matches = context.document.body.search(anchor, { matchCase: false, matchWholeWord: false });
       matches.load("items");
       await context.sync();
+      if (matches.items.length > 1) throw new Error(`anchor is ambiguous (${matches.items.length} matches): ${anchor}`);
       const range = matches.items[0];
       if (!range) throw new Error(`anchor not found: ${anchor}`);
       range.insertText(`\n${text}`, Word.InsertLocation.after);
@@ -1150,11 +1187,11 @@ export class OfficeJsWordAdapter {
     });
   }
 
-  async validateCitation(citation: string): Promise<{ citation: string; valid: boolean; reason?: string }> {
+  async validateCitation(citation: string): Promise<{ citation: string; valid: boolean; verified: boolean; check: "format-only"; reason?: string }> {
     const valid = /(?:\b(?:19|20)\d{2}\b|\d{4}年).{0,80}(?:第[一二三四五六七八九十百千万\d]+条|Section\s+\d+)/i.test(citation);
     return valid
-      ? { citation, valid: true }
-      : { citation, valid: false, reason: i18n.t("taskpane.wordAdapter.invalidCitationReason") };
+      ? { citation, valid: true, verified: false, check: "format-only" }
+      : { citation, valid: false, verified: false, check: "format-only", reason: i18n.t("taskpane.wordAdapter.invalidCitationReason") };
   }
 
   async insertImage(base64: string, altText?: string): Promise<void> {

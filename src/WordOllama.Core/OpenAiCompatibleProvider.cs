@@ -120,7 +120,7 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
         };
         AddCommonChatOptions(payload, request);
 
-        using var response = await _httpClient.PostAsJsonAsync(
+        using var response = await ProviderHttpRetry.PostAsJsonAsync(_httpClient,
             "chat/completions",
             payload,
             cancellationToken);
@@ -147,7 +147,7 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
         string model,
         CancellationToken cancellationToken)
     {
-        using var response = await _httpClient.PostAsJsonAsync(
+        using var response = await ProviderHttpRetry.PostAsJsonAsync(_httpClient,
             "responses",
             BuildResponsesPayload(request, model),
             cancellationToken);

@@ -130,6 +130,13 @@ pwsh ./tools/unified-smoke-test.ps1 `
 Agent、Provider、MCP、Skills、文档比较、加密恢复、OAuth PKCE、更新门禁和真实
 Bridge 重启持久化。
 
+Agent 对长任务采用 30 分钟/200 轮硬预算，并会在上下文接近模型窗口时压缩较早的
+工具结果。联网搜索、URL 获取、MCP/向量检索返回的外部 URL 会显示为可点击的来源卡片。
+任务完成后可以填写反馈并将成功流程整理为 Skill；也可以使用 `/make-skill`，或在
+设置的 Skills 页面直接描述需求，由模型根据当前 Office.js 工具目录生成并校验
+`SKILL.md`。模型详情中的“能力体检”会实际检查模型列表、普通对话、流式响应和原生
+工具调用，适合诊断 llama.cpp、LM Studio、vLLM 等兼容接口。
+
 如果当前网络可以访问 Microsoft manifest 验证服务，可去掉
 `-SkipManifestValidation`。
 

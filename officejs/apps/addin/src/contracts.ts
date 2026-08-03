@@ -108,6 +108,28 @@ export interface SkillSummary {
   description: string;
 }
 
+export interface GenerateSkillRequest {
+  requirement: string;
+  taskResult?: string;
+  userFeedback?: string;
+  suggestedName?: string;
+  toolsUsed?: string[];
+  officeTools?: OfficeToolDescriptor[];
+  uiLocale?: "en-US" | "zh-CN";
+}
+
+export interface GeneratedSkillResponse extends SkillSummary {
+  skillMarkdown: string;
+  saved: boolean;
+}
+
+export interface AgentSource {
+  url: string;
+  title: string;
+  tool: string;
+  retrievedAt: string;
+}
+
 export interface ProviderModelsResponse {
   provider: string;
   models: string[];
@@ -117,6 +139,18 @@ export interface ProviderRuntimeResponse {
   provider: string;
   type: string;
   models: string[];
+}
+
+export interface ProviderCapabilityProbeResponse {
+  providerProfileId: string;
+  models: boolean;
+  chat: boolean;
+  streaming: boolean;
+  toolCalling: boolean;
+  visionConfigured: boolean;
+  jsonConfigured: boolean;
+  latencyMilliseconds: number;
+  errors: Record<string, string>;
 }
 
 export interface OllamaModelProgress {

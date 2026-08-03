@@ -85,6 +85,7 @@ try {
     Invoke-NpmChecked -NpmArguments @("run", "test:pairing-session") -Label "Office.js shared pairing session"
     Invoke-NpmChecked -NpmArguments @("run", "test:permission-scope") -Label "Office.js Agent permission scope"
     Invoke-NpmChecked -NpmArguments @("run", "test:offline") -Label "Office.js offline product boundary"
+    Invoke-NpmChecked -NpmArguments @("run", "test:agent-evolution") -Label "Office.js Agent sources and Skill creator"
     Invoke-NpmChecked -NpmArguments @("run", "bundle") -Label "Office.js production bundle"
     if (-not $SkipManifestValidation) {
         Invoke-NpmChecked -NpmArguments @("run", "validate") -Label "Office.js manifest validation"

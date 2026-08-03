@@ -39,11 +39,15 @@ public sealed class AgentSession
     private readonly string _languageMode;
     private readonly string _uiLocale;
     private readonly string _permissionMode;
+    private readonly DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
+    private readonly Dictionary<string, AgentSource> _sources = new(StringComparer.OrdinalIgnoreCase);
     private bool _awaitingPlanConfirmation;
     private bool _planWasPresented;
     private int _iterations;
     private bool _completed;
     private AgentCheckpoint? _checkpoint;
+    private int _toolCallCount;
+    private int _contextCompactions;
 
     public AgentSession(
         string id,
@@ -67,7 +71,7 @@ public sealed class AgentSession
         _onCompleted = onCompleted;
         _tools = request.Tools ?? Array.Empty<OfficeToolDescriptor>();
         _requirePlanConfirmation = request.RequirePlanConfirmation;
-        _maxIterations = request.MaxIterations <= 0 ? int.MaxValue : Math.Clamp(request.MaxIterations, 1, 1000);
+        _maxIterations = request.MaxIterations <= 0 ? 200 : Math.Clamp(request.MaxIterations, 1, 200);
         _executionMode = NormalizeExecutionMode(request.ExecutionMode);
         // The legacy aggregate switch remains a compatibility fallback for
         // settings written before permissions were split by capability.
@@ -117,8 +121,10 @@ public sealed class AgentSession
                 "The active Microsoft Word document is available only through the Office tools " +
                 "such as get_selection, get_doc_overview, read_paragraphs, and read_large_chunk. " +
                  "Never use isolated-workspace file tools to read the active Word document. " +
+                  "When external search, vector retrieval, MCP retrieval, or URL fetching is used, ground factual claims in the returned evidence and cite the source URLs in the final answer. Never invent a source. " +
                  "Installed Skills are instruction packages that extend your workflow; they are not Office add-ins. " +
-                 "Use list_skills when the user asks for a Skill without an exact canonical name, and read_skill before following one. " +
+                  "Use list_skills when the user asks for a Skill without an exact canonical name, and read_skill before following one. " +
+                  "When the user asks to create a reusable Skill, use create_skill with concise instructions derived from the requirement, successful workflow, available Office tools, and explicit feedback. Never include document text, secrets, personal data, or raw conversation history in a Skill. " +
                  "If a Skill needs a tool that is not available in this session, state which Agent capability (local tools, network tools, or MCP) must be enabled. " +
                  "Never dismiss a Skill request by saying that you are merely a Word plugin. " +
                  (_requirePlanConfirmation
@@ -262,7 +268,8 @@ public sealed class AgentSession
         try
         {
             if (!_isRecovered) await InitializeSkillContextAsync();
-            while (!_cancellation.IsCancellationRequested && _iterations++ < _maxIterations)
+            while (!_cancellation.IsCancellationRequested && _iterations++ < _maxIterations &&
+                   DateTimeOffset.UtcNow - _startedAt < TimeSpan.FromMinutes(30))
             {
                 _checkpoint = new AgentCheckpoint(
                     Id,
@@ -274,9 +281,21 @@ public sealed class AgentSession
                 Publish(new RuntimeEvent(
                     "checkpoint",
                     Data: JsonSerializer.SerializeToElement(_checkpoint)));
+                var providerMessages = AgentContextWindow.Prepare(
+                    _messages, _contextWindow, out var compacted, out var estimatedTokens);
+                if (compacted)
+                {
+                    _contextCompactions++;
+                    Publish(new RuntimeEvent("context_compacted", Data: JsonSerializer.SerializeToElement(new
+                    {
+                        originalMessages = _messages.Count,
+                        sentMessages = providerMessages.Count,
+                        estimatedTokens,
+                    })));
+                }
                 var response = await _provider.ChatAsync(
                     new ProviderChatRequest(
-                        _messages,
+                        providerMessages,
                         Model,
                         Temperature: _temperature,
                         MaxTokens: _maxTokens,
@@ -307,6 +326,7 @@ public sealed class AgentSession
                 var results = new List<(ProviderToolCall Call, ToolResult Result)>();
                 foreach (var call in calls)
                 {
+                    _toolCallCount++;
                     if (string.Equals(call.Name, "update_plan", StringComparison.OrdinalIgnoreCase))
                     {
                         var steps = ReadPlanSteps(call.Arguments);
@@ -322,9 +342,10 @@ public sealed class AgentSession
 
                         if (_planWasPresented)
                         {
+                            Publish(new RuntimeEvent("plan_updated", Data: JsonSerializer.SerializeToElement(new { steps })));
                             _messages.Add(new ChatMessage(
                                 "tool",
-                                JsonSerializer.Serialize(new { approved = true, alreadyPresented = true }),
+                                JsonSerializer.Serialize(new { approved = true, updated = true }),
                                 ToolCallId: call.Id,
                                 Name: call.Name));
                             continue;
@@ -415,6 +436,7 @@ public sealed class AgentSession
                                     result = localResult,
                                     isError = false,
                                 })));
+                            PublishSources(call.Name, localResult);
                         }
                         catch (Exception exception)
                         {
@@ -476,12 +498,14 @@ public sealed class AgentSession
                         content,
                         ToolCallId: call.Id,
                         Name: call.Name));
+                    if (!result.IsError) PublishSources(call.Name, result.Content);
                 }
             }
 
-            Publish(new RuntimeEvent(
-                "failed",
-                Message: Localize("AgentIterationLimit")));
+            Publish(new RuntimeEvent("failed", Message:
+                DateTimeOffset.UtcNow - _startedAt >= TimeSpan.FromMinutes(30)
+                    ? "Agent task exceeded the 30-minute safety budget."
+                    : Localize("AgentIterationLimit")));
             Complete(deleteRecovery: true);
         }
         catch (OperationCanceledException)
@@ -509,7 +533,8 @@ public sealed class AgentSession
         }
 
         if (string.Equals(name, "list_skills", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(name, "read_skill", StringComparison.OrdinalIgnoreCase))
+            string.Equals(name, "read_skill", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "create_skill", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -571,7 +596,7 @@ public sealed class AgentSession
 
     private static OfficeToolDescriptor CreateUpdatePlanTool() => new(
         "update_plan",
-        "Show a concise TODO plan for a genuinely multi-step task and wait for the user to approve it before execution. Do not use for simple or one-step requests.",
+        "Create or update a concise execution plan. The first plan waits for user approval; later calls update progress or re-plan after new evidence and failures.",
         false,
         JsonSerializer.SerializeToElement(new
         {
@@ -660,6 +685,15 @@ public sealed class AgentSession
         _events.Writer.TryWrite(runtimeEvent with { RequestId = Id });
     }
 
+    private void PublishSources(string tool, string content)
+    {
+        foreach (var source in AgentSourceExtractor.Extract(tool, content))
+        {
+            if (!_sources.TryAdd(source.Url, source)) continue;
+            Publish(new RuntimeEvent("source", Message: source.Title, Data: JsonSerializer.SerializeToElement(source)));
+        }
+    }
+
     private void SaveRecovery(AgentCheckpoint checkpoint)
     {
         try
@@ -690,6 +724,14 @@ public sealed class AgentSession
             }
 
             _completed = true;
+            Publish(new RuntimeEvent("agent_stats", Data: JsonSerializer.SerializeToElement(new
+            {
+                iterations = _iterations,
+                toolCalls = _toolCallCount,
+                sources = _sources.Count,
+                contextCompactions = _contextCompactions,
+                elapsedMilliseconds = (long)(DateTimeOffset.UtcNow - _startedAt).TotalMilliseconds,
+            })));
             _events.Writer.TryComplete();
             if (deleteRecovery)
             {

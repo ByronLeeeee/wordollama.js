@@ -890,6 +890,26 @@ function ModelsPage({ onProviderSettingsChange }: {
     }
   };
 
+  const probeCapabilities = async () => {
+    setConnectionStatus(translatedStatus("models.probingCapabilities"));
+    try {
+      const result = await runtime.probeProvider(form.id);
+      const passed = [result.models, result.chat, result.streaming, result.toolCalling].filter(Boolean).length;
+      const details = Object.entries(result.errors).map(([key, value]) => `${key}: ${value}`).join("；");
+      setConnectionStatus({
+        text: t("models.capabilityProbeResult", {
+          passed,
+          total: 4,
+          latency: result.latencyMilliseconds,
+          details: details ? ` · ${details}` : "",
+        }),
+        error: passed < 3,
+      });
+    } catch (error) {
+      setConnectionStatus(toStatus(error, "models.capabilityProbeFailed"));
+    }
+  };
+
   const isGoogleProvider = /^(gemini|google)$/iu.test(form.type.trim());
   const openNewModel = () => {
     setEditorMode("new");
@@ -1255,6 +1275,7 @@ function ModelsPage({ onProviderSettingsChange }: {
             ) : null}
             <div className="modal-action">
               <button className="btn btn-sm" type="button" onClick={() => setEditorOpen(false)}>{t("common.cancel")}</button>
+              {editorMode === "edit" ? <button className="btn btn-sm" type="button" onClick={() => void probeCapabilities()}><Bot size={14} />{t("models.probeCapabilities")}</button> : null}
               <button className="btn btn-primary btn-sm" type="button" disabled={!canSave} onClick={() => void saveProvider()}>{t("common.save")}</button>
             </div>
           </div>
@@ -1288,6 +1309,8 @@ function SkillsPage() {
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<StatusState>(null);
+  const [createRequirement, setCreateRequirement] = useState("");
+  const [creatingSkill, setCreatingSkill] = useState(false);
   const [preview, setPreview] = useState<{
     skill: SkillSummary;
     content: string;
@@ -1336,6 +1359,33 @@ function SkillsPage() {
           </div>
         )}
       >
+        <div className="settings-field-stack mb-4">
+          <textarea
+            className="textarea textarea-bordered w-full"
+            rows={3}
+            value={createRequirement}
+            onChange={(event) => setCreateRequirement(event.currentTarget.value)}
+            placeholder={t("skills.createRequirement")}
+          />
+          <button className="btn btn-primary btn-sm self-start" type="button" disabled={!createRequirement.trim() || creatingSkill} onClick={() => void (async () => {
+            setCreatingSkill(true);
+            setStatus({ translationKey: "skills.creating" });
+            try {
+              const generated = await runtime.generateSkill({
+                requirement: createRequirement.trim(),
+                uiLocale: (readUiLocalePreference() === "zh-CN" ? "zh-CN" : "en-US"),
+              });
+              setCreateRequirement("");
+              setStatus({ translationKey: "skills.created", values: { name: generated.name } });
+              await load();
+              await openPreview(generated);
+            } catch (error) {
+              setStatus(toStatus(error, "common.notConnected"));
+            } finally {
+              setCreatingSkill(false);
+            }
+          })()}><Sparkles size={14} />{creatingSkill ? t("skills.creating") : t("skills.createWithAi")}</button>
+        </div>
         <div className="settings-import">
           <FilePicker accept=".zip,application/zip" file={file} onChange={setFile} />
           <button className="btn btn-primary btn-sm" type="button" disabled={!file} onClick={() => void (async () => {
@@ -1784,7 +1834,7 @@ function AgentPage() {
         <Card title={t("agent.execution")}>
           <div className="settings-form-grid">
             <label>{t("agent.iterations")}</label>
-            <input className="input input-sm" type="number" min={1} value={agent.maxIterations} onChange={(event) => setAgent({ ...agent, maxIterations: Number(event.currentTarget.value) })} />
+            <input className="input input-sm" type="number" min={1} max={200} value={agent.maxIterations} onChange={(event) => setAgent({ ...agent, maxIterations: Math.max(1, Math.min(200, Number(event.currentTarget.value))) })} />
             <label>{t("agent.mode")}</label>
             <select className="select select-sm" value={agent.executionMode} onChange={(event) => setAgent({ ...agent, executionMode: event.currentTarget.value })}>
               <option value="ViewOnly">{t("agent.viewOnly")}</option>
