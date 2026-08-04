@@ -93,6 +93,14 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Office.js UI parity smoke failed: ${message}`);
 }
 
+assert(
+  translationWorkspace.includes('role="listbox"') &&
+    translationWorkspace.includes('aria-controls="translation-source-language-options"') &&
+    translationWorkspace.includes('aria-controls="translation-target-language-options"') &&
+    !translationWorkspace.includes("<datalist"),
+  "translation language selection must use the WPS-compatible searchable listbox instead of a native datalist",
+);
+
 for (const promptFieldId of [
   "agent-goal",
   "agent-requirement",

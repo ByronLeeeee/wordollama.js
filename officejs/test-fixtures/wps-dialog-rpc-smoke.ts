@@ -46,4 +46,12 @@ assert(methods.includes("word.createParagraphStyle"));
 assert(methods.includes("settings.close"));
 assert.equal(closed, true);
 
+closed = false;
+const messageCount = methods.length;
+Object.assign(window.location, { search: "?wpsDialog=1" });
+Object.assign(window, { Application: { ActiveDocument: {} } });
+rpc.closeSettingsWindow();
+assert.equal(closed, true);
+assert.equal(methods.length, messageCount);
+
 console.log("WPS settings popup RPC smoke tests passed.");

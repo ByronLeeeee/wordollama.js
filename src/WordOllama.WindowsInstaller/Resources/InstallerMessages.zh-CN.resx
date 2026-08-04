@@ -17,5 +17,11 @@ SHA-256 指纹：{0}
 
 该证书不能签发其他证书，不会写入计算机级信任库；卸载 WordOllama.JS 时会一并移除。</value></data>
   <data name="RestartWord" xml:space="preserve"><value>检测到 Microsoft Word 正在运行。请完全退出并重新打开 Word，以载入更新后的 WordOllama.JS 功能区。</value></data>
+  <data name="CloseWpsPrompt" xml:space="preserve"><value>检测到 WPS Office 正在运行。请先保存所有已打开的 WPS 文档。
+
+是否立即关闭 WPS 并继续安装？
+
+选择“否”将取消安装。</value></data>
+  <data name="CloseWpsFailed" xml:space="preserve"><value>无法关闭 WPS Office。请在任务管理器中结束 WPS 进程，然后重新运行安装程序。</value></data>
   <data name="Failed" xml:space="preserve"><value>安装失败：{0}</value></data>
 </root>

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 const state = new Map<string, unknown>();
+const temporaryFiles = new Map<string, string>();
 const texts = ["第一段", "第二段", "第三段"];
 const styles = ["标题 1", "正文", "正文"];
 const formats = texts.map(() => ({ Alignment: 0, SpaceBefore: 0, SpaceAfter: 0 }));
@@ -68,7 +69,11 @@ const listFormat = {
 };
 const selection = {
   Text: "选择内容",
-  Range: { Text: "选择内容", ListFormat: listFormat },
+  Range: {
+    Text: "选择内容",
+    ListFormat: listFormat,
+    InsertFile(path: string) { state.set("insertedHtml", temporaryFiles.get(path)); },
+  },
   Font: {} as Record<string, unknown>,
   TypeText(value: string) { state.set("typed", value); },
   InsertAfter(value: string) { state.set("after", value); },
@@ -82,6 +87,7 @@ const footer = { Range: { Text: "" } };
 const tocItems: Array<{ Update(): void }> = [];
 const document = {
   FullName: "C:\\sample.docx",
+  TrackRevisions: false,
   Paragraphs: paragraphs,
   Tables: tables,
   PageSetup: pageSetup,
@@ -118,6 +124,28 @@ const document = {
     Add() { tocItems.push({ Update() { state.set("tocUpdated", true); } }); },
     Item(index: number) { return tocItems[index - 1]; },
   },
+  InlineShapes: {
+    AddPicture(path: string) {
+      state.set("insertedImage", temporaryFiles.get(path));
+      return { AlternativeText: "" };
+    },
+  },
+  Revisions: {
+    Count: 1,
+    Item() {
+      return {
+        Type: 1,
+        Author: "Tester",
+        Date: new Date("2026-08-04T00:00:00.000Z"),
+        FormatDescription: "",
+        Range: { Text: "修订文本\r", Select() { state.set("revisionSelected", true); } },
+        Accept() { state.set("revisionAccepted", true); },
+        Reject() { state.set("revisionRejected", true); },
+      };
+    },
+    AcceptAll() { state.set("allRevisionsAccepted", true); },
+    RejectAll() { state.set("allRevisionsRejected", true); },
+  },
   Range(start: number, end: number) {
     return {
       set HighlightColorIndex(value: number) {
@@ -130,7 +158,17 @@ const document = {
 
 Object.assign(globalThis, {
   window: {
-    wps: { Selection: selection, ActiveDocument: document },
+    atob(value: string) { return Buffer.from(value, "base64").toString("binary"); },
+    wps: {
+      Selection: selection,
+      ActiveDocument: document,
+      Env: { GetTempPath() { return "C:\\temp\\"; } },
+      FileSystem: {
+        writeFileString(path: string, value: string) { temporaryFiles.set(path, value); },
+        writeAsBinaryString(path: string, value: string) { temporaryFiles.set(path, value); },
+        Remove(path: string) { temporaryFiles.delete(path); },
+      },
+    },
     localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
   },
 });
@@ -142,7 +180,8 @@ const registry = new OfficeJsToolRegistry(word);
 
 assert(registry.list().some((tool) => tool.name === "table_set_cell"));
 assert(registry.list().some((tool) => tool.name === "page_setup"));
-assert(!registry.list().some((tool) => tool.name === "insert_image"));
+assert(registry.list().some((tool) => tool.name === "insert_image"));
+assert.equal(word.supportsTool("revisions"), true);
 await word.applyStyle(1, "标题 2");
 await word.formatParagraph(1, "Centered", 6, 12);
 assert.equal(styles[0], "标题 2");
@@ -196,5 +235,24 @@ const review = await word.applyReviewSuggestionsBatch([
 ], "accept");
 assert.equal(review[0]?.paragraphIndex, 1);
 assert.equal(texts[0], "第一条 已处理事项");
+
+await word.insertHtmlAtSelection("<strong>共用 Word UI</strong>");
+assert.match(String(state.get("insertedHtml")), /<strong>共用 Word UI<\/strong>/u);
+await word.insertImage("data:image/png;base64,aGVsbG8=", "图片说明");
+assert.equal(state.get("insertedImage"), "hello");
+
+const previousTracking = await word.beginTrackedChanges();
+assert.equal(previousTracking, "false");
+assert.equal(document.TrackRevisions, true);
+const revisions = await word.listTrackedRevisions();
+assert.equal(revisions.total, 1);
+await word.focusTrackedRevision(revisions.revisions[0].identity, 1);
+await word.applyTrackedRevision(revisions.revisions[0].identity, 1, "accept");
+await word.applyAllTrackedRevisions("reject");
+assert.equal(state.get("revisionSelected"), true);
+assert.equal(state.get("revisionAccepted"), true);
+assert.equal(state.get("allRevisionsRejected"), true);
+await word.restoreTrackedChanges(previousTracking);
+assert.equal(document.TrackRevisions, false);
 
 console.log("WPS extended tool smoke tests passed.");

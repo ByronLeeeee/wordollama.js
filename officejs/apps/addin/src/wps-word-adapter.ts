@@ -5,7 +5,9 @@ import {
   type DocumentOverview,
   type ParagraphResult,
   type SearchResult,
+  type TrackedRevisionResult,
   type WordSelection,
+  trackedRevisionIdentity,
 } from "./officejs-word-adapter.ts";
 import type { DocumentDiff } from "./contracts.ts";
 import type { ReviewAnchor } from "./review-anchor.ts";
@@ -21,7 +23,8 @@ const WPS_SUPPORTED_TOOLS = new Set([
   "table_set_cell", "get_document_outline", "read_clause", "extract_definitions",
   "check_cross_references", "insert_clause_after", "highlight_risk",
   "apply_legal_format", "validate_citation", "format_list", "page_setup",
-  "header_footer", "update_toc", "replace_exact_text", "ask_human",
+  "header_footer", "update_toc", "replace_exact_text", "insert_image",
+  "revisions", "ask_human",
 ]);
 
 const PARAGRAPH_ALIGNMENT: Record<string, number> = {
@@ -90,6 +93,45 @@ function setRangeText(range: any, text: string): void {
   range.Text = text;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function revisionDate(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  return String(value ?? "");
+}
+
+function temporaryFilePath(application: WpsApplication, extension: string): string {
+  const fileSystem = application.FileSystem;
+  const root = String(
+    application.Env?.GetTempPath?.() ?? fileSystem?.tmpdir?.() ?? "",
+  );
+  if (!root) unsupported("temporary files");
+  const separator = /[\\/]$/u.test(root) ? "" : root.includes("\\") ? "\\" : "/";
+  return `${root}${separator}wordollama-${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`;
+}
+
+async function removeTemporaryFile(application: WpsApplication, path: string): Promise<void> {
+  const fileSystem = application.FileSystem;
+  try {
+    if (typeof fileSystem?.Remove === "function") await Promise.resolve(fileSystem.Remove(path));
+    else if (typeof fileSystem?.unlinkSync === "function") fileSystem.unlinkSync(path);
+  } catch {
+    // The image/document is already embedded. A locked temporary file can be
+    // reclaimed by the operating system later without failing the Word action.
+  }
+}
+
 function styleName(value: any): string {
   if (typeof value === "string") return value;
   return String(value?.NameLocal ?? value?.Name ?? "");
@@ -118,11 +160,100 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
   }
 
   override async beginTrackedChanges(): Promise<string | null> {
-    return null;
+    const document = this.application().ActiveDocument;
+    if (!document || !("TrackRevisions" in document)) return null;
+    const previous = document.TrackRevisions ? "true" : "false";
+    document.TrackRevisions = true;
+    return previous;
   }
 
-  override async restoreTrackedChanges(): Promise<void> {
-    // The first WPS baseline deliberately leaves the user's tracking mode unchanged.
+  override async restoreTrackedChanges(previous: string | null): Promise<void> {
+    if (previous === null) return;
+    const document = this.application().ActiveDocument;
+    if (document && "TrackRevisions" in document) {
+      document.TrackRevisions = previous === "true";
+    }
+  }
+
+  override async listTrackedRevisions(limit = 200): Promise<TrackedRevisionResult> {
+    const revisions = this.application().ActiveDocument?.Revisions;
+    if (!revisions || typeof revisions.Item !== "function") unsupported("revisions");
+    const total = Number(revisions.Count ?? 0);
+    const boundedLimit = Math.max(1, Math.min(500, Math.trunc(limit) || 200));
+    const visible = Math.min(total, boundedLimit);
+    const result: TrackedRevisionResult["revisions"] = [];
+    for (let index = 1; index <= visible; index += 1) {
+      const revision = revisions.Item(index);
+      const fields = {
+        type: String(revision?.Type ?? ""),
+        author: String(revision?.Author ?? ""),
+        date: revisionDate(revision?.Date),
+        formatDescription: String(revision?.FormatDescription ?? ""),
+        text: cleanText(revision?.Range?.Text),
+      };
+      result.push({ identity: trackedRevisionIdentity(fields), index, ...fields });
+    }
+    return { total, truncated: total > visible, revisions: result };
+  }
+
+  override async focusTrackedRevision(identity: string, index: number): Promise<void> {
+    await this.performWpsRevisionAction(identity, index, "focus");
+  }
+
+  override async applyTrackedRevision(
+    identity: string,
+    index: number,
+    action: "accept" | "reject",
+  ): Promise<void> {
+    await this.performWpsRevisionAction(identity, index, action);
+  }
+
+  override async applyAllTrackedRevisions(action: "accept" | "reject"): Promise<void> {
+    const document = this.application().ActiveDocument;
+    const revisions = document?.Revisions;
+    if (!revisions) unsupported("revisions");
+    if (action === "accept") {
+      if (typeof revisions.AcceptAll === "function") revisions.AcceptAll();
+      else if (typeof document.AcceptAllRevisions === "function") document.AcceptAllRevisions();
+      else unsupported("accept all revisions");
+    } else if (typeof revisions.RejectAll === "function") revisions.RejectAll();
+    else if (typeof document.RejectAllRevisions === "function") document.RejectAllRevisions();
+    else unsupported("reject all revisions");
+  }
+
+  private async performWpsRevisionAction(
+    identity: string,
+    index: number,
+    action: "focus" | "accept" | "reject",
+  ): Promise<void> {
+    if (!identity || !Number.isInteger(index) || index < 1) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.safeRevisionUnsupported"));
+    }
+    const revisions = this.application().ActiveDocument?.Revisions;
+    if (!revisions || typeof revisions.Item !== "function" || index > Number(revisions.Count ?? 0)) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.revisionListChanged"));
+    }
+    const revision = revisions.Item(index);
+    const currentIdentity = trackedRevisionIdentity({
+      type: String(revision?.Type ?? ""),
+      author: String(revision?.Author ?? ""),
+      date: revisionDate(revision?.Date),
+      formatDescription: String(revision?.FormatDescription ?? ""),
+      text: cleanText(revision?.Range?.Text),
+    });
+    if (currentIdentity !== identity) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.targetRevisionChanged"));
+    }
+    if (action === "focus") {
+      if (typeof revision?.Range?.Select !== "function") unsupported("focus revision");
+      revision.Range.Select();
+    } else if (action === "accept") {
+      if (typeof revision?.Accept !== "function") unsupported("accept revision");
+      revision.Accept();
+    } else {
+      if (typeof revision?.Reject !== "function") unsupported("reject revision");
+      revision.Reject();
+    }
   }
 
   override async getSelection(): Promise<WordSelection> {
@@ -593,18 +724,122 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     styles.Add(normalized, 1);
   }
 
-  override async insertHtmlAtSelection(): Promise<void> {
-    unsupported("HTML insertion");
+  override async insertHtmlAtSelection(html: string): Promise<void> {
+    if (!html.trim()) throw new Error("html must not be empty");
+    const application = this.application();
+    const fileSystem = application.FileSystem;
+    const range = application.Selection?.Range;
+    if (!range || typeof range.InsertFile !== "function" ||
+        typeof fileSystem?.writeFileString !== "function") {
+      unsupported("HTML insertion");
+    }
+    const path = temporaryFilePath(application, "html");
+    const document = `<!doctype html><html><head><meta charset="utf-8"></head><body>${html}</body></html>`;
+    try {
+      await Promise.resolve(fileSystem.writeFileString(path, document));
+      range.Text = "";
+      await Promise.resolve(range.InsertFile(path));
+    } finally {
+      await removeTemporaryFile(application, path);
+    }
   }
 
-  override async insertStyledHtmlBlocksAtSelection(): Promise<void> {
-    unsupported("styled Markdown insertion");
+  override async insertStyledHtmlBlocksAtSelection(
+    blocks: Array<{ kind: string; html: string; notes?: Array<{ marker: string; text: string }> }>,
+    _styleMappings: Record<string, string>,
+    _notePlacement: "footnote" | "endnote" = "footnote",
+  ): Promise<void> {
+    if (!blocks.length) throw new Error("Markdown blocks must not be empty");
+    const html = blocks.map((block) => {
+      const notes = (block.notes ?? []).map((note) =>
+        `<p><small>${escapeHtml(note.marker)} ${escapeHtml(note.text)}</small></p>`).join("");
+      return `${block.html}${notes}`;
+    }).join("\n");
+    await this.insertHtmlAtSelection(html);
   }
 
   override async applyCompareChangesBatch(
-    _changes: DocumentDiff[],
+    changes: DocumentDiff[],
   ): Promise<Array<{ paragraphIndex: number; kind: string }>> {
-    unsupported("apply document comparison changes");
+    if (!changes.length) return [];
+    if (changes.some((change) => change.blockType === "tableCell" ||
+        change.insertAfterOriginalBlockType === "tableCell")) {
+      unsupported("apply table comparison changes");
+    }
+    const application = this.application();
+    const paragraphs = paragraphTexts(application);
+    const normalize = (value: string) => value.replace(/[\r\u0007]+$/gu, "").replace(/\s+/gu, " ").trim();
+    const resolveIndex = (expectedIndex: number, expectedText: string): number => {
+      const expected = normalize(expectedText);
+      if (expectedIndex > 0 && normalize(paragraphs[expectedIndex - 1] ?? "") === expected) return expectedIndex;
+      const matches = paragraphs
+        .map((text, index) => ({ text: normalize(text), index: index + 1 }))
+        .filter((entry) => entry.text === expected);
+      if (matches.length === 1) return matches[0].index;
+      if (matches.length > 1) {
+        throw new Error(i18n.t("taskpane.wordAdapter.errors.compareOriginalAmbiguous", { text: expectedText.slice(0, 40) }));
+      }
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.compareOriginalNotFound", { text: expectedText.slice(0, 40) }));
+    };
+    const applied: Array<{ paragraphIndex: number; kind: string }> = [];
+    for (const change of [...changes].sort((left, right) =>
+      (right.originalParagraphIndex ?? right.paragraphIndex) -
+      (left.originalParagraphIndex ?? left.paragraphIndex))) {
+      if (change.kind === "added") {
+        const anchor = change.insertAfterOriginalParagraphIndex ?? 0;
+        if (anchor <= 0) {
+          const range = application.ActiveDocument?.Range?.(0, 0);
+          if (!range || typeof range.InsertBefore !== "function") unsupported("insert comparison paragraph");
+          range.InsertBefore(`${change.revised ?? ""}\r`);
+        } else {
+          const resolved = resolveIndex(anchor, change.insertAfterOriginalText ?? "");
+          const range = application.ActiveDocument?.Paragraphs?.Item?.(resolved)?.Range;
+          if (!range || typeof range.InsertAfter !== "function") unsupported("insert comparison paragraph");
+          range.InsertAfter(`\r${change.revised ?? ""}`);
+        }
+        applied.push({ paragraphIndex: change.revisedParagraphIndex ?? change.paragraphIndex, kind: change.kind });
+        continue;
+      }
+      const resolved = resolveIndex(
+        change.originalParagraphIndex ?? change.paragraphIndex,
+        change.original ?? "",
+      );
+      const range = application.ActiveDocument?.Paragraphs?.Item?.(resolved)?.Range;
+      if (!range) unsupported("comparison paragraph");
+      if (change.kind === "removed") {
+        if (typeof range.Delete === "function") range.Delete();
+        else range.Text = "";
+      } else {
+        range.Text = `${change.revised ?? ""}\r`;
+        if (change.revisedStyle && change.revisedStyle !== change.originalStyle) {
+          range.Style = change.revisedStyle;
+        }
+      }
+      applied.push({ paragraphIndex: resolved, kind: change.kind });
+    }
+    return applied;
+  }
+
+  override async insertImage(base64: string, altText?: string): Promise<void> {
+    const payload = base64.replace(/^data:image\/[a-z0-9.+-]+;base64,/iu, "").trim();
+    if (!payload) throw new Error("base64 image data is required");
+    const application = this.application();
+    const fileSystem = application.FileSystem;
+    const shapes = application.ActiveDocument?.InlineShapes;
+    if (!shapes || typeof shapes.AddPicture !== "function" ||
+        typeof fileSystem?.writeAsBinaryString !== "function") {
+      unsupported("image insertion");
+    }
+    const extension = payload.startsWith("iVBOR") ? "png"
+      : payload.startsWith("R0lGOD") ? "gif" : "jpg";
+    const path = temporaryFilePath(application, extension);
+    try {
+      await Promise.resolve(fileSystem.writeAsBinaryString(path, window.atob(payload)));
+      const picture = await Promise.resolve(shapes.AddPicture(path, false, true, application.Selection?.Range));
+      if (altText && picture && "AlternativeText" in picture) picture.AlternativeText = altText;
+    } finally {
+      await removeTemporaryFile(application, path);
+    }
   }
 
   override async getReviewDocumentFingerprint(): Promise<string> {

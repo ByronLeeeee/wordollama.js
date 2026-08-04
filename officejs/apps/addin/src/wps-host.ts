@@ -2,7 +2,23 @@ export interface WpsApplication {
   ActiveDocument?: any;
   Selection?: any;
   Enum?: Record<string, Record<string, number>>;
+  Env?: any;
+  FileSystem?: any;
   CreateTaskPane?: (url: string, title?: string) => any;
+  ShowDialog?: (
+    url: string,
+    appName?: string,
+    width?: number,
+    height?: number,
+    modal?: boolean,
+    hasCaption?: boolean,
+    resizeEdge?: number,
+    errorUrl?: string,
+    loadingTimeout?: number,
+    isChildWindow?: boolean,
+    isUseCookie?: boolean,
+    needRaise?: boolean,
+  ) => boolean;
 }
 
 declare global {

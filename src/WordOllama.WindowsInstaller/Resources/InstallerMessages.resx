@@ -17,5 +17,11 @@ Expires: {1:g}
 
 It cannot issue other certificates, is never installed machine-wide, and will be removed when you uninstall WordOllama.JS.</value></data>
   <data name="RestartWord" xml:space="preserve"><value>Microsoft Word is currently running. Completely close and reopen Word to load the updated WordOllama.JS Ribbon.</value></data>
+  <data name="CloseWpsPrompt" xml:space="preserve"><value>WordOllama.JS Setup detected that WPS Office is running. Save all open WPS documents first.
+
+Close WPS now and continue installation?
+
+Choosing No cancels setup.</value></data>
+  <data name="CloseWpsFailed" xml:space="preserve"><value>WPS Office could not be closed. Close it in Task Manager, then run setup again.</value></data>
   <data name="Failed" xml:space="preserve"><value>Setup failed: {0}</value></data>
 </root>

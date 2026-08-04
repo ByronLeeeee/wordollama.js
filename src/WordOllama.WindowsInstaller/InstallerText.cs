@@ -20,6 +20,8 @@ internal static class InstallerText
             thumbprint,
             expiresAt);
     public static string RestartWord => Get(nameof(RestartWord));
+    public static string CloseWpsPrompt => Get(nameof(CloseWpsPrompt));
+    public static string CloseWpsFailed => Get(nameof(CloseWpsFailed));
 
     public static string Failed(string detail) =>
         string.Format(

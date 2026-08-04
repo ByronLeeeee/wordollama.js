@@ -1,0 +1,41 @@
+<customUI xmlns="http://schemas.microsoft.com/office/2006/01/customui" onLoad="OnAddInLoad">
+  <ribbon startFromScratch="false">
+    <tabs>
+      <tab id="WordOllamaTab" label="WordOllama.JS">
+        <group id="WordOllamaCreateGroup" label="创作">
+          <button id="WordOllamaWriting" label="AI 写作" size="large" onAction="OpenWordOllamaWriting" getImage="GetWordOllamaImage" screentip="打开 AI 写作" />
+          <button id="WordOllamaAgent" label="Agent" size="large" onAction="OpenWordOllamaAgent" getImage="GetWordOllamaImage" screentip="打开 WordOllama.JS Agent" />
+          <button id="WordOllamaCustomPrompts" label="我的指令" onAction="OpenWordOllamaCustomPrompts" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaImage" label="图片理解" onAction="OpenWordOllamaImage" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaTable" label="智能表格" onAction="OpenWordOllamaTable" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaMarkdown" label="Markdown" onAction="OpenWordOllamaMarkdown" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaHtml" label="HTML" onAction="OpenWordOllamaHtml" getImage="GetWordOllamaImage" />
+        </group>
+        <group id="WordOllamaEditGroup" label="编辑">
+          <button id="WordOllamaPolish" label="润色" size="large" onAction="OpenWordOllamaPolish" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaExpand" label="扩写" onAction="OpenWordOllamaExpand" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaSimplify" label="精简" onAction="OpenWordOllamaSimplify" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaModify" label="修改" onAction="OpenWordOllamaModify" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaContinue" label="续写" onAction="OpenWordOllamaContinue" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaSummarize" label="总结" onAction="OpenWordOllamaSummarize" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaFix" label="校对" onAction="OpenWordOllamaFix" getImage="GetWordOllamaImage" />
+        </group>
+        <group id="WordOllamaTranslateGroup" label="翻译">
+          <button id="WordOllamaTranslate" label="自由翻译" size="large" onAction="OpenWordOllamaTranslate" getImage="GetWordOllamaImage" />
+        </group>
+        <group id="WordOllamaLegalGroup" label="法律与审阅">
+          <button id="WordOllamaRisk" label="风险分析" size="large" onAction="OpenWordOllamaRisk" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaFairness" label="公平审查" onAction="OpenWordOllamaFairness" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaMootCourt" label="模拟法庭" onAction="OpenWordOllamaMootCourt" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaContractCompare" label="合同对比" onAction="OpenWordOllamaContractCompare" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaCompare" label="文档比较" onAction="OpenWordOllamaCompare" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaLawSearch" label="法规检索" onAction="OpenWordOllamaLawSearch" getImage="GetWordOllamaImage" />
+          <button id="WordOllamaReview" label="文档审阅" onAction="OpenWordOllamaReview" getImage="GetWordOllamaImage" />
+        </group>
+        <group id="WordOllamaSettingsGroup" label="设置">
+          <button id="WordOllamaSettings" label="设置" size="large" onAction="OpenWordOllamaSettings" getImage="GetWordOllamaImage" />
+        </group>
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>

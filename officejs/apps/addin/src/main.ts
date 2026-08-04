@@ -121,6 +121,11 @@ import {
 
 type AddinSurface = "agent" | "create" | "edit" | "review" | "legal" | "settings" | "diagnostics" | "compare";
 
+const wpsHost = isWpsHost();
+if (wpsHost) {
+  document.documentElement.dataset.host = "wps";
+}
+
 const routeParams = new URLSearchParams(window.location.search);
 const requestedSurface = routeParams.get("surface");
 const requestedWorkflow = routeParams.get("workflow");
@@ -174,7 +179,6 @@ i18n.on("languageChanged", () => {
   void refreshRuntimeStatus();
 });
 
-const wpsHost = isWpsHost();
 const word = wpsHost
   ? new WpsWordAdapter(requestHumanInput)
   : new OfficeJsWordAdapter(requestHumanInput);
@@ -621,10 +625,27 @@ function openUtilityDialog(): void {
 }
 
 function openReactSettingsDialog(): void {
+  if (wpsHost) {
+    const application = window.wps ?? window.Application;
+    const opened = application?.ShowDialog?.(
+      new URL("/settings.html?wpsDialog=1", window.location.origin).href,
+      "WordOllama.JS 设置",
+      1080,
+      760,
+      false,
+      true,
+      2,
+      "",
+      15000,
+      false,
+      true,
+      true,
+    );
+    if (!opened) showError(new Error(i18n.t("taskpane.settings.openFailed")));
+    return;
+  }
   if (settingsOfficeDialog || (settingsPopup && !settingsPopup.closed)) return;
-  const url = wpsHost
-    ? new URL("settings.html", new URL(".", window.location.href)).href
-    : new URL("/settings.html", window.location.origin).href;
+  const url = new URL("/settings.html", window.location.origin).href;
   if (typeof Office === "undefined" || !Office.context?.ui?.displayDialogAsync) {
     settingsPopup = window.open(url, "wordollama-settings", "popup,width=1120,height=760,resizable=yes");
     if (!settingsPopup) showError(new Error(i18n.t("taskpane.settings.openFailed")));

@@ -25,6 +25,12 @@ const pending = new Map<string, {
 
 let initialized = false;
 
+function isDirectWpsDialog(): boolean {
+  const application = window.wps ?? window.Application;
+  return Boolean(application?.ActiveDocument) &&
+    new URLSearchParams(window.location.search).get("wpsDialog") === "1";
+}
+
 function ensureInitialized(): void {
   if (initialized) return;
   if (typeof Office !== "undefined" && typeof Office.context?.ui?.addHandlerAsync === "function") {
@@ -83,19 +89,42 @@ function requestParent<T>(input: DialogRequestInput): Promise<T> {
   });
 }
 
-export function listWordStyles(): Promise<string[]> {
+export async function listWordStyles(): Promise<string[]> {
+  if (isDirectWpsDialog()) {
+    const { WpsWordAdapter } = await import("../wps-word-adapter.ts");
+    return new WpsWordAdapter().listStyles();
+  }
   return requestParent<string[]>({ method: "word.listStyles" });
 }
 
-export function createWordParagraphStyle(name: string): Promise<void> {
+export async function createWordParagraphStyle(name: string): Promise<void> {
+  if (isDirectWpsDialog()) {
+    const { WpsWordAdapter } = await import("../wps-word-adapter.ts");
+    return new WpsWordAdapter().createParagraphStyle(name);
+  }
   return requestParent<void>({ method: "word.createParagraphStyle", name });
 }
 
-export function adoptPairingInTaskPane(pairing: PairResponse): Promise<ToolCatalogResponse> {
+export async function adoptPairingInTaskPane(pairing: PairResponse): Promise<ToolCatalogResponse> {
+  if (isDirectWpsDialog()) {
+    const [{ WpsWordAdapter }, { OfficeJsToolRegistry }, { RuntimeClient }] = await Promise.all([
+      import("../wps-word-adapter.ts"),
+      import("../officejs-tool-registry.ts"),
+      import("../runtime-client.ts"),
+    ]);
+    const adapter = new WpsWordAdapter();
+    const runtime = new RuntimeClient();
+    runtime.adoptPairing(pairing);
+    return runtime.registerOfficeTools(new OfficeJsToolRegistry(adapter).list());
+  }
   return requestParent<ToolCatalogResponse>({ method: "runtime.adoptPairing", pairing });
 }
 
 export function closeSettingsWindow(): void {
+  if (isDirectWpsDialog()) {
+    window.close();
+    return;
+  }
   if (typeof Office !== "undefined" && typeof Office.context?.ui?.messageParent === "function") {
     Office.context.ui.messageParent(JSON.stringify({
       id: crypto.randomUUID(),

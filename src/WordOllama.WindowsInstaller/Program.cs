@@ -7,6 +7,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Xml.Linq;
 using Microsoft.Win32;
 
 namespace WordOllama.WindowsInstaller;
@@ -39,8 +40,12 @@ internal static class Program
         "4d2a7c5e-2d2a-4a1a-8b72-6a1cf4f7b701";
     private const string OfficeAddinDebugRegistryPath =
         OfficeAddinRegistryPath + "\\" + OfficeAddinId;
+    private const string WpsAddinName = "WordOllama.JS";
+    private const string WpsAddinUrl = "https://localhost:37421/wps-addin/";
     private const string LocalhostCertificateSubject = "CN=李伯阳/Boyang Li";
     private const string LegacyLocalhostCertificateSubject = "CN=WordOllama.JS localhost";
+    private static readonly string[] WpsProcessNames =
+        ["wps", "wpscenter", "wpscloudsvr"];
 
     [STAThread]
     private static int Main(string[] args)
@@ -91,6 +96,11 @@ internal static class Program
                         : null);
                 return 0;
             }
+            if (options.ContainsKey("--repair-wps-registration"))
+            {
+                RegisterWpsAddin();
+                return 0;
+            }
             if (options.ContainsKey("--uninstall"))
             {
                 Uninstall(
@@ -117,6 +127,10 @@ internal static class Program
             var runningWordProcessIds = Process.GetProcessesByName("WINWORD")
                 .Select(process => process.Id)
                 .ToArray();
+            if (!skipRegistration && !EnsureWpsClosedBeforeInstall(quiet))
+            {
+                return 2;
+            }
             Install(
                 installRoot,
                 startupRoot,
@@ -162,7 +176,8 @@ internal static class Program
             var argument = args[index];
             if (argument is "--quiet" or "--no-start" or "--uninstall" or "--rollback" or
                 "--skip-registration" or "--trust-localhost-certificate" or
-                "--rotate-localhost-certificate" or "--repair-office-registration")
+                "--rotate-localhost-certificate" or "--repair-office-registration" or
+                "--repair-wps-registration")
             {
                 result[argument] = null;
                 continue;
@@ -435,6 +450,7 @@ internal static class Program
         {
             RegisterOfficeAddin(
                 Path.Combine(target, "WordOllama.JS.xml"));
+            RegisterWpsAddin();
             RegisterUninstaller(
                 uninstallPath,
                 installRoot,
@@ -574,6 +590,12 @@ internal static class Program
             !File.Exists(Path.Combine(staging, "appsettings.json")) ||
             !File.Exists(Path.Combine(staging, "WordOllama.JS.xml")) ||
             !File.Exists(Path.Combine(staging, "wwwroot", "index.html")) ||
+            !File.Exists(Path.Combine(staging, "wwwroot", "wps.html")) ||
+            !File.Exists(Path.Combine(staging, "wwwroot", "wps-addin", "index.html")) ||
+            !File.Exists(Path.Combine(staging, "wwwroot", "wps-addin", "main.js")) ||
+            !File.Exists(Path.Combine(staging, "wwwroot", "wps-addin", "ribbon.xml")) ||
+            !File.Exists(Path.Combine(staging, "wwwroot", "wps-addin", "assets", "ribbon", "agent.svg")) ||
+            !File.Exists(Path.Combine(staging, "wwwroot", "assets", "ribbon", "agent.svg")) ||
             !File.Exists(Path.Combine(staging, "wwwroot", "settings.html")) ||
             !File.Exists(Path.Combine(staging, "wwwroot", "commands.html")))
         {
@@ -621,6 +643,7 @@ internal static class Program
         reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseDirectDebugger" /t REG_DWORD /d 0 /f >nul 2>&1
         reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseWebDebugger" /t REG_DWORD /d 0 /f >nul 2>&1
         reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseLiveReload" /t REG_DWORD /d 0 /f >nul 2>&1
+        if exist "%WORDOLLAMA_BRIDGE_ROOT%WordOllama.JS-Uninstall.exe" "%WORDOLLAMA_BRIDGE_ROOT%WordOllama.JS-Uninstall.exe" --quiet --repair-wps-registration >nul 2>&1
         if not exist "%WORDOLLAMA_BRIDGE_ROOT%certs\bridge.pfx" exit /b 0
         start "WordOllama.JS Desktop Bridge" /b "%WORDOLLAMA_BRIDGE_EXE%" >>"%WORDOLLAMA_BRIDGE_ROOT%bridge.log" 2>&1
         """;
@@ -678,6 +701,7 @@ internal static class Program
             DeleteOwnedLocalhostCertificate(installRoot);
             DeleteHttpsCredential();
             DeleteOfficeAddinRegistration(installRoot);
+            DeleteWpsAddinRegistration();
         }
         var startupPath = Path.Combine(
             startupRoot,
@@ -747,6 +771,170 @@ internal static class Program
             "UseLiveReload",
             0,
             RegistryValueKind.DWord);
+    }
+
+    private static bool EnsureWpsClosedBeforeInstall(bool quiet)
+    {
+        var running = GetRunningWpsProcesses();
+        if (running.Length == 0)
+        {
+            return true;
+        }
+        foreach (var process in running)
+        {
+            process.Dispose();
+        }
+        if (quiet)
+        {
+            Console.Error.WriteLine(InstallerText.CloseWpsPrompt);
+            return false;
+        }
+        var confirmed = MessageBoxW(
+            IntPtr.Zero,
+            InstallerText.CloseWpsPrompt,
+            InstallerText.Title,
+            0x00000004 | 0x00000030 | 0x00000100) == 6;
+        if (!confirmed)
+        {
+            return false;
+        }
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            running = GetRunningWpsProcesses();
+            if (running.Length == 0)
+            {
+                return true;
+            }
+            foreach (var process in running)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                        process.WaitForExit(5000);
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // The process exited between enumeration and termination.
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            }
+            Thread.Sleep(250);
+        }
+
+        running = GetRunningWpsProcesses();
+        foreach (var process in running)
+        {
+            process.Dispose();
+        }
+        if (running.Length > 0)
+        {
+            throw new InvalidOperationException(InstallerText.CloseWpsFailed);
+        }
+        return true;
+    }
+
+    private static Process[] GetRunningWpsProcesses() =>
+        WpsProcessNames
+            .SelectMany(Process.GetProcessesByName)
+            .GroupBy(process => process.Id)
+            .Select(group => group.First())
+            .ToArray();
+
+    private static string WpsPublishPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "kingsoft",
+        "wps",
+        "jsaddons",
+        "publish.xml");
+
+    private static XDocument ReadWpsPublishDocument(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return new XDocument(new XElement("jsplugins"));
+        }
+        try
+        {
+            var document = XDocument.Load(path, LoadOptions.PreserveWhitespace);
+            if (!string.Equals(
+                    document.Root?.Name.LocalName,
+                    "jsplugins",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException(
+                    "The existing WPS publish.xml has an unexpected root element.");
+            }
+            return document;
+        }
+        catch (Exception exception) when (
+            exception is IOException or System.Xml.XmlException)
+        {
+            throw new InvalidDataException(
+                "The existing WPS publish.xml could not be read; it was preserved unchanged.",
+                exception);
+        }
+    }
+
+    private static void RemoveOwnedWpsEntries(XElement root)
+    {
+        root.Elements()
+            .Where(element =>
+                (element.Name.LocalName is "jspluginonline" or "jsplugin") &&
+                string.Equals(
+                    element.Attribute("name")?.Value,
+                    WpsAddinName,
+                    StringComparison.OrdinalIgnoreCase))
+            .Remove();
+    }
+
+    private static void RegisterWpsAddin()
+    {
+        var path = WpsPublishPath();
+        var document = ReadWpsPublishDocument(path);
+        var root = document.Root!;
+        RemoveOwnedWpsEntries(root);
+        root.Add(new XElement(
+            "jspluginonline",
+            new XAttribute("name", WpsAddinName),
+            new XAttribute("type", "wps"),
+            new XAttribute("url", WpsAddinUrl),
+            new XAttribute("debug", ""),
+            new XAttribute("enable", "enable_dev"),
+            new XAttribute("install", "null"),
+            new XAttribute("customDomain", "")));
+        WriteAtomic(path, document.ToString(), new UTF8Encoding(false));
+    }
+
+    private static void DeleteWpsAddinRegistration()
+    {
+        var path = WpsPublishPath();
+        if (!File.Exists(path)) return;
+        try
+        {
+            var document = ReadWpsPublishDocument(path);
+            var root = document.Root!;
+            var before = root.Elements().Count();
+            RemoveOwnedWpsEntries(root);
+            if (root.Elements().Count() == before) return;
+            if (!root.Elements().Any())
+            {
+                File.Delete(path);
+                return;
+            }
+            WriteAtomic(path, document.ToString(), new UTF8Encoding(false));
+        }
+        catch (Exception exception) when (
+            exception is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            // An unrelated or locked WPS configuration must not block uninstall.
+        }
     }
 
     private static void ScheduleOfficeAddinRegistrationRepair(

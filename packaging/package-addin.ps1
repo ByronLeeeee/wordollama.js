@@ -100,6 +100,9 @@ finally {
 
 Copy-Item -Path (Join-Path $addinRoot "dist\*") -Destination $output -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $addinRoot "assets") -Destination $output -Recurse -Force
+New-Item -ItemType Directory -Force -Path (Join-Path $output "wps-addin\assets") | Out-Null
+Copy-Item -LiteralPath (Join-Path $addinRoot "assets\ribbon") `
+    -Destination (Join-Path $output "wps-addin\assets") -Recurse -Force
 
 # commands.html is a Vite entry point. Keep the bundled file copied from dist;
 # copying the source entry here would restore its /src/commands.ts reference,

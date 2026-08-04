@@ -60,6 +60,17 @@ jobs:
       - name: Install Office.js dependencies
         working-directory: officejs/apps/addin
         run: npm ci
+      - name: Run WPS compatibility regression
+        if: ${{ matrix.runtime == 'win-x64' }}
+        working-directory: officejs/apps/addin
+        shell: pwsh
+        run: |
+          npm run test:wps
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:wps-tools
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:wps-dialog
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build unsigned unified artifacts
         shell: pwsh
         run: >
@@ -107,6 +118,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: wordollama-js-wps-unsigned
-          path: ci-unified/wps/WordOllama.JS-WPS.zip
+          path: |
+            ci-unified/wps/WordOllama.JS-WPS.zip
+            ci-unified/wps/WordOllama.JS-WPS-publish.html
           if-no-files-found: error
           retention-days: 7

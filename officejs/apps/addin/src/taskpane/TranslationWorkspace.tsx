@@ -24,15 +24,18 @@ export function TranslationWorkspace() {
       <div className="translation-language-bar">
         <label className="translation-language-select">
           <span data-i18n="taskpane.translation.sourceLanguage">Source language</span>
-          <input
-            id="translation-source-language"
-            className="input input-sm"
-            list="translation-source-language-options"
-            autoComplete="off"
-            role="combobox"
-            aria-autocomplete="list"
-          />
-          <datalist id="translation-source-language-options" />
+          <div className="translation-language-combobox">
+            <input
+              id="translation-source-language"
+              className="input input-sm"
+              autoComplete="off"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-controls="translation-source-language-options"
+              aria-expanded="false"
+            />
+            <div id="translation-source-language-options" className="translation-language-options" role="listbox" hidden />
+          </div>
         </label>
         <button
           id="translation-swap-languages"
@@ -47,15 +50,18 @@ export function TranslationWorkspace() {
         </button>
         <label className="translation-language-select">
           <span data-i18n="taskpane.translation.targetLanguage">Target language</span>
-          <input
-            id="translation-target-language"
-            className="input input-sm"
-            list="translation-target-language-options"
-            autoComplete="off"
-            role="combobox"
-            aria-autocomplete="list"
-          />
-          <datalist id="translation-target-language-options" />
+          <div className="translation-language-combobox">
+            <input
+              id="translation-target-language"
+              className="input input-sm"
+              autoComplete="off"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-controls="translation-target-language-options"
+              aria-expanded="false"
+            />
+            <div id="translation-target-language-options" className="translation-language-options" role="listbox" hidden />
+          </div>
         </label>
       </div>
 

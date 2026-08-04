@@ -28,6 +28,12 @@ $smokeUpdatePublisherSubject = "CN=WordOllama Package Smoke Publisher"
 $smokeAddinStaticRoot = Join-Path $buildRootFullPath "addin-static"
 New-Item -ItemType Directory -Force -Path `
     (Join-Path $smokeAddinStaticRoot "assets") | Out-Null
+New-Item -ItemType Directory -Force -Path `
+    (Join-Path $smokeAddinStaticRoot "assets/ribbon") | Out-Null
+New-Item -ItemType Directory -Force -Path `
+    (Join-Path $smokeAddinStaticRoot "wps-addin") | Out-Null
+New-Item -ItemType Directory -Force -Path `
+    (Join-Path $smokeAddinStaticRoot "wps-addin/assets/ribbon") | Out-Null
 Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "index.html") `
     -Value "<!doctype html><title>WordOllama.JS</title><div id=`"root`"></div>" `
     -Encoding utf8NoBOM
@@ -37,6 +43,21 @@ Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "settings.html") `
 Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "commands.html") `
     -Value "<!doctype html><title>WordOllama.JS Commands</title>" `
     -Encoding utf8NoBOM
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "wps.html") `
+    -Value "<!doctype html><title>WordOllama.JS WPS</title><div id=`"root`"></div>" `
+    -Encoding utf8NoBOM
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "wps-addin/index.html") `
+    -Value "<!doctype html><script src=`"./main.js`"></script>" -Encoding utf8NoBOM
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "wps-addin/main.js") `
+    -Value "function OpenWordOllama(){ Application.CreateTaskPane('../wps.html'); }" `
+    -Encoding utf8NoBOM
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "wps-addin/ribbon.xml") `
+    -Value '<customUI xmlns="http://schemas.microsoft.com/office/2006/01/customui" />' `
+    -Encoding utf8NoBOM
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "assets/ribbon/agent.svg") `
+    -Value '<svg xmlns="http://www.w3.org/2000/svg" />' -Encoding utf8NoBOM
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "wps-addin/assets/ribbon/agent.svg") `
+    -Value '<svg xmlns="http://www.w3.org/2000/svg" />' -Encoding utf8NoBOM
 Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "assets/app.js") `
     -Value "globalThis.wordOllamaDesktopHost = true;" -Encoding utf8NoBOM
 Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "manifest.xml") `
@@ -101,7 +122,13 @@ function Assert-PublishDirectory {
     }
     if (-not (Test-Path -LiteralPath (Join-Path $directory "WordOllama.JS.xml") -PathType Leaf) -or
         -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/index.html") -PathType Leaf) -or
-        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/settings.html") -PathType Leaf)) {
+        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/settings.html") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps.html") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps-addin/index.html") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps-addin/main.js") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps-addin/ribbon.xml") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps-addin/assets/ribbon/agent.svg") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/assets/ribbon/agent.svg") -PathType Leaf)) {
         throw "Bridge package smoke: locally hosted Add-in payload is missing for $Runtime."
     }
 
@@ -124,7 +151,12 @@ function Assert-PublishDirectory {
             if ($entryNames -notcontains "appsettings.json" -or $entryNames -notcontains $expectedExecutable -or
                 $entryNames -notcontains "Skills/contract-review/SKILL.md" -or
                 $entryNames -notcontains "WordOllama.JS.xml" -or
-                $entryNames -notcontains "wwwroot/index.html") {
+                $entryNames -notcontains "wwwroot/index.html" -or
+                $entryNames -notcontains "wwwroot/wps.html" -or
+                $entryNames -notcontains "wwwroot/wps-addin/index.html" -or
+                $entryNames -notcontains "wwwroot/wps-addin/ribbon.xml" -or
+                $entryNames -notcontains "wwwroot/wps-addin/assets/ribbon/agent.svg" -or
+                $entryNames -notcontains "wwwroot/assets/ribbon/agent.svg") {
                 throw "Bridge package smoke: required entries must be at the archive root for $Runtime."
             }
         }
@@ -636,7 +668,7 @@ function Assert-WindowsInstallerLifecycle {
     $englishKeys = @($installerEnglish.root.data.name | Sort-Object)
     $chineseKeys = @($installerChinese.root.data.name | Sort-Object)
     if (($englishKeys -join ",") -ne ($chineseKeys -join ",") -or
-        $englishKeys.Count -ne 7) {
+        $englishKeys.Count -ne 9) {
         throw "Bridge package smoke: Windows installer locales are incomplete or mismatched."
     }
 
@@ -924,8 +956,15 @@ if ($hostRuntime -eq "win-x64") {
         $windowsInstallerProgram -notmatch 'TryReuseOwnedLocalhostCertificate' -or
         $windowsInstallerProgram -notmatch 'rotate-localhost-certificate' -or
         $windowsInstallerProgram -notmatch 'ScheduleOfficeAddinRegistrationRepair' -or
-        $windowsInstallerProgram -notmatch 'RepairOfficeAddinRegistrationAfterWordExit') {
-        throw "Bridge package smoke: Windows installer lacks owned current-user localhost certificate provisioning."
+        $windowsInstallerProgram -notmatch 'RepairOfficeAddinRegistrationAfterWordExit' -or
+        $windowsInstallerProgram -notmatch 'RegisterWpsAddin' -or
+        $windowsInstallerProgram -notmatch 'DeleteWpsAddinRegistration' -or
+        $windowsInstallerProgram -notmatch 'EnsureWpsClosedBeforeInstall' -or
+        $windowsInstallerProgram -notmatch 'process\.Kill\(entireProcessTree: true\)' -or
+        $windowsInstallerProgram -notmatch '"kingsoft"' -or
+        $windowsInstallerProgram -notmatch '"jsaddons"' -or
+        $windowsInstallerProgram -notmatch 'https://localhost:37421/wps-addin/') {
+        throw "Bridge package smoke: Windows installer lacks owned certificate, Office, or WPS registration."
     }
     if ($signedCandidateWorkflow -notmatch 'LocalSelfSignedMacRelease' -or
         $signedCandidateWorkflow -notmatch 'LocalSelfSignedRelease' -or

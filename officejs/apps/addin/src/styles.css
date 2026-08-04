@@ -147,6 +147,13 @@ button { cursor: pointer; }
   background: #fff;
 }
 
+/* WPS renders its task pane behind the expanded Ribbon instead of reducing the
+   webview viewport. Reserve the obscured logical-pixel band inside the flex
+   shell so headers and the top of every workflow remain reachable. */
+:root[data-host="wps"] .agent-shell {
+  padding-top: 124px;
+}
+
 .react-taskpane-root {
   display: contents;
 }
@@ -454,6 +461,8 @@ textarea:not(.textarea) { resize: vertical; }
 .translation-title svg { flex: none; color: var(--accent); }
 .translation-title h2 { margin: 0; font-size: 15px; }
 .translation-language-bar {
+  position: relative;
+  z-index: 4;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 38px minmax(0, 1fr);
   align-items: end;
@@ -476,6 +485,49 @@ textarea:not(.textarea) { resize: vertical; }
   min-width: 0;
   height: 38px;
   padding: 0 8px;
+}
+.translation-language-combobox {
+  position: relative;
+  min-width: 0;
+}
+.translation-language-options {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  max-height: min(240px, 45vh);
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--canvas);
+}
+.translation-language-option {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.translation-language-option small {
+  flex: none;
+  color: var(--faint);
+  font-size: 9px;
+}
+.translation-language-option:hover,
+.translation-language-option:focus,
+.translation-language-option[aria-selected="true"] {
+  outline: none;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
 }
 button.translation-swap-button {
   display: grid;

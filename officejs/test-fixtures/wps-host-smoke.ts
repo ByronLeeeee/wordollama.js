@@ -1,4 +1,37 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const wpsEntry = readFileSync(
+  new URL("../apps/addin/wps-public/wps-addin/index.html", import.meta.url),
+  "utf8",
+);
+const wpsMain = readFileSync(
+  new URL("../apps/addin/wps-public/wps-addin/main.js", import.meta.url),
+  "utf8",
+);
+const wpsRibbon = readFileSync(
+  new URL("../apps/addin/wps-public/wps-addin/ribbon.xml", import.meta.url),
+  "utf8",
+);
+const taskpaneMain = readFileSync(
+  new URL("../apps/addin/src/main.ts", import.meta.url),
+  "utf8",
+);
+const taskpaneStyles = readFileSync(
+  new URL("../apps/addin/src/styles.css", import.meta.url),
+  "utf8",
+);
+assert.match(wpsEntry, /src="\.\/main\.js"/u);
+assert.match(wpsMain, /\/wps\.html\?surface=/u);
+assert.match(wpsMain, /Application\.ShowDialog/u);
+assert.match(wpsMain, /settings\.html\?wpsDialog=1/u);
+assert.doesNotMatch(wpsMain, /settings\.html\?wpsTaskpane=1/u);
+assert.match(wpsMain, /return "assets\/ribbon\/"/u);
+assert.match(taskpaneMain, /dataset\.host = "wps"/u);
+assert.match(taskpaneStyles, /:root\[data-host="wps"\] \.agent-shell[\s\S]*padding-top: 124px/u);
+for (const action of wpsRibbon.matchAll(/onAction="([^"]+)"/gu)) {
+  assert.match(wpsMain, new RegExp(`(?:function ${action[1]}\\b|${action[1]}:)`, "u"));
+}
 
 const values = new Map<string, string>();
 const paragraphValues = ["第一段", "第二段包含关键字", "第三段"];
@@ -60,7 +93,7 @@ const { WpsWordAdapter } = await import("../apps/addin/src/wps-word-adapter.ts")
 assert.equal(isWpsHost(), true);
 const word = new WpsWordAdapter();
 assert.equal(word.supportsTool("get_selection"), true);
-assert.equal(word.supportsTool("revisions"), false);
+assert.equal(word.supportsTool("revisions"), true);
 assert.deepEqual(await word.getSelection(), {
   text: "用户选区",
   documentUrl: "C:\\docs\\sample.docx",

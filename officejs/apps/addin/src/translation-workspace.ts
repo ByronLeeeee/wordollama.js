@@ -72,10 +72,10 @@ export function initializeTranslationWorkspace(
 ): TranslationWorkspaceController {
   const sourceLanguage = element<HTMLInputElement>("#translation-source-language");
   const targetLanguage = element<HTMLInputElement>("#translation-target-language");
-  const sourceLanguageOptions = element<HTMLDataListElement>(
+  const sourceLanguageOptions = element<HTMLDivElement>(
     "#translation-source-language-options",
   );
-  const targetLanguageOptions = element<HTMLDataListElement>(
+  const targetLanguageOptions = element<HTMLDivElement>(
     "#translation-target-language-options",
   );
   const source = element<HTMLTextAreaElement>("#translation-source");
@@ -188,21 +188,51 @@ export function initializeTranslationWorkspace(
     input.value = languageDisplayName(code);
   };
   const fillOptions = (
-    list: HTMLDataListElement,
+    list: HTMLDivElement,
+    input: HTMLInputElement,
     includeAdaptive: boolean,
+    query = "",
   ) => {
-    list.replaceChildren(...translationLanguageOptions(recentLanguages, includeAdaptive)
-      .map(({ code, label }) => {
-        const option = document.createElement("option");
-        option.value = label;
-        option.label = code === "auto" ? label : `${label} · ${code}`;
-        option.dataset.languageCode = code;
-        return option;
-      }));
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    const options = translationLanguageOptions(recentLanguages, includeAdaptive)
+      .filter(({ code, label }) => !normalizedQuery ||
+        code.toLocaleLowerCase().includes(normalizedQuery) ||
+        label.toLocaleLowerCase().includes(normalizedQuery));
+    list.replaceChildren(...options.map(({ code, label }) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "translation-language-option";
+      option.dataset.languageCode = code;
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(input.dataset.languageCode === code));
+      const name = document.createElement("span");
+      name.textContent = label;
+      const languageCode = document.createElement("small");
+      languageCode.textContent = code === "auto" ? "" : code;
+      option.append(name, languageCode);
+      const selectOption = () => {
+        if (input.dataset.languageCode === code && input.value === label && list.hidden) return;
+        setLanguage(input, code);
+        list.hidden = true;
+        input.setAttribute("aria-expanded", "false");
+        updateState();
+        input.focus();
+      };
+      option.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        selectOption();
+      });
+      option.addEventListener("click", selectOption);
+      return option;
+    }));
   };
-  const renderLanguageOptions = () => {
-    fillOptions(sourceLanguageOptions, true);
-    fillOptions(targetLanguageOptions, false);
+  const renderLanguageOptions = (input?: HTMLInputElement, query = "") => {
+    if (!input || input === sourceLanguage) {
+      fillOptions(sourceLanguageOptions, sourceLanguage, true, query);
+    }
+    if (!input || input === targetLanguage) {
+      fillOptions(targetLanguageOptions, targetLanguage, false, query);
+    }
   };
   const rememberLanguages = (
     sourceCode: SourceLanguageCode,
@@ -230,6 +260,76 @@ export function initializeTranslationWorkspace(
     insertButton.disabled = !hasResult;
     retryButton.disabled = !hasSource || !hasLanguages || abortController !== null || !result.value.trim();
     copyButton.disabled = !hasResult;
+  };
+
+  const configureLanguageCombobox = (
+    input: HTMLInputElement,
+    list: HTMLDivElement,
+    includeAdaptive: boolean,
+  ) => {
+    const showOptions = (query = "") => {
+      renderLanguageOptions(input, query);
+      list.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+    };
+    const hideOptions = () => {
+      list.hidden = true;
+      input.setAttribute("aria-expanded", "false");
+    };
+    input.addEventListener("focus", () => {
+      input.select();
+      showOptions();
+    });
+    input.addEventListener("click", () => showOptions(input.selectionStart === 0 &&
+      input.selectionEnd === input.value.length ? "" : input.value));
+    input.addEventListener("input", () => {
+      const code = resolveLanguageCode(input.value, includeAdaptive);
+      if (code) input.dataset.languageCode = code;
+      showOptions(input.value);
+      updateState();
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        hideOptions();
+        return;
+      }
+      if (event.key === "Enter" || event.key === "ArrowDown") {
+        const firstOption = list.querySelector<HTMLButtonElement>(".translation-language-option");
+        if (!firstOption) return;
+        event.preventDefault();
+        if (event.key === "Enter") firstOption.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        else firstOption.focus();
+      }
+    });
+    input.addEventListener("blur", () => {
+      window.setTimeout(() => {
+        if (list.contains(document.activeElement)) return;
+        const resolved = resolveLanguageCode(input.value, includeAdaptive);
+        if (resolved) setLanguage(input, resolved);
+        else {
+          const previous = input.dataset.languageCode as SourceLanguageCode | undefined;
+          if (previous) setLanguage(input, previous);
+        }
+        hideOptions();
+        updateState();
+      }, 100);
+    });
+    list.addEventListener("keydown", (event) => {
+      const options = Array.from(list.querySelectorAll<HTMLButtonElement>(".translation-language-option"));
+      const index = options.indexOf(document.activeElement as HTMLButtonElement);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        input.focus();
+        hideOptions();
+      } else if (event.key === "ArrowDown" && index >= 0) {
+        event.preventDefault();
+        options[Math.min(index + 1, options.length - 1)]?.focus();
+      } else if (event.key === "ArrowUp" && index >= 0) {
+        event.preventDefault();
+        (index === 0 ? input : options[index - 1])?.focus();
+      }
+    });
   };
 
   const setLinkedSelection = (value: string) => {
@@ -273,6 +373,8 @@ export function initializeTranslationWorkspace(
   applySelectedPrompt();
   setLanguage(sourceLanguage, "auto");
   setLanguage(targetLanguage, i18n.resolvedLanguage === "zh-CN" ? "en" : "zh-CN");
+  configureLanguageCombobox(sourceLanguage, sourceLanguageOptions, true);
+  configureLanguageCombobox(targetLanguage, targetLanguageOptions, false);
 
   element<HTMLButtonElement>("#translation-load-selection").addEventListener("click", () => {
     dependencies.clearError();
@@ -305,14 +407,6 @@ export function initializeTranslationWorkspace(
     }
     updateState();
   });
-  for (const input of [sourceLanguage, targetLanguage]) {
-    input.addEventListener("input", () => {
-      const code = resolveLanguageCode(input.value, input === sourceLanguage);
-      input.dataset.languageCode = code ?? "";
-      updateState();
-    });
-    input.addEventListener("focus", () => input.select());
-  }
   source.addEventListener("input", updateState);
   result.addEventListener("input", updateState);
   promptSelect.addEventListener("change", () => {
