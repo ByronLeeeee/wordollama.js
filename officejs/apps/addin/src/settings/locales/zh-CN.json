@@ -1150,6 +1150,7 @@
       "errors": {
         "revisionsApiUnsupported": "当前 Word 版本不支持 WordApiDesktop 1.4 修订 API",
         "safeRevisionUnsupported": "当前 Word 版本不支持安全修订操作",
+        "wpsFeatureUnsupported": "当前 WPS 版本暂不支持{{feature}}。",
         "revisionListChanged": "修订列表已变化，请刷新后重试",
         "targetRevisionChanged": "目标修订已变化，请刷新后重试",
         "reviewTargetMissing": "审阅项目没有可定位的段落或原文",

@@ -42,6 +42,8 @@ export default defineConfig(async ({ command }) => {
   }).process?.env;
   const baseConfig = {
     plugins: [react(), tailwindcss()],
+    publicDir: "wps-public",
+    base: "./",
     define: {
       __WORDOLLAMA_BRIDGE_URL__: JSON.stringify(
         environment?.WORDOLLAMA_BRIDGE_URL ?? "http://127.0.0.1:37421",
@@ -61,6 +63,7 @@ export default defineConfig(async ({ command }) => {
           index: join(import.meta.dirname, "index.html"),
           settings: join(import.meta.dirname, "settings.html"),
           commands: join(import.meta.dirname, "commands.html"),
+          wps: join(import.meta.dirname, "wps.html"),
         },
       },
     },

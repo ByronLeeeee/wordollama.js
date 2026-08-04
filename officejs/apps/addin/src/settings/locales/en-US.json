@@ -1150,6 +1150,7 @@
       "errors": {
         "revisionsApiUnsupported": "This Word version does not support the WordApiDesktop 1.4 revisions API",
         "safeRevisionUnsupported": "This Word version does not support safe revision operations",
+        "wpsFeatureUnsupported": "The current WPS version does not support {{feature}} yet.",
         "revisionListChanged": "The revision list has changed. Refresh and retry.",
         "targetRevisionChanged": "The target revision has changed. Refresh and retry.",
         "reviewTargetMissing": "The review item has no paragraph or source text that can be located",

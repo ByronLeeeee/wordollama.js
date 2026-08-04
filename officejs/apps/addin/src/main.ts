@@ -8,6 +8,8 @@ import {
   OfficeJsWordAdapter,
   type TrackedRevision,
 } from "./officejs-word-adapter";
+import { WpsWordAdapter } from "./wps-word-adapter";
+import { isWpsHost } from "./wps-host";
 import { OfficeJsToolRegistry } from "./officejs-tool-registry";
 import { OfficeGoldenHostHarness, runOfficeGoldenMatrix } from "./officejs-golden-runner";
 import {
@@ -172,7 +174,10 @@ i18n.on("languageChanged", () => {
   void refreshRuntimeStatus();
 });
 
-const word = new OfficeJsWordAdapter(requestHumanInput);
+const wpsHost = isWpsHost();
+const word = wpsHost
+  ? new WpsWordAdapter(requestHumanInput)
+  : new OfficeJsWordAdapter(requestHumanInput);
 const tools = new OfficeJsToolRegistry(word);
 const runtime = new RuntimeClient();
 
@@ -428,6 +433,7 @@ let customPromptSource = "";
 let customPromptOriginalSelection = "";
 let customPromptAbortController: AbortController | null = null;
 let settingsOfficeDialog: Office.Dialog | null = null;
+let settingsPopup: Window | null = null;
 let commandMenuItems: Array<{ label: string; hint?: string; action: () => void }> = [];
 let selectedCommandIndex = -1;
 let availableSkills: Array<{ name: string; description: string }> = [];
@@ -615,10 +621,13 @@ function openUtilityDialog(): void {
 }
 
 function openReactSettingsDialog(): void {
-  if (settingsOfficeDialog) return;
-  const url = new URL("/settings.html", window.location.origin).href;
+  if (settingsOfficeDialog || (settingsPopup && !settingsPopup.closed)) return;
+  const url = wpsHost
+    ? new URL("settings.html", new URL(".", window.location.href)).href
+    : new URL("/settings.html", window.location.origin).href;
   if (typeof Office === "undefined" || !Office.context?.ui?.displayDialogAsync) {
-    window.open(url, "_blank", "popup,width=1120,height=760,resizable=yes");
+    settingsPopup = window.open(url, "wordollama-settings", "popup,width=1120,height=760,resizable=yes");
+    if (!settingsPopup) showError(new Error(i18n.t("taskpane.settings.openFailed")));
     return;
   }
   Office.context.ui.displayDialogAsync(
@@ -2601,7 +2610,14 @@ function initializeWorkflowRoute(): void {
     });
 }
 
-if (typeof Office === "undefined") {
+if (wpsHost) {
+  officeReady = true;
+  hostStatus.textContent = "";
+  hostStatus.title = i18n.t("taskpane.agent.hostConnected", { host: "WPS Writer" });
+  initializeWorkflowRoute();
+  void activateBridgeSession().catch((error) =>
+    appendDiagnostic("bridge", `automatic pairing failed: ${error instanceof Error ? error.message : String(error)}`));
+} else if (typeof Office === "undefined") {
   hostStatus.textContent = "";
   void refreshRuntimeStatus();
   initializeWorkflowRoute();
@@ -2857,6 +2873,21 @@ async function consumeAgentSession(
     }
   }
 }
+
+window.addEventListener("message", (event) => {
+  if (!wpsHost || !settingsPopup || event.source !== settingsPopup || event.origin !== window.location.origin) {
+    return;
+  }
+  const dialog = {
+    close: () => {
+      settingsPopup?.close();
+      settingsPopup = null;
+    },
+    messageChild: (message: string) => settingsPopup?.postMessage(message, window.location.origin),
+  } as unknown as Office.Dialog;
+  const message = typeof event.data === "string" ? event.data : JSON.stringify(event.data);
+  void handleReactSettingsMessage(dialog, message, event.origin);
+});
 
 function openAgentSource(url: string): void {
   const officeUi = typeof Office === "undefined" ? undefined : Office.context?.ui as Office.UI & {

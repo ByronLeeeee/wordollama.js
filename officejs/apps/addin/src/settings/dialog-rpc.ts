@@ -27,21 +27,29 @@ let initialized = false;
 
 function ensureInitialized(): void {
   if (initialized) return;
-  if (typeof Office === "undefined" || typeof Office.context?.ui?.addHandlerAsync !== "function") {
-    throw new Error("dialog-parent-messaging-unavailable");
+  if (typeof Office !== "undefined" && typeof Office.context?.ui?.addHandlerAsync === "function") {
+    Office.context.ui.addHandlerAsync(
+      Office.EventType.DialogParentMessageReceived,
+      (event) => handleResponse(event.message),
+    );
+    initialized = true;
+    return;
   }
-  Office.context.ui.addHandlerAsync(
-    Office.EventType.DialogParentMessageReceived,
-    (event) => {
-      const response = JSON.parse(event.message) as DialogResponse;
-      const request = pending.get(response.id);
-      if (!request) return;
-      pending.delete(response.id);
-      if (response.ok) request.resolve(response.result);
-      else request.reject(new Error(response.error ?? "dialog-parent-request-failed"));
-    },
-  );
+  if (!window.opener) throw new Error("dialog-parent-messaging-unavailable");
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.opener || event.origin !== window.location.origin) return;
+    handleResponse(typeof event.data === "string" ? event.data : JSON.stringify(event.data));
+  });
   initialized = true;
+}
+
+function handleResponse(message: string): void {
+  const response = JSON.parse(message) as DialogResponse;
+  const request = pending.get(response.id);
+  if (!request) return;
+  pending.delete(response.id);
+  if (response.ok) request.resolve(response.result);
+  else request.reject(new Error(response.error ?? "dialog-parent-request-failed"));
 }
 
 function requestParent<T>(input: DialogRequestInput): Promise<T> {
@@ -62,9 +70,16 @@ function requestParent<T>(input: DialogRequestInput): Promise<T> {
         reject(error);
       },
     });
-    Office.context.ui.messageParent(JSON.stringify({ ...input, id }), {
-      targetOrigin: window.location.origin,
-    });
+    const message = JSON.stringify({ ...input, id });
+    if (typeof Office !== "undefined" && typeof Office.context?.ui?.messageParent === "function") {
+      Office.context.ui.messageParent(message, { targetOrigin: window.location.origin });
+    } else if (window.opener) {
+      window.opener.postMessage(message, window.location.origin);
+    } else {
+      pending.delete(id);
+      window.clearTimeout(timeout);
+      reject(new Error("dialog-parent-messaging-unavailable"));
+    }
   });
 }
 
@@ -89,6 +104,12 @@ export function closeSettingsWindow(): void {
       targetOrigin: window.location.origin,
     });
     return;
+  }
+  if (window.opener) {
+    window.opener.postMessage(JSON.stringify({
+      id: crypto.randomUUID(),
+      method: "settings.close",
+    }), window.location.origin);
   }
   window.close();
 }

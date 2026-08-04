@@ -45,6 +45,8 @@ MCP stdio 已独立为 `WordOllama.Mcp` net8.0 项目，Bridge 提供 `/mcp/serv
 
 Bridge 当前使用本机回环 HTTP 便于开发；程序会拒绝非回环 HTTP。正式桌面版由同一个 Bridge 在 `https://localhost:37421` 同时托管 React 前端与本地 API，生成的 manifest 也指向该本地宿主，因此用户安装后不需要 Vite、在线静态站点或手动启动 Bridge。Windows EXE/macOS PKG 会安装本地前端、manifest 和用户级登录自启项；生产配置使用回环 HTTPS PFX，`provision-bridge-https.ps1` 会验证受信任 PFX 并通过标准输入把密码写入 Windows Credential Manager 或 macOS Keychain，避免密码进入命令行和 JSON。真实证书签名、公证及目标平台信任链仍须在对应发布环境执行。Windows/Mac 统一版的受支持基线是 Microsoft 365 Word（Windows、Mac）；老版本或缺少对应 WordApi 集的宿主会隐藏/拒绝不支持的工具，保留基础文本操作。完全离线的桌面发行不支持 Word 网页版。
 
+WPS 版已建立独立的 Windows/Linux 基线：复用同一套 React、Agent、Skill、Provider 与 Desktop Bridge，通过 `wps.html` 和 `WpsWordAdapter` 对接 WPS Writer 的同步对象模型。当前已适配选区/全文与段落、搜索替换、批注、书签、样式、段落与文字格式、表格、文档大纲、法律工具、列表、页面设置、页眉页脚、目录及批量审阅建议；设置窗口在 WPS 下使用同源 `postMessage` 与任务窗格交换样式和配对信息。HTML/Markdown 保真插入、比较结果回写、图片文件落盘和修订列表尚未对 WPS 开放，不会加入 Agent 工具目录或会返回明确的宿主能力错误。WPS 加载项入口为 `ribbon.xml + main.js`，执行 `pwsh ./packaging/package-wps-addin.ps1` 可生成测试 ZIP。该版本仍需在实际 WPS Windows/Linux 客户端完成宿主回归；WPS 官方开发文档目前仍只声明 Windows/Linux 适配，因此暂不承诺支持 Mac 版 WPS。
+
 Windows EXE 会登记当前用户卸载入口；macOS PKG 会在
 `~/Applications/WordOllama.JS` 安装双语原生卸载器。两端卸载都删除安装文件、
 自启项和专用 HTTPS 凭据，但默认保留 Provider/MCP/API Key 与用户设置。

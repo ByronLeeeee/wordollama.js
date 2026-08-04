@@ -86,6 +86,9 @@ try {
     Invoke-NpmChecked -NpmArguments @("run", "test:permission-scope") -Label "Office.js Agent permission scope"
     Invoke-NpmChecked -NpmArguments @("run", "test:offline") -Label "Office.js offline product boundary"
     Invoke-NpmChecked -NpmArguments @("run", "test:agent-evolution") -Label "Office.js Agent sources and Skill creator"
+    Invoke-NpmChecked -NpmArguments @("run", "test:wps") -Label "WPS core host adapter"
+    Invoke-NpmChecked -NpmArguments @("run", "test:wps-tools") -Label "WPS extended Agent tools"
+    Invoke-NpmChecked -NpmArguments @("run", "test:wps-dialog") -Label "WPS settings popup RPC"
     Invoke-NpmChecked -NpmArguments @("run", "bundle") -Label "Office.js production bundle"
     if (-not $SkipManifestValidation) {
         Invoke-NpmChecked -NpmArguments @("run", "validate") -Label "Office.js manifest validation"
