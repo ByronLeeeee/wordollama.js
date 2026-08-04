@@ -62,7 +62,7 @@ pwsh ./packaging/package-linux-installer.ps1 `
 
 每个目标平台 runner 还会直接启动其自包含 Bridge 可执行文件，连接受控本地 Provider 和 stdio MCP fixture，并执行配对鉴权、设置持久化及 Agent 加密恢复的跨进程重启回归。macOS arm64 runner 会真实经过 Keychain，而不是用 Windows 结果代替 Mac 平台证据；它还会为 `smoke` 版本原生执行 unsigned `pkgbuild/productbuild`，用 `pkgutil --expand-full` 展开 PKG，再由系统 `sh -n`/`plutil` 检查 launcher、postinstall、双语卸载器、回滚入口、LaunchAgent 和可执行权限。`-BuildUnsignedForTests` 对非 `smoke`/`test` 版本无效；生产路径必须明确选择 Developer ID 公证模式或首发采用的本地自签名/显式用户信任模式。这些 CI 结果仍不等同于 Word 宿主、正式签名或 Apple 公证证据。
 
-需要正式签名候选包时，手动运行 `.github/workflows/officejs-signed-candidate.yml`。Windows runner 从 `WINDOWS_SIGNING_PFX_BASE64` / `WINDOWS_SIGNING_PFX_PASSWORD` 导入固定的自签名代码签名证书，签署 Bridge PE/ZIP 后继续生成并签署用户级 EXE；macOS runner 从 `MACOS_SIGNING_P12_BASE64` / `MACOS_SIGNING_P12_PASSWORD` 导入包含固定 Application/Installer 自签名身份的临时 Keychain，分别使用 `MACOS_SIGNING_IDENTITY` 和 `MACOS_INSTALLER_IDENTITY`，生成明确标记 `notarized: false`、`explicitUserTrustRequired: true` 的 Bridge 与 PKG 证据。工作流不会请求或伪造 Apple 公证，随后启动候选 Bridge 执行实时 API 回归；最后删除临时凭据，只上传保留 14 天的 `signed-candidate` 和原始 unsigned descriptor。该候选仍为 `releaseReady: false`；必须在目标 Word 中生成同版本宿主证据并运行终审，不能直接作为 GA 发布。
+需要 Windows 正式签名候选包时，手动运行 `.github/workflows/officejs-signed-candidate.yml`。该工作流只运行 `windows-latest`，从 `WINDOWS_SIGNING_PFX_BASE64` / `WINDOWS_SIGNING_PFX_PASSWORD` 导入固定的 `CN=李伯阳` 自签名代码签名证书，并将证书指纹固定为 `D550783D83AF20115E35EBD7391CC08212B79EE4`；它签署 Bridge PE/ZIP 后继续生成并签署用户级 EXE，导出供用户核验的 `.publisher.cer`，最后删除 Runner 中的临时私钥和信任。macOS 和 Linux 继续只由统一 CI 生成 unsigned 包，不进入此签名工作流。Windows 候选仍为 `releaseReady: false`；必须在目标 Word/WPS 中完成宿主验收后才能正式分发。
 
 没有 Developer ID 时，可在 Apple Silicon Mac 上为 `sign-bridge-release.ps1` 传入
 `-LocalSelfSignedMacRelease`，并为 `package-macos-installer.ps1` 传入

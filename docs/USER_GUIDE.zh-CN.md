@@ -39,16 +39,13 @@ API Key。下面的证书、哈希和平台说明主要供发布者或需要手�
 
 ## Apple Silicon Mac 安装
 
-首期本地自签名包无法取得 Apple Developer ID 公共身份，因此不能完成 Apple 公证、
-stapling，也不能承诺 Gatekeeper 无警告。发布证据会明确标记
-`explicitUserTrustRequired: true`，不会把本地签名冒充为 Apple 已公证。
+当前 Action 生成 unsigned macOS 包，不包含 Developer ID 身份、Apple 公证或
+stapling，也不能承诺 Gatekeeper 无警告；不得将该产物描述为 Apple 已公证。
 
-1. 核对 PKG 的 SHA-256、签名身份和随包公布的指纹。
-2. 将发布者提供的应用签名证书和安装器签名证书显式导入当前用户 login Keychain，
-   只对核对过的 WordOllama.JS 身份设置信任。
-3. 在 Finder 中按住 Control 点击 PKG 并选择“打开”；若系统仍阻止，在“系统设置 >
+1. 核对 PKG 的 SHA-256。
+2. 在 Finder 中按住 Control 点击 PKG 并选择“打开”；若系统仍阻止，在“系统设置 >
    隐私与安全性”中仅为这一个已核验安装器选择“仍要打开”。不要全局关闭 Gatekeeper。
-4. 安装完成后运行 `~/Applications/WordOllama.JS/Complete WordOllama.JS Setup.command`，
+3. 安装完成后运行 `~/Applications/WordOllama.JS/Complete WordOllama.JS Setup.command`，
    查看并确认产品专用 localhost HTTPS 证书，再完全退出并重开 Word。
 
 Mac 仅支持 Apple Silicon，不提供 Intel 构建。若以后改用 Developer ID，才可恢复

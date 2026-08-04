@@ -164,8 +164,9 @@ try {
         $enhancedKeyUsage = @($exportedCertificate.Extensions |
             Where-Object { $_.Oid.Value -eq "2.5.29.37" } |
             Select-Object -First 1)
-        if ($basicConstraints.Count -ne 1 -or
-            ([Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]$basicConstraints[0]).CertificateAuthority -or
+        if ($basicConstraints.Count -gt 1 -or
+            ($basicConstraints.Count -eq 1 -and
+             ([Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]$basicConstraints[0]).CertificateAuthority) -or
             $enhancedKeyUsage.Count -ne 1 -or
             -not ([Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]$enhancedKeyUsage[0]).EnhancedKeyUsages[
                 "1.3.6.1.5.5.7.3.3"]) {

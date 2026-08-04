@@ -975,11 +975,14 @@ if ($hostRuntime -eq "win-x64") {
         $windowsInstallerProgram -notmatch 'https://localhost:37421/wps-addin/') {
         throw "Bridge package smoke: Windows installer lacks owned certificate, Office, or WPS registration."
     }
-    if ($signedCandidateWorkflow -notmatch 'LocalSelfSignedMacRelease' -or
-        $signedCandidateWorkflow -notmatch 'LocalSelfSignedRelease' -or
-        $signedCandidateWorkflow -notmatch 'BridgeLocalSignatureEvidencePath' -or
-        $signedCandidateWorkflow -match 'APPLE_ID|APPLE_TEAM_ID|APPLE_APP_PASSWORD') {
-        throw "Bridge package smoke: signed candidate workflow does not follow the local self-signed Apple Silicon release policy."
+    if ($signedCandidateWorkflow -notmatch 'WINDOWS_SIGNING_PFX_BASE64' -or
+        $signedCandidateWorkflow -notmatch 'WINDOWS_SIGNING_PFX_PASSWORD' -or
+        $signedCandidateWorkflow -notmatch 'PINNED_SIGNER_THUMBPRINT' -or
+        $signedCandidateWorkflow -notmatch 'CurrentUser\\Root' -or
+        $signedCandidateWorkflow -notmatch 'CurrentUser\\TrustedPublisher' -or
+        $signedCandidateWorkflow -notmatch 'Runtime win-x64' -or
+        $signedCandidateWorkflow -match 'macos-15|osx-arm64|MACOS_SIGNING|APPLE_ID|APPLE_TEAM_ID|APPLE_APP_PASSWORD') {
+        throw "Bridge package smoke: signed candidate workflow must sign only the pinned Windows candidate."
     }
     if ($installerSource -notmatch "TimeStamperCertificate" -or
         $finalizerSource -notmatch "TimeStamperCertificate") {

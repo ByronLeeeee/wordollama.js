@@ -32,13 +32,11 @@ is requested. Uninstall removes the owned localhost certificate and credential.
 
 ## Install on Apple Silicon Mac
 
-The local self-signed release cannot obtain Apple notarization, stapling, or a
-warning-free Gatekeeper result. Its evidence is marked
-`explicitUserTrustRequired: true`; it is never represented as Apple-notarized.
+The current CI produces an unsigned macOS package. It has no Apple notarization,
+stapling, Developer ID identity, or warning-free Gatekeeper result and must never
+be represented as Apple-notarized.
 
-Verify the PKG hash and identities, import the supplied application and installer
-certificates into the current user's login Keychain, and trust only the verified
-WordOllama.JS identities. Control-click the verified PKG and choose Open; if it is
+Verify the PKG hash, then Control-click the verified PKG and choose Open; if it is
 still blocked, use Privacy & Security > Open Anyway for that exact package. Never
 disable Gatekeeper globally. After installation, run
 `~/Applications/WordOllama.JS/Complete WordOllama.JS Setup.command` and approve the

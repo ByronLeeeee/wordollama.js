@@ -91,10 +91,6 @@ jobs:
             -UpdateIndexUrl 'https://updates.wordollama.invalid/ci-${{ github.run_number }}-${{ github.run_attempt }}/index.json' `
             -ExpectedUpdatePublisherSubject 'CN=WordOllama CI Unsigned Test' `
             -OutputRoot ./ci-unified
-      - name: Build WPS add-in package
-        if: ${{ matrix.runtime == 'win-x64' }}
-        shell: pwsh
-        run: ./packaging/package-wps-addin.ps1 -OutputDirectory ./ci-unified/wps -SkipBuild
       - name: Build target-native test installer
         shell: pwsh
         run: |
@@ -120,18 +116,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: wordollama-js-${{ matrix.runtime }}-unsigned
-          path: |
-            ci-unified/
-            !ci-unified/wps/
-          if-no-files-found: error
-          retention-days: 7
-      - name: Upload WPS add-in package
-        if: ${{ matrix.runtime == 'win-x64' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: wordollama-js-wps-unsigned
-          path: |
-            ci-unified/wps/WordOllama.JS-WPS.zip
-            ci-unified/wps/WordOllama.JS-WPS-publish.html
+          path: ci-unified/
           if-no-files-found: error
           retention-days: 7
