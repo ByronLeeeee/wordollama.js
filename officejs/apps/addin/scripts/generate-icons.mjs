@@ -24,11 +24,11 @@ const icons = [
   ["table", "Table", `<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16M15 4v16"/>`],
   ["html", "Html", `<path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/>`],
   ["markdown", "Markdown", `<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M5 15V9l3 3 3-3v6M15 9v6m-2-2 2 2 2-2"/>`],
-  ["agent", "Agent", `<path d="m12 2 1.4 4.6L18 8l-4.6 1.4L12 14l-1.4-4.6L6 8l4.6-1.4zM19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8zM5 14l.7 1.8 1.8.7-1.8.7L5 19l-.7-1.8-1.8-.7 1.8-.7z"/>`],
+  ["agent", "Agent", `<rect x="4" y="6" width="16" height="14" rx="3"/><path d="M9 3h6M12 3v3M8 11h.01M16 11h.01M8 15h8"/>`],
   ["custom-prompts", "CustomPrompts", `<path d="M5 4h14v16H5zM8 8h8M8 12h5M8 16h4m5-3 .7 1.8 1.8.7-1.8.7L17 18l-.7-1.8-1.8-.7 1.8-.7z"/>`],
   ["polish", "Polish", `<path d="M4 18h10M4 13h8M4 8h6m7-5 .9 2.6 2.6.9-2.6.9L17 10l-.9-2.6-2.6-.9 2.6-.9zM19 14l.6 1.4L21 16l-1.4.6L19 18l-.6-1.4L17 16l1.4-.6z"/>`],
-  ["expand", "Expand", `<path d="M9 9 4 4m0 0v4m0-4h4M15 9l5-5m0 0v4m0-4h-4M9 15l-5 5m0 0v-4m0 4h4M15 15l5 5m0 0v-4m0 4h-4"/>`],
-  ["simplify", "Simplify", `<path d="M4 4l5 5M4 4v4m0-4h4M20 4l-5 5m5-5v4m0-4h-4M4 20l5-5m-5 5v-4m0 4h4M20 20l-5-5m5 5v-4m0 4h-4"/>`],
+  ["expand", "Expand", `<path d="M4 6h8M4 11h12M4 16h16M18 3v6M15 6h6"/>`],
+  ["simplify", "Simplify", `<path d="M4 6h16M4 11h12M4 16h8M15 18h6"/>`],
   ["modify", "Modify", `<path d="M4 20h4l11-11-4-4L4 16zM13 7l4 4M4 12H2M8 8H2M10 4H2"/>`],
   ["continue", "Continue", `<path d="M3 6h10M3 11h8M3 16h10M14 12l5 4-5 4"/>`],
   ["summarize", "Summarize", `<path d="M4 5h16M7 9h10M9 13h6M11 17h2m-4 3 3 2 3-2"/>`],
@@ -60,7 +60,7 @@ const icons = [
 ];
 
 const root = join(import.meta.dirname, "..", "assets", "ribbon");
-const ribbonAssetRevision = "mono-1";
+const ribbonAssetRevision = "mono-2";
 await mkdir(root, { recursive: true });
 const catalog = [];
 for (const [name, resource, body] of icons) {

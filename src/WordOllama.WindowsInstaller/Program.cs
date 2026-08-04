@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -24,6 +25,11 @@ internal sealed record InstallState(
     string InstalledAt,
     string ArchiveSha256,
     string Installer);
+
+internal sealed record RibbonRepairResult(
+    string ReportPath,
+    string RegistryFilePath,
+    bool BridgeReady);
 
 internal static class Program
 {
@@ -82,6 +88,35 @@ internal static class Program
             var startupRoot = ResolveStartupRoot(
                 options,
                 skipRegistration);
+            if (options.ContainsKey("--repair-ribbon"))
+            {
+                if (quiet)
+                {
+                    throw new InvalidOperationException(
+                        "Ribbon repair requires interactive confirmation because it resets the shared Office WEF cache.");
+                }
+                if (!ConfirmRibbonRepair())
+                {
+                    return 0;
+                }
+                var runningOfficeApps = GetRunningOfficeApplications();
+                if (runningOfficeApps.Count > 0)
+                {
+                    Notify(
+                        InstallerText.CloseOfficeForRibbonRepair(
+                            string.Join(", ", runningOfficeApps)),
+                        quiet: false);
+                    return 2;
+                }
+                var result = RepairRibbon(installRoot);
+                Notify(
+                    InstallerText.RibbonRepairCompleted(
+                        result.ReportPath,
+                        result.RegistryFilePath,
+                        result.BridgeReady),
+                    quiet: false);
+                return 0;
+            }
             if (options.ContainsKey("--repair-office-registration"))
             {
                 RepairOfficeAddinRegistrationAfterWordExit(
@@ -145,7 +180,11 @@ internal static class Program
                 MessageBoxW(
                     IntPtr.Zero,
                     InstallerText.Failed(exception.Message),
-                    InstallerText.Title,
+                    args.Contains(
+                        "--repair-ribbon",
+                        StringComparer.OrdinalIgnoreCase)
+                        ? InstallerText.RibbonRepairTitle
+                        : InstallerText.Title,
                     0x00000010);
             }
             Console.Error.WriteLine(exception);
@@ -162,7 +201,8 @@ internal static class Program
             var argument = args[index];
             if (argument is "--quiet" or "--no-start" or "--uninstall" or "--rollback" or
                 "--skip-registration" or "--trust-localhost-certificate" or
-                "--rotate-localhost-certificate" or "--repair-office-registration")
+                "--rotate-localhost-certificate" or "--repair-office-registration" or
+                "--repair-ribbon")
             {
                 result[argument] = null;
                 continue;
@@ -433,8 +473,13 @@ internal static class Program
 
         if (!skipRegistration)
         {
+            var manifestPath = Path.Combine(target, "WordOllama.JS.xml");
             RegisterOfficeAddin(
-                Path.Combine(target, "WordOllama.JS.xml"));
+                manifestPath);
+            WriteRibbonRepairRegistryFile(
+                Path.Combine(installRoot, "WordOllama.JS-Ribbon-Repair.reg"),
+                manifestPath);
+            InstallRibbonRepairEntry(installRoot);
             RegisterUninstaller(
                 uninstallPath,
                 installRoot,
@@ -657,10 +702,10 @@ internal static class Program
             $"\"{uninstallPath}\" --uninstall --quiet");
         key.SetValue(
             "ModifyPath",
-            $"\"{uninstallPath}\" --rollback");
+            $"\"{uninstallPath}\" --repair-ribbon");
         key.SetValue("InstallLocation", installRoot);
         key.SetValue("NoModify", 0, RegistryValueKind.DWord);
-        key.SetValue("NoRepair", 1, RegistryValueKind.DWord);
+        key.SetValue("NoRepair", 0, RegistryValueKind.DWord);
         key.SetValue(
             "EstimatedSize",
             estimatedSizeKb,
@@ -688,6 +733,7 @@ internal static class Program
         }
         if (!skipRegistration)
         {
+            RemoveRibbonRepairEntry();
             Registry.CurrentUser.DeleteSubKeyTree(
                 UninstallRegistryPath,
                 throwOnMissingSubKey: false);
@@ -709,6 +755,283 @@ internal static class Program
         else
         {
             Directory.Delete(installRoot, recursive: true);
+        }
+    }
+
+    private static bool ConfirmRibbonRepair() =>
+        MessageBoxW(
+            IntPtr.Zero,
+            InstallerText.RibbonRepairConfirmation,
+            InstallerText.RibbonRepairTitle,
+            0x00000004 | 0x00000030 | 0x00000100) == 6;
+
+    private static IReadOnlyList<string> GetRunningOfficeApplications()
+    {
+        var result = new List<string>();
+        foreach (var (processName, displayName) in new[]
+                 {
+                     ("WINWORD", "Word"),
+                     ("EXCEL", "Excel"),
+                     ("POWERPNT", "PowerPoint"),
+                 })
+        {
+            var processes = Process.GetProcessesByName(processName);
+            if (processes.Length > 0)
+            {
+                result.Add(displayName);
+            }
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
+        }
+        return result;
+    }
+
+    private static RibbonRepairResult RepairRibbon(string installRoot)
+    {
+        var currentVersionPath = Path.Combine(installRoot, "current-version");
+        if (!File.Exists(currentVersionPath))
+        {
+            throw new InvalidDataException(
+                "WordOllama.JS is not installed for the current Windows user.");
+        }
+        var version = File.ReadAllText(currentVersionPath).Trim();
+        if (!IsValidVersion(version))
+        {
+            throw new InvalidDataException(
+                "The installed WordOllama.JS version pointer is invalid.");
+        }
+
+        var manifestPath = Path.Combine(
+            installRoot,
+            "versions",
+            version,
+            "WordOllama.JS.xml");
+        if (!File.Exists(manifestPath))
+        {
+            throw new InvalidDataException(
+                "The installed WordOllama.JS manifest is missing.");
+        }
+
+        var repairRoot = Path.Combine(
+            installRoot,
+            "diagnostics",
+            "ribbon-repair-" +
+            DateTime.Now.ToString(
+                "yyyyMMdd-HHmmss-fff",
+                System.Globalization.CultureInfo.InvariantCulture));
+        Directory.CreateDirectory(repairRoot);
+        var reportPath = Path.Combine(repairRoot, "report.txt");
+        var registryFilePath = Path.Combine(
+            installRoot,
+            "WordOllama.JS-Ribbon-Repair.reg");
+        WriteRibbonRepairRegistryFile(registryFilePath, manifestPath);
+        WriteRibbonRepairRegistryFile(
+            Path.Combine(repairRoot, "WordOllama.JS-Ribbon-Repair.reg"),
+            manifestPath);
+
+        using var developerKeyBefore = Registry.CurrentUser.OpenSubKey(
+            OfficeAddinRegistryPath,
+            writable: false);
+        var registrationBefore = developerKeyBefore?.GetValue(OfficeAddinId)
+            as string;
+        var localApplicationData = Path.GetFullPath(
+            Environment.GetFolderPath(
+                Environment.SpecialFolder.LocalApplicationData));
+        var wefCachePath = Path.GetFullPath(Path.Combine(
+            localApplicationData,
+            "Microsoft",
+            "Office",
+            "16.0",
+            "Wef"));
+        if (!wefCachePath.StartsWith(
+                localApplicationData + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "The Office WEF cache path is outside LocalAppData.");
+        }
+
+        string? cacheBackupPath = null;
+        Exception? bridgeError = null;
+        var bridgeReady = false;
+        var registrationRebuilt = false;
+        try
+        {
+            if (Directory.Exists(wefCachePath))
+            {
+                cacheBackupPath = Path.Combine(repairRoot, "Wef-backup");
+                Directory.Move(wefCachePath, cacheBackupPath);
+            }
+            Directory.CreateDirectory(wefCachePath);
+
+            RegisterOfficeAddin(manifestPath);
+            using var developerKeyAfter = Registry.CurrentUser.OpenSubKey(
+                OfficeAddinRegistryPath,
+                writable: false);
+            var registrationAfter = developerKeyAfter?.GetValue(OfficeAddinId)
+                as string;
+            if (!string.Equals(
+                    Path.GetFullPath(registrationAfter ?? string.Empty),
+                    Path.GetFullPath(manifestPath),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Office WEF registration verification failed.");
+            }
+            registrationRebuilt = true;
+
+            var launcherPath = Path.Combine(installRoot, "start-bridge.cmd");
+            if (File.Exists(launcherPath))
+            {
+                _ = Process.Start(new ProcessStartInfo
+                {
+                    FileName = launcherPath,
+                    WorkingDirectory = installRoot,
+                    UseShellExecute = true,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                });
+                try
+                {
+                    VerifyBridgeReadyAsync().GetAwaiter().GetResult();
+                    bridgeReady = true;
+                }
+                catch (Exception exception)
+                {
+                    bridgeError = exception;
+                }
+            }
+
+            using var identity = WindowsIdentity.GetCurrent();
+            var report = string.Join(
+                Environment.NewLine,
+                new[]
+                {
+                    "WordOllama.JS Ribbon repair report",
+                    $"Time: {DateTimeOffset.Now:O}",
+                    $"Windows user: {identity.Name}",
+                    $"Windows SID: {identity.User?.Value ?? "unknown"}",
+                    $"Install root: {installRoot}",
+                    $"Version: {version}",
+                    $"Manifest: {manifestPath}",
+                    $"Manifest SHA-256: {Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(manifestPath))).ToLowerInvariant()}",
+                    $"Registration before: {registrationBefore ?? "missing"}",
+                    $"Registration after: {registrationAfter ?? "missing"}",
+                    $"WEF cache: {wefCachePath}",
+                    $"WEF backup: {cacheBackupPath ?? "cache did not exist"}",
+                    $"Bridge ready: {bridgeReady}",
+                    $"Bridge detail: {bridgeError?.Message ?? "ok"}",
+                    $"Fallback REG: {registryFilePath}",
+                });
+            WriteAtomic(reportPath, report + Environment.NewLine, new UTF8Encoding(false));
+            return new RibbonRepairResult(
+                reportPath,
+                registryFilePath,
+                bridgeReady);
+        }
+        catch (Exception exception)
+        {
+            var cacheRestored = false;
+            if (!registrationRebuilt &&
+                cacheBackupPath is not null &&
+                Directory.Exists(cacheBackupPath))
+            {
+                if (Directory.Exists(wefCachePath) &&
+                    !Directory.EnumerateFileSystemEntries(wefCachePath).Any())
+                {
+                    Directory.Delete(wefCachePath);
+                }
+                if (!Directory.Exists(wefCachePath))
+                {
+                    Directory.Move(cacheBackupPath, wefCachePath);
+                    cacheRestored = true;
+                }
+            }
+            var failure = string.Join(
+                Environment.NewLine,
+                "WordOllama.JS Ribbon repair failed",
+                $"Time: {DateTimeOffset.Now:O}",
+                $"Install root: {installRoot}",
+                $"Manifest: {manifestPath}",
+                $"WEF cache: {wefCachePath}",
+                $"WEF backup: {cacheBackupPath ?? "not created"}",
+                $"WEF cache restored after failure: {cacheRestored}",
+                $"Error: {exception}");
+            WriteAtomic(
+                reportPath,
+                failure + Environment.NewLine,
+                new UTF8Encoding(false));
+            throw new InvalidOperationException(
+                $"Ribbon repair failed. Diagnostic report: {reportPath}",
+                exception);
+        }
+    }
+
+    private static void WriteRibbonRepairRegistryFile(
+        string destination,
+        string manifestPath)
+    {
+        var escapedManifestPath = Path.GetFullPath(manifestPath)
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal);
+        var content =
+            "Windows Registry Editor Version 5.00\r\n\r\n" +
+            "[HKEY_CURRENT_USER\\Software\\Microsoft\\Office\\16.0\\Wef\\Developer]\r\n" +
+            $"\"{OfficeAddinId}\"=\"{escapedManifestPath}\"\r\n\r\n" +
+            $"[HKEY_CURRENT_USER\\Software\\Microsoft\\Office\\16.0\\Wef\\Developer\\{OfficeAddinId}]\r\n" +
+            "\"UseDirectDebugger\"=dword:00000000\r\n" +
+            "\"UseWebDebugger\"=dword:00000000\r\n" +
+            "\"UseLiveReload\"=dword:00000000\r\n";
+        WriteAtomic(destination, content, Encoding.Unicode);
+    }
+
+    private static void InstallRibbonRepairEntry(string installRoot)
+    {
+        var programs = Environment.GetFolderPath(
+            Environment.SpecialFolder.Programs);
+        if (string.IsNullOrWhiteSpace(programs))
+        {
+            throw new InvalidOperationException(
+                "Unable to resolve the current user's Start menu Programs directory.");
+        }
+        var entryPath = Path.Combine(
+            programs,
+            "WordOllama.JS",
+            "Repair WordOllama.JS Ribbon.vbs");
+        var maintenanceExecutable = Path.Combine(
+            installRoot,
+            "WordOllama.JS-Uninstall.exe");
+        var escapedExecutable = maintenanceExecutable.Replace(
+            "\"",
+            "\"\"",
+            StringComparison.Ordinal);
+        var script =
+            "Set shell = CreateObject(\"WScript.Shell\")\r\n" +
+            $"shell.Run Chr(34) & \"{escapedExecutable}\" & Chr(34) & \" --repair-ribbon\", 0, False\r\n";
+        WriteAtomic(entryPath, script, Encoding.Unicode);
+    }
+
+    private static void RemoveRibbonRepairEntry()
+    {
+        var programs = Environment.GetFolderPath(
+            Environment.SpecialFolder.Programs);
+        if (string.IsNullOrWhiteSpace(programs))
+        {
+            return;
+        }
+        var directory = Path.Combine(programs, "WordOllama.JS");
+        var entryPath = Path.Combine(
+            directory,
+            "Repair WordOllama.JS Ribbon.vbs");
+        if (File.Exists(entryPath))
+        {
+            File.Delete(entryPath);
+        }
+        if (Directory.Exists(directory) &&
+            !Directory.EnumerateFileSystemEntries(directory).Any())
+        {
+            Directory.Delete(directory);
         }
     }
 

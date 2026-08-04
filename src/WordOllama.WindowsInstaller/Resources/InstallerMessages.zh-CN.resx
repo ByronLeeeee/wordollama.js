@@ -17,5 +17,21 @@ SHA-256 指纹：{0}
 
 该证书不能签发其他证书，不会写入计算机级信任库；卸载 WordOllama.JS 时会一并移除。</value></data>
   <data name="RestartWord" xml:space="preserve"><value>检测到 Microsoft Word 正在运行。请完全退出并重新打开 Word，以载入更新后的 WordOllama.JS 功能区。</value></data>
+  <data name="RibbonRepairTitle" xml:space="preserve"><value>修复 WordOllama.JS 标签栏</value></data>
+  <data name="RibbonRepairConfirmation" xml:space="preserve"><value>修复程序将先备份再重置当前用户共用的 Office Web 加载项缓存，恢复 WordOllama.JS manifest 注册，并重新启动本地服务。
+
+其他手动旁加载的开发加载项可能需要重新注册；集中部署和 Marketplace 加载项不会被卸载。
+
+请先关闭 Word、Excel 和 PowerPoint。现在开始修复吗？</value></data>
+  <data name="CloseOfficeForRibbonRepair" xml:space="preserve"><value>请完全关闭以下 Office 程序，然后重新运行标签栏修复：{0}。</value></data>
+  <data name="RibbonRepairCompleted" xml:space="preserve"><value>WordOllama.JS 标签栏注册已经重建。
+
+本地服务：{2}
+诊断报告：{0}
+备用注册表文件：{1}
+
+请重新打开 Word。如果仍未出现独立标签页，请提供诊断报告。</value></data>
+  <data name="BridgeReady" xml:space="preserve"><value>正常</value></data>
+  <data name="BridgeNotReady" xml:space="preserve"><value>未就绪，请查看诊断报告</value></data>
   <data name="Failed" xml:space="preserve"><value>安装失败：{0}</value></data>
 </root>

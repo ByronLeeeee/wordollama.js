@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 const addinRoot = resolve(repoRoot, "officejs/apps/addin");
@@ -32,7 +33,7 @@ for (const { name, resource, svg } of catalog) {
     const file = resolve(addinRoot, `assets/ribbon/${name}-${size}.png`);
     assert(existsSync(file) && statSync(file).size > 100, `missing ${size}px Ribbon PNG for ${name}`);
     assert(manifest.includes(`id="${resource}.Icon${size}"`), `manifest resource missing ${resource}.Icon${size}`);
-    assert(manifest.includes(`assets/ribbon/${name}-${size}.png?v=mono-1`), `manifest URL missing versioned ${name}-${size}.png`);
+    assert(manifest.includes(`assets/ribbon/${name}-${size}.png?v=mono-2`), `manifest URL missing versioned ${name}-${size}.png`);
   }
 }
 
@@ -44,6 +45,17 @@ for (const [, control, iconMarkup] of controls) {
   }
 }
 assert(!manifest.includes('resid="Icon.'), "generic Ribbon icon resources must not remain");
+const commandResources = new Set(controls.map(([, control]) => control));
+for (const size of [16, 32, 80]) {
+  const hashes = new Map<string, string>();
+  for (const { name, resource } of catalog.filter((item) => commandResources.has(item.resource))) {
+    const file = resolve(addinRoot, `assets/ribbon/${name}-${size}.png`);
+    const hash = createHash("sha256").update(readFileSync(file)).digest("hex");
+    const duplicate = hashes.get(hash);
+    assert(!duplicate, `${name}-${size}.png renders exactly like ${duplicate}-${size}.png`);
+    hashes.set(hash, name);
+  }
+}
 
 const featureIcon = readFileSync(resolve(addinRoot, "src/taskpane/FeatureIcon.tsx"), "utf8");
 const styles = readFileSync(resolve(addinRoot, "src/styles.css"), "utf8");

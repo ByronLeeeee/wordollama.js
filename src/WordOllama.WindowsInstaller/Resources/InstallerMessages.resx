@@ -17,5 +17,21 @@ Expires: {1:g}
 
 It cannot issue other certificates, is never installed machine-wide, and will be removed when you uninstall WordOllama.JS.</value></data>
   <data name="RestartWord" xml:space="preserve"><value>Microsoft Word is currently running. Completely close and reopen Word to load the updated WordOllama.JS Ribbon.</value></data>
+  <data name="RibbonRepairTitle" xml:space="preserve"><value>Repair WordOllama.JS Ribbon</value></data>
+  <data name="RibbonRepairConfirmation" xml:space="preserve"><value>This repair will back up and reset the current user's shared Office web add-in cache, restore the WordOllama.JS manifest registration, and restart its local service.
+
+Other sideloaded development add-ins may need to be registered again. Centrally deployed and Marketplace add-ins aren't removed.
+
+Close Word, Excel, and PowerPoint before continuing. Start the repair now?</value></data>
+  <data name="CloseOfficeForRibbonRepair" xml:space="preserve"><value>Close these Office applications completely, then run Ribbon repair again: {0}.</value></data>
+  <data name="RibbonRepairCompleted" xml:space="preserve"><value>WordOllama.JS Ribbon registration has been rebuilt.
+
+Local service: {2}
+Diagnostic report: {0}
+Fallback registry file: {1}
+
+Open Word again. If the custom tab is still absent, attach the diagnostic report.</value></data>
+  <data name="BridgeReady" xml:space="preserve"><value>ready</value></data>
+  <data name="BridgeNotReady" xml:space="preserve"><value>not ready; see the diagnostic report</value></data>
   <data name="Failed" xml:space="preserve"><value>Setup failed: {0}</value></data>
 </root>
