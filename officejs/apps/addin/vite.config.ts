@@ -58,6 +58,10 @@ export default defineConfig(async ({ command }) => {
       __SERVER_FORWARD_CONSOLE__: "false",
     },
     build: {
+      // WPS 12.1 currently embeds Chromium 104. Vite 8's moving default target
+      // is newer, so pin both JavaScript and CSS output to the actual host.
+      target: "chrome104",
+      cssTarget: "chrome104",
       rollupOptions: {
         input: {
           index: join(import.meta.dirname, "index.html"),

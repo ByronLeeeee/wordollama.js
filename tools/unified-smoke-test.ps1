@@ -264,11 +264,14 @@ if ($settings.Bridge.LocalTools.AllowHttpRequests -ne $false) {
 }
 $unifiedWorkflow = Get-Content `
     (Join-Path $repoRoot ".github\workflows\officejs-unified-ci.yml") -Raw
-if ($unifiedWorkflow -notmatch "platform-secret-store-smoke" -or
-    $unifiedWorkflow -notmatch "--allow-user-vault-test" -or
+if ($unifiedWorkflow -notmatch "windows-latest" -or
+    $unifiedWorkflow -notmatch "win-x64" -or
     $unifiedWorkflow -notmatch "macos-15" -or
-    $unifiedWorkflow -notmatch "osx-arm64") {
-    throw "平台回归失败：Windows x64/macOS arm64 原生 CI 缺少 Credential Manager/Keychain 门禁。"
+    $unifiedWorkflow -notmatch "osx-arm64" -or
+    $unifiedWorkflow -notmatch "ubuntu-latest" -or
+    $unifiedWorkflow -notmatch "linux-x64" -or
+    $unifiedWorkflow -notmatch "package-linux-installer\.ps1") {
+    throw "平台回归失败：统一 CI 缺少 Windows x64、macOS arm64 或 Linux x64 原生打包门禁。"
 }
 
 $skillFile = Join-Path $buildRoot ($Configuration + "\net8.0\Skills\contract-review\SKILL.md")

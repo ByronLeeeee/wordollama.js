@@ -595,6 +595,7 @@ internal static class Program
             !File.Exists(Path.Combine(staging, "wwwroot", "wps-addin", "main.js")) ||
             !File.Exists(Path.Combine(staging, "wwwroot", "wps-addin", "ribbon.xml")) ||
             !File.Exists(Path.Combine(staging, "wwwroot", "wps-addin", "assets", "ribbon", "agent.svg")) ||
+            !File.Exists(Path.Combine(staging, "wwwroot", "wps-addin", "assets", "ribbon", "wps", "agent.svg")) ||
             !File.Exists(Path.Combine(staging, "wwwroot", "assets", "ribbon", "agent.svg")) ||
             !File.Exists(Path.Combine(staging, "wwwroot", "settings.html")) ||
             !File.Exists(Path.Combine(staging, "wwwroot", "commands.html")))
@@ -643,7 +644,6 @@ internal static class Program
         reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseDirectDebugger" /t REG_DWORD /d 0 /f >nul 2>&1
         reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseWebDebugger" /t REG_DWORD /d 0 /f >nul 2>&1
         reg.exe add "HKCU\{OfficeAddinDebugRegistryPath}" /v "UseLiveReload" /t REG_DWORD /d 0 /f >nul 2>&1
-        if exist "%WORDOLLAMA_BRIDGE_ROOT%WordOllama.JS-Uninstall.exe" "%WORDOLLAMA_BRIDGE_ROOT%WordOllama.JS-Uninstall.exe" --quiet --repair-wps-registration >nul 2>&1
         if not exist "%WORDOLLAMA_BRIDGE_ROOT%certs\bridge.pfx" exit /b 0
         start "WordOllama.JS Desktop Bridge" /b "%WORDOLLAMA_BRIDGE_EXE%" >>"%WORDOLLAMA_BRIDGE_ROOT%bridge.log" 2>&1
         """;
@@ -905,7 +905,6 @@ internal static class Program
             new XAttribute("name", WpsAddinName),
             new XAttribute("type", "wps"),
             new XAttribute("url", WpsAddinUrl),
-            new XAttribute("debug", ""),
             new XAttribute("enable", "enable_dev"),
             new XAttribute("install", "null"),
             new XAttribute("customDomain", "")));

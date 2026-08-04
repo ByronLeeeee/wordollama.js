@@ -1,6 +1,6 @@
 # WordOllama.JS 用户指南
 
-WordOllama.JS 首发支持 Windows x64 和 Apple Silicon Mac。Ollama 是可选外部依赖；
+WordOllama.JS 支持 Windows x64、Apple Silicon Mac，并提供 Linux x64 WPS 测试版。Ollama 是可选外部依赖；
 使用在线模型时不需要安装 Ollama。安装后 Desktop Bridge 随当前用户登录启动，Word
 中的任务窗格不需要另开终端或 Vite。
 
@@ -54,6 +54,21 @@ stapling，也不能承诺 Gatekeeper 无警告。发布证据会明确标记
 Mac 仅支持 Apple Silicon，不提供 Intel 构建。若以后改用 Developer ID，才可恢复
 公证、stapling 和默认 Gatekeeper 评估流程。
 
+## Linux x64 WPS 安装
+
+Linux 版只面向 WPS Writer，不支持 Linux 上的 Microsoft Office。WPS 官方对
+`publish.xml` 模式声明的支持基线为企业版 2020-05-30 分支之后版本。
+
+1. 下载 `WordOllama-Installer-<version>-linux-x64.tar.gz` 和 `.sha256`，核对哈希。
+2. 解压归档，以普通桌面用户运行 `./install.sh`，不要使用 `sudo`。
+3. 安装脚本会登记 `~/.local/share/Kingsoft/wps/jsaddons/publish.xml`，创建 systemd
+   用户服务并检查本地 Bridge；完成后完全退出并重启 WPS Writer。
+4. 本地 Ollama 不需要额外密钥组件。保存云端 API Key 前请安装
+   `libsecret-tools`；启用 Agent Python/Node 沙箱前请安装 `bubblewrap`。
+
+Linux Bridge 只监听 `http://127.0.0.1:37421`，不接受局域网连接。首版不提供应用内
+自动更新；下载新版用户包并重新运行 `install.sh`，健康检查失败时会恢复上一版本。
+
 ## 模型与首次使用
 
 - 新用户优先使用自动出现的“首次使用向导”；也可以随时点击设置窗口右上角的“使用向导”。
@@ -61,7 +76,7 @@ Mac 仅支持 Apple Silicon，不提供 Intel 构建。若以后改用 Developer
   专用模型接口），选择模型并保存。一个提供商可以保存任意多个模型。
 - 模型列表可切换、查看详情、修改或删除；没有激活模型时，AI 功能会要求先激活，
   不会静默回退到默认 Ollama。
-- API Key 保存到 Windows Credential Manager 或 macOS Keychain，不写入普通设置 JSON。
+- API Key 保存到 Windows Credential Manager、macOS Keychain 或 Linux Secret Service，不写入普通设置 JSON。
 - Ollama 由用户自行安装、升级和配置；WordOllama.JS 只检测及加载已存在的模型。
 
 ## 更新与回滚
@@ -104,3 +119,6 @@ Bridge、移除 Startup、JS manifest、版本目录和产品专用 localhost �
 Mac 运行 `~/Applications/WordOllama.JS/Uninstall WordOllama.JS.command`。脚本移除
 LaunchAgent、JS manifest、Bridge 文件和产品专用 localhost 项；发布者签名证书的
 信任由用户在 Keychain Access 中单独撤销，避免卸载器扩大证书库写权限。
+
+Linux 运行 `~/.local/share/WordOllama.JS/uninstall.sh`。脚本停止并删除 systemd
+用户服务、Bridge 和 WordOllama.JS 自己的 WPS 注册节点，不触碰其他加载项或模型。

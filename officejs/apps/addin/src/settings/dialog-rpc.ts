@@ -25,9 +25,17 @@ const pending = new Map<string, {
 
 let initialized = false;
 
+function createRequestId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  const random = Math.random().toString(36).slice(2);
+  return `wps-${Date.now().toString(36)}-${random}`;
+}
+
 function isDirectWpsDialog(): boolean {
   const application = window.wps ?? window.Application;
-  return Boolean(application?.ActiveDocument) &&
+  return Boolean(application) &&
     new URLSearchParams(window.location.search).get("wpsDialog") === "1";
 }
 
@@ -50,7 +58,13 @@ function ensureInitialized(): void {
 }
 
 function handleResponse(message: string): void {
-  const response = JSON.parse(message) as DialogResponse;
+  let response: DialogResponse;
+  try {
+    response = JSON.parse(message) as DialogResponse;
+  } catch {
+    return;
+  }
+  if (!response || typeof response.id !== "string" || typeof response.ok !== "boolean") return;
   const request = pending.get(response.id);
   if (!request) return;
   pending.delete(response.id);
@@ -60,7 +74,7 @@ function handleResponse(message: string): void {
 
 function requestParent<T>(input: DialogRequestInput): Promise<T> {
   ensureInitialized();
-  const id = crypto.randomUUID();
+  const id = createRequestId();
   return new Promise<T>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       pending.delete(id);
@@ -127,7 +141,7 @@ export function closeSettingsWindow(): void {
   }
   if (typeof Office !== "undefined" && typeof Office.context?.ui?.messageParent === "function") {
     Office.context.ui.messageParent(JSON.stringify({
-      id: crypto.randomUUID(),
+      id: createRequestId(),
       method: "settings.close",
     }), {
       targetOrigin: window.location.origin,
@@ -136,7 +150,7 @@ export function closeSettingsWindow(): void {
   }
   if (window.opener) {
     window.opener.postMessage(JSON.stringify({
-      id: crypto.randomUUID(),
+      id: createRequestId(),
       method: "settings.close",
     }), window.location.origin);
   }

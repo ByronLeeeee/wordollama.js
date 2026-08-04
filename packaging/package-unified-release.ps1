@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("win-x64", "osx-arm64")]
+    [ValidateSet("win-x64", "osx-arm64", "linux-x64")]
     [string]$Runtime = "win-x64",
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
@@ -26,6 +26,7 @@ $addinOutput = Join-Path $outputRootFullPath "addin"
 $bridgeOutput = Join-Path $outputRootFullPath "bridge"
 $packageAddin = Join-Path $PSScriptRoot "package-addin.ps1"
 $publishBridge = Join-Path $PSScriptRoot "publish-bridge.ps1"
+$targetIsLinux = $Runtime -eq "linux-x64"
 
 [Uri]$baseUri = $null
 if (-not [Uri]::TryCreate($BaseUrl, [UriKind]::Absolute, [ref]$baseUri)) {
@@ -40,7 +41,9 @@ $normalizedUpdateIndexUrl = if ([string]::IsNullOrWhiteSpace($UpdateIndexUrl)) {
 
 & $packageAddin -BaseUrl $BaseUrl -BridgeUrl $BridgeUrl `
     -Version $Version -ManifestVersion $ManifestVersion `
-    -OutputRoot $addinOutput -SkipManifestValidation:$SkipManifestValidation
+    -OutputRoot $addinOutput `
+    -AllowLoopbackHttpForWps:$targetIsLinux `
+    -SkipManifestValidation:($SkipManifestValidation -or $targetIsLinux)
 $addinStaticRoot = Join-Path $addinOutput $Version
 & $publishBridge -Runtime $Runtime -Configuration $Configuration `
     -Version $Version -AddinOrigin $addinOrigin -UpdateIndexUrl $UpdateIndexUrl `
@@ -50,7 +53,8 @@ $addinStaticRoot = Join-Path $addinOutput $Version
 
 $addinArchive = Join-Path $addinOutput "WordOllama.JS-Addin-$Version.zip"
 $bridgeDirectory = Join-Path $bridgeOutput "$Version-$Runtime"
-$bridgeArchive = Join-Path $bridgeOutput "WordOllama-Bridge-$Version-$Runtime.zip"
+$bridgeArchiveExtension = if ($targetIsLinux) { ".tar.gz" } else { ".zip" }
+$bridgeArchive = Join-Path $bridgeOutput "WordOllama-Bridge-$Version-$Runtime$bridgeArchiveExtension"
 if (-not (Test-Path -LiteralPath $addinArchive -PathType Leaf) -or
     -not (Test-Path -LiteralPath $bridgeDirectory -PathType Container)) {
     throw "Unified packaging did not produce the Add-in archive and Bridge runtime directory."
@@ -76,6 +80,20 @@ if (@($bridgeSettings.Bridge.AllowedOrigins).Count -ne 1 -or
     throw "Unified packaging detected an Add-in origin or update-index mismatch in Bridge settings."
 }
 
+$requiredNextSteps = if ($targetIsLinux) {
+    @(
+        "Build the per-user Linux installer archive on Linux and verify its SHA-256 sidecar.",
+        "Run the install, systemd user-service, WPS registration, upgrade, and uninstall lifecycle as a non-root desktop user.",
+        "Run the real WPS Writer host checklist on linux-x64."
+    )
+} else {
+    @(
+        "Sign and verify the Bridge binary/archive and build the signed per-user installer on the target operating system.",
+        "Provision a trusted localhost HTTPS PFX through provision-bridge-https.ps1.",
+        "Run the real Word host release checklist on this runtime."
+    )
+}
+
 $descriptor = [ordered]@{
     schemaVersion = 1
     product = "WordOllama.JS"
@@ -88,11 +106,7 @@ $descriptor = [ordered]@{
     expectedUpdatePublisherSubject = $ExpectedUpdatePublisherSubject.Trim()
     generatedAt = [DateTimeOffset]::UtcNow.ToString("O")
     releaseReady = $false
-    requiredNextSteps = @(
-        "Sign and verify the Bridge binary/archive and build the signed per-user installer on the target operating system.",
-        "Provision a trusted localhost HTTPS PFX through provision-bridge-https.ps1.",
-        "Run the real Word host release checklist on this runtime."
-    )
+    requiredNextSteps = $requiredNextSteps
     artifacts = @(
         [ordered]@{
             kind = "office-addin"

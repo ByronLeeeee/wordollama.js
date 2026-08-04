@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("win-x64", "osx-arm64")]
+    [ValidateSet("win-x64", "osx-arm64", "linux-x64")]
     [string]$Runtime = "win-x64",
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
@@ -16,15 +16,20 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot ".."))
 $project = Join-Path $repoRoot "src\WordOllama.DesktopBridge\WordOllama.DesktopBridge.csproj"
+$targetIsMac = $Runtime.StartsWith("osx-", [StringComparison]::Ordinal)
+$targetIsLinux = $Runtime.StartsWith("linux-", [StringComparison]::Ordinal)
 
 [Uri]$addinUri = $null
 if (-not [Uri]::TryCreate($AddinOrigin, [UriKind]::Absolute, [ref]$addinUri) -or
-    $addinUri.Scheme -ne [Uri]::UriSchemeHttps -or
+    ($addinUri.Scheme -ne [Uri]::UriSchemeHttps -and
+     -not ($targetIsLinux -and
+           $addinUri.Scheme -eq [Uri]::UriSchemeHttp -and
+           $addinUri.IsLoopback)) -or
     -not [string]::IsNullOrEmpty($addinUri.UserInfo) -or
     -not [string]::IsNullOrEmpty($addinUri.Query) -or
     -not [string]::IsNullOrEmpty($addinUri.Fragment) -or
     $addinUri.AbsolutePath -ne "/") {
-    throw "AddinOrigin must be an HTTPS origin without credentials, path, query, or fragment."
+    throw "AddinOrigin must be HTTPS, except for loopback HTTP in the Linux WPS runtime."
 }
 $productionAddinOrigin = $addinUri.GetLeftPart([UriPartial]::Authority)
 if ($addinUri.IsLoopback -and [string]::IsNullOrWhiteSpace($AddinStaticRoot)) {
@@ -53,14 +58,17 @@ if ($productionUpdatePublisherSubject.Length -gt 512 -or
     throw "ExpectedUpdatePublisherSubject is invalid."
 }
 
-$targetIsMac = $Runtime.StartsWith("osx-", [StringComparison]::Ordinal)
-$runtimeHostMatches = ($Runtime -eq "win-x64" -and $IsWindows) -or ($targetIsMac -and $IsMacOS)
+$runtimeHostMatches = ($Runtime -eq "win-x64" -and $IsWindows) -or
+    ($targetIsMac -and $IsMacOS) -or
+    ($targetIsLinux -and $IsLinux)
 if (-not $runtimeHostMatches -and -not $CrossBuildOnly) {
     throw "Final $Runtime packaging must run on its target OS. Use -CrossBuildOnly to verify compilation without creating a release archive."
 }
 
 $configurationTemplateName = if ($targetIsMac) {
     "production.appsettings.macos.template.json"
+} elseif ($targetIsLinux) {
+    "production.appsettings.linux.template.json"
 } else {
     "production.appsettings.windows.template.json"
 }
@@ -80,7 +88,8 @@ $expectedPrefix = $outputRootFullPath.TrimEnd(
 if (-not $output.StartsWith($expectedPrefix, [StringComparison]::OrdinalIgnoreCase)) {
     throw "Version output must stay under OutputRoot."
 }
-$archive = Join-Path $outputRootFullPath "WordOllama-Bridge-$Version-$Runtime.zip"
+$archiveExtension = if ($targetIsLinux) { ".tar.gz" } else { ".zip" }
+$archive = Join-Path $outputRootFullPath "WordOllama-Bridge-$Version-$Runtime$archiveExtension"
 
 if (Test-Path -LiteralPath $output) {
     Remove-Item -LiteralPath $output -Recurse -Force
@@ -116,20 +125,34 @@ $settingsTemp = "$activeSettingsPath.$([Guid]::NewGuid().ToString('N')).tmp"
 $productionSettings | ConvertTo-Json -Depth 12 |
     Set-Content -LiteralPath $settingsTemp -Encoding utf8
 Move-Item -LiteralPath $settingsTemp -Destination $activeSettingsPath -Force
-if ($productionSettings.Bridge.Urls -notlike "https://*" -or
-    [string]::IsNullOrWhiteSpace($productionSettings.Bridge.HttpsCertificate.Path) -or
+if ((-not $targetIsLinux -and
+     ($productionSettings.Bridge.Urls -notlike "https://*" -or
+      [string]::IsNullOrWhiteSpace($productionSettings.Bridge.HttpsCertificate.Path))) -or
+    ($targetIsLinux -and
+     ($productionSettings.Bridge.Urls -ne "http://127.0.0.1:37421" -or
+      -not [string]::IsNullOrWhiteSpace($productionSettings.Bridge.HttpsCertificate.Path) -or
+      $productionAddinOrigin -ne "http://127.0.0.1:37421")) -or
     $productionSettings.Bridge.LocalTools.AllowHttpRequests -ne $false -or
     @($productionSettings.Bridge.AllowedOrigins).Count -ne 1 -or
     $productionSettings.Bridge.AllowedOrigins[0] -ne $productionAddinOrigin -or
     $productionSettings.Bridge.Updates.IndexUrl -ne $productionUpdateIndexUrl -or
     $productionSettings.Bridge.Updates.ExpectedPublisherSubject -ne
         $productionUpdatePublisherSubject) {
-    throw "Published Bridge production settings failed the HTTPS/security invariant."
+    throw "Published Bridge production settings failed the platform transport/security invariant."
 }
 
 if (-not [string]::IsNullOrWhiteSpace($AddinStaticRoot)) {
     $addinStaticRootFullPath = (Resolve-Path -LiteralPath $AddinStaticRoot).Path
-    foreach ($requiredFile in @("index.html", "settings.html", "commands.html", "manifest.xml")) {
+    foreach ($requiredFile in @(
+        "index.html",
+        "settings.html",
+        "commands.html",
+        "manifest.xml",
+        "wps.html",
+        "wps-addin/index.html",
+        "wps-addin/main.js",
+        "wps-addin/ribbon.xml"
+    )) {
         if (-not (Test-Path -LiteralPath (Join-Path $addinStaticRootFullPath $requiredFile) -PathType Leaf)) {
             throw "Packaged Add-in static root is missing $requiredFile."
         }
@@ -165,8 +188,16 @@ if ($targetIsMac) {
     if ($LASTEXITCODE -ne 0) {
         throw "ditto failed with exit code $LASTEXITCODE."
     }
-}
-else {
+} elseif ($targetIsLinux) {
+    $tar = Get-Command "tar" -ErrorAction SilentlyContinue
+    if ($null -eq $tar) {
+        throw "Final Linux packaging requires 'tar' on PATH."
+    }
+    & $tar.Source -czf $archive -C $output .
+    if ($LASTEXITCODE -ne 0) {
+        throw "tar failed with exit code $LASTEXITCODE."
+    }
+} else {
     Compress-Archive -Path (Join-Path $output "*") -DestinationPath $archive -Force
 }
 Write-Host "Published $archive"

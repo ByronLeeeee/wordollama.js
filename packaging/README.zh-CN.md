@@ -42,7 +42,23 @@ pwsh ./packaging/package-unified-release.ps1 -Runtime win-x64 `
 
 正式目标平台构建会生成 `unified-build-<version>-<runtime>.json`，明确标记 `releaseReady: false`，记录 Add-in/Bridge 未签名归档的 SHA-256 与大小，并列出签名、PFX 配置和真实 Word 验收三个后续门槛。Add-in 在终审时必须仍与该记录逐字节一致；Bridge 因平台签名和签后重建 ZIP 必然允许一次受控哈希转换，但终审会重新验证当前归档内所有 PE 的 Authenticode，或 macOS codesign、Gatekeeper 与 Developer ID Authority，并在最终描述中同时固化源描述文件哈希、未签名哈希和签名后哈希。其他替换仍会被拒绝，该描述文件也不能被误当成已签名发布证明。`-CrossBuildOnly` 只验证编译，不生成 Bridge ZIP 或发布描述文件。
 
-`.github/workflows/officejs-unified-ci.yml` 在 Windows x64 和 macOS arm64 两个目标原生 runner 上执行包 smoke 和统一构建，并上传保留 7 天的 unsigned evidence；每个平台产物还包含仅供跨设备测试的自包含安装器（Windows EXE / Apple Silicon macOS PKG）。工作流采用 GitHub 的 `macos-15` Apple Silicon runner；项目不构建或发布 Intel Mac 版本。参考 [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。CI 产物仍明确为 unsigned，Windows 可能显示 SmartScreen 提示，macOS 需要按系统方式确认打开；工作流不会在缺少发布凭据时自动创建 Release。
+`.github/workflows/officejs-unified-ci.yml` 在 Windows x64、macOS arm64 和 Linux x64 三个目标原生 runner 上执行统一构建并上传保留 7 天的 unsigned evidence；每个平台产物还包含仅供跨设备测试的安装器（Windows EXE / Apple Silicon macOS PKG / Linux 用户级 tar.gz）。工作流采用 GitHub 的 `macos-15` Apple Silicon runner；项目不构建或发布 Intel Mac 版本。参考 [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。CI 产物仍明确为 unsigned；工作流不会在缺少发布凭据时自动创建 Release。
+
+macOS PKG 同时服务 Microsoft Word 与 WPS Writer：Word manifest 写入 Word 容器的 `wef` 目录；如果当前用户已经启动过 WPS 并存在 `com.kingsoft.wpsoffice.mac` 容器，安装脚本会调用 Bridge 的 `wps-registration install`，原子更新 `Data/.kingsoft/wps/jsaddons/publish.xml`。该命令只移除和重建 `WordOllama.JS` 节点，保留其他加载项，首次修改前写入 `.wordollama-backup`，使用 `type="wps"` 且不写入 `debug` 属性；卸载时同样只移除自有节点。WPS 未安装或容器不可访问不会阻断 Word 安装。
+
+Linux x64 WPS 构建和用户安装包：
+
+```powershell
+pwsh ./packaging/package-unified-release.ps1 `
+  -Runtime linux-x64 -Version 1.0.0 -ManifestVersion 1.2.0.0 `
+  -BaseUrl http://127.0.0.1:37421 -BridgeUrl http://127.0.0.1:37421 `
+  -OutputRoot ./artifacts/linux
+
+pwsh ./packaging/package-linux-installer.ps1 `
+  -Runtime linux-x64 -ArtifactRoot ./artifacts/linux/bridge -Version 1.0.0
+```
+
+第二条命令必须在 x86_64 Linux 上执行，生成 `WordOllama-Installer-1.0.0-linux-x64.tar.gz` 和 SHA-256 旁车文件。用户解压后以普通桌面账户运行 `./install.sh`，不要使用 `sudo`。安装器写入 `~/.local/share/WordOllama.JS`、创建 `~/.config/systemd/user/wordollama-js.service`、登记 WPS `publish.xml` 并验证 `/health` 与 Ribbon。卸载入口为 `~/.local/share/WordOllama.JS/uninstall.sh`。Linux 首版不提供应用内自动更新，下载新版用户包后重新运行安装脚本即可；当前 Action 产物是无签名测试包，SHA-256 只能验证传输完整性，不能替代可信发布签名。
 
 每个目标平台 runner 还会直接启动其自包含 Bridge 可执行文件，连接受控本地 Provider 和 stdio MCP fixture，并执行配对鉴权、设置持久化及 Agent 加密恢复的跨进程重启回归。macOS arm64 runner 会真实经过 Keychain，而不是用 Windows 结果代替 Mac 平台证据；它还会为 `smoke` 版本原生执行 unsigned `pkgbuild/productbuild`，用 `pkgutil --expand-full` 展开 PKG，再由系统 `sh -n`/`plutil` 检查 launcher、postinstall、双语卸载器、回滚入口、LaunchAgent 和可执行权限。`-BuildUnsignedForTests` 对非 `smoke`/`test` 版本无效；生产路径必须明确选择 Developer ID 公证模式或首发采用的本地自签名/显式用户信任模式。这些 CI 结果仍不等同于 Word 宿主、正式签名或 Apple 公证证据。
 

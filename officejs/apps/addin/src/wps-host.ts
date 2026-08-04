@@ -5,6 +5,7 @@ export interface WpsApplication {
   Env?: any;
   FileSystem?: any;
   CreateTaskPane?: (url: string, title?: string) => any;
+  GetTaskPane?: (id: number) => any;
   ShowDialog?: (
     url: string,
     appName?: string,
@@ -35,5 +36,12 @@ export function resolveWpsApplication(): WpsApplication | undefined {
 }
 
 export function isWpsHost(): boolean {
-  return Boolean(resolveWpsApplication());
+  if (typeof window === "undefined") return false;
+  const application = window.wps ?? window.Application;
+  return Boolean(application && (
+    application.ActiveDocument ||
+    typeof application.CreateTaskPane === "function" ||
+    typeof application.GetTaskPane === "function" ||
+    typeof application.ShowDialog === "function"
+  ));
 }

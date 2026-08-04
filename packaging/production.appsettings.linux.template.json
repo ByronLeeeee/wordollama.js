@@ -1,0 +1,19 @@
+{
+  "Bridge": {
+    "Urls": "http://127.0.0.1:37421",
+    "HttpsCertificate": {
+      "Path": "",
+      "Password": ""
+    },
+    "AllowedOrigins": [
+      "http://127.0.0.1:37421"
+    ],
+    "Updates": {
+      "IndexUrl": "",
+      "ExpectedPublisherSubject": ""
+    },
+    "LocalTools": {
+      "AllowHttpRequests": false
+    }
+  }
+}

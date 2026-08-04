@@ -21,6 +21,15 @@ if (HttpsCertificateSecretCommand.IsRequested(args))
     return;
 }
 
+if (WpsRegistrationCommand.IsRequested(args))
+{
+    Environment.ExitCode = WpsRegistrationCommand.Execute(
+        args,
+        Console.Out,
+        Console.Error);
+    return;
+}
+
 var userScope = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 if (string.IsNullOrWhiteSpace(userScope))
 {
@@ -174,7 +183,7 @@ foreach (var configuredUrl in bridgeUrls.Split(';', StringSplitOptions.RemoveEmp
            bridgeUri.Host is "127.0.0.1" or "localhost" or "::1")))
     {
         throw new InvalidOperationException(
-            "Bridge URLs must use HTTPS; loopback HTTP is allowed only for local development.");
+            "Bridge URLs must use HTTPS; loopback HTTP is allowed for local-only deployments.");
     }
 }
 
@@ -314,6 +323,15 @@ if (Directory.Exists(addinWebRoot))
     app.UseStaticFiles(new StaticFileOptions
     {
         FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(addinWebRoot),
+        OnPrepareResponse = context =>
+        {
+            // WPS keeps its Chromium profile across Writer restarts. These
+            // files are served only from the loopback Bridge, so always prefer
+            // the currently installed bundle over a stale task-pane cache.
+            context.Context.Response.Headers.CacheControl = "no-store";
+            context.Context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+            context.Context.Response.Headers["Referrer-Policy"] = "no-referrer";
+        },
     });
 }
 app.UseCors("officejs");

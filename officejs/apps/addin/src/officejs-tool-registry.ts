@@ -369,7 +369,9 @@ export class OfficeJsToolRegistry {
     return descriptors.filter((descriptor) => this.word.supportsTool(descriptor.name)).map((descriptor) => ({
       ...descriptor,
       description: i18n.t(`taskpane.toolDescriptions.${descriptor.description}`),
-      parameterSchema: structuredClone(descriptor.parameterSchema),
+      // Tool schemas are JSON values. A JSON clone keeps WPS WebViews that do
+      // not yet expose structuredClone from failing during task-pane startup.
+      parameterSchema: JSON.parse(JSON.stringify(descriptor.parameterSchema)) as Record<string, unknown>,
     }));
   }
 

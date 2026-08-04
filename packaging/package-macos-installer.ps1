@@ -271,6 +271,7 @@ if [ -f "$root/current-version" ]; then
   if [ -n "$version" ]; then
     executable="$root/versions/$version/WordOllama.DesktopBridge"
     if [ -x "$executable" ]; then
+      "$executable" wps-registration uninstall >/dev/null 2>&1 || true
       "$executable" https-certificate-secret delete >/dev/null 2>&1 || true
       for pid in $(pgrep -x WordOllama.DesktopBridge 2>/dev/null || true); do
         process_path=$(/usr/sbin/lsof -a -p "$pid" -d txt -Fn 2>/dev/null |
@@ -373,13 +374,13 @@ locale="${LC_ALL:-${LC_MESSAGES:-${LANG:-en-US}}}"
 case "$locale" in
   zh*|ZH*)
     confirm='WordOllama.JS 需要为当前用户创建并信任一个仅限 localhost、127.0.0.1 和 ::1 的证书。macOS 可能继续显示系统授权提示。继续？[y/N] '
-    success='WordOllama.JS 本地服务已启动并通过健康检查。请重新启动 Word。'
+    success='WordOllama.JS 本地服务已启动并通过健康检查。请重新启动 Word 或 WPS Writer。'
     cancelled='已取消安全设置；WordOllama.JS 本地服务尚未启动。'
     failed='本地服务未能通过健康检查。请查看 DesktopBridge/bridge.log。'
     ;;
   *)
     confirm='WordOllama.JS will create and trust a current-user certificate limited to localhost, 127.0.0.1 and ::1. macOS may show an additional authorization prompt. Continue? [y/N] '
-    success='The WordOllama.JS local service is running and healthy. Restart Word.'
+    success='The WordOllama.JS local service is running and healthy. Restart Word or WPS Writer.'
     cancelled='Setup was cancelled; the WordOllama.JS local service has not started.'
     failed='The local service did not pass its health check. Review DesktopBridge/bridge.log.'
     ;;
@@ -505,10 +506,17 @@ case "`$previous" in
 esac
 mkdir -p "`$root"
 addin_source="`$root/versions/$Version/WordOllama.JS.xml"
+executable="`$root/versions/$Version/WordOllama.DesktopBridge"
+[ -f "`$addin_source" ] && [ -x "`$executable" ] || exit 5
 addin_root="`$HOME/Library/Containers/com.microsoft.Word/Data/Documents/wef"
-[ -f "`$addin_source" ] || exit 5
 mkdir -p "`$addin_root"
 cp -f "`$addin_source" "`$addin_root/WordOllama.JS.xml"
+wps_container="`$HOME/Library/Containers/com.kingsoft.wpsoffice.mac"
+if [ -d "`$wps_container" ]; then
+  if ! "`$executable" wps-registration install; then
+    printf '%s\n' 'WPS registration could not be completed automatically. Microsoft Word support remains installed.' >&2
+  fi
+fi
 pointer_tmp="`$root/.current-version.`$`$"
 state_tmp="`$root/.current.json.`$`$"
 printf '%s' '$Version' > "`$pointer_tmp"
@@ -587,6 +595,11 @@ fi
     Invoke-InstallerTool -FileName "productbuild" `
         -Arguments $productBuildArguments `
         -Label "macOS product package build/signing" | Out-Null
+
+    if ($DryRun -and $allowUnsignedTest) {
+        Write-Host "Built unsigned macOS installer dry-run fixture $packagePath"
+        return
+    }
 
     if ($DryRun) {
         Invoke-InstallerTool -FileName "pkgutil" `

@@ -45,13 +45,15 @@ MCP stdio 已独立为 `WordOllama.Mcp` net8.0 项目，Bridge 提供 `/mcp/serv
 
 Bridge 当前使用本机回环 HTTP 便于开发；程序会拒绝非回环 HTTP。正式桌面版由同一个 Bridge 在 `https://localhost:37421` 同时托管 React 前端与本地 API，生成的 manifest 也指向该本地宿主，因此用户安装后不需要 Vite、在线静态站点或手动启动 Bridge。Windows EXE/macOS PKG 会安装本地前端、manifest 和用户级登录自启项；生产配置使用回环 HTTPS PFX，`provision-bridge-https.ps1` 会验证受信任 PFX 并通过标准输入把密码写入 Windows Credential Manager 或 macOS Keychain，避免密码进入命令行和 JSON。真实证书签名、公证及目标平台信任链仍须在对应发布环境执行。Windows/Mac 统一版的受支持基线是 Microsoft 365 Word（Windows、Mac）；老版本或缺少对应 WordApi 集的宿主会隐藏/拒绝不支持的工具，保留基础文本操作。完全离线的桌面发行不支持 Word 网页版。
 
-WPS 版已建立独立的 Windows/Linux 基线：复用同一套 React、Agent、Skill、Provider 与 Desktop Bridge，通过 `wps.html` 和 `WpsWordAdapter` 对接 WPS Writer 的同步对象模型。当前已适配选区/全文与段落、搜索替换、批注、书签、样式、段落与文字格式、表格、文档大纲、法律工具、列表、页面设置、页眉页脚、目录及批量审阅建议；设置窗口在 WPS 下使用同源 `postMessage` 与任务窗格交换样式和配对信息。HTML/Markdown 保真插入、比较结果回写、图片文件落盘和修订列表尚未对 WPS 开放，不会加入 Agent 工具目录或会返回明确的宿主能力错误。WPS 加载项入口为 `ribbon.xml + main.js`，执行 `pwsh ./packaging/package-wps-addin.ps1` 可生成测试 ZIP。该版本仍需在实际 WPS Windows/Linux 客户端完成宿主回归；WPS 官方开发文档目前仍只声明 Windows/Linux 适配，因此暂不承诺支持 Mac 版 WPS。
+WPS 版复用同一套 React、Agent、Skill、Provider 与 Desktop Bridge，通过 `wps.html` 和 `WpsWordAdapter` 对接 WPS Writer 的同步对象模型。当前已适配选区/全文与段落、搜索替换、批注、书签、样式、段落与文字格式、表格、文档大纲、法律工具、列表、页面设置、页眉页脚、目录及批量审阅建议；设置窗口在 WPS 下使用同源 `postMessage` 与任务窗格交换样式和配对信息。HTML/Markdown 保真插入、比较结果回写、图片文件落盘和修订列表尚未对 WPS 开放，不会加入 Agent 工具目录或会返回明确的宿主能力错误。WPS 加载项入口为 `ribbon.xml + main.js`，执行 `pwsh ./packaging/package-wps-addin.ps1` 可生成测试 ZIP。Windows 安装器维护 `%APPDATA%\kingsoft\wps\jsaddons\publish.xml`；macOS PKG 在检测到 WPS 容器后，安全维护 `~/Library/Containers/com.kingsoft.wpsoffice.mac/Data/.kingsoft/wps/jsaddons/publish.xml`，保留其他加载项、自动去重、创建首次修改备份，且不启用 JS 调试器。Mac WPS 代码与安装路径已接通，但仍须在真实 Apple Silicon Mac WPS 中完成 Writer API 和 Ribbon 宿主验收。
+
+Linux x64 用户包维护 `~/.local/share/Kingsoft/wps/jsaddons/publish.xml`，通过 systemd 用户服务启动自包含 Bridge。Linux WPS 使用仅监听 `127.0.0.1` 的同源 HTTP，避免内嵌 Chromium 的本地证书信任差异；CORS、配对鉴权和本地工具网络权限仍保持收紧。API Key 写入 Secret Service，Agent 的 Python/Node 执行使用 Bubblewrap 隔离且默认断网。Linux WPS 仍须在官方支持版本的真实宿主中验收。
 
 Windows EXE 会登记当前用户卸载入口；macOS PKG 会在
 `~/Applications/WordOllama.JS` 安装双语原生卸载器。两端卸载都删除安装文件、
 自启项和专用 HTTPS 凭据，但默认保留 Provider/MCP/API Key 与用户设置。
 
-Bridge 不会把 API Key 写入 Office.js 状态或 Skill 文件；`WordOllama.Platform` 已优先从 Windows Credential Manager 的 `WordOllama.JS/<name>` 或 macOS Keychain 同名 service 读取，无法访问平台密钥库时才回退到 provider 专用或通用环境变量。
+Bridge 不会把 API Key 写入 Office.js 状态或 Skill 文件；`WordOllama.Platform` 已优先从 Windows Credential Manager、macOS Keychain 或 Linux Secret Service 的 `WordOllama.JS/<name>` 读取，无法读取平台密钥库时才回退到 provider 专用或通用环境变量。
 
 为避免与仍可并存的 COM `WordOllama` 相互覆盖，统一版的配置、恢复点、更新缓存和 Skills 现在都位于独立的 `WordOllama.JS` 用户目录，系统密钥也使用 `WordOllama.JS/<name>` 命名空间。首次启动会以有界、拒绝链接的复制方式导入旧 Bridge 的已知 JSON/恢复文件和旧 Skills；源文件不移动、不删除，迁移标记写入后不再反复同步，因此 JS 版后续新增、修改或删除 Skill 不会影响 COM 版。已有旧 Bridge 密钥只在新命名空间缺失时读取并复制，新写入和卸载均只触及 JS 命名空间。
 

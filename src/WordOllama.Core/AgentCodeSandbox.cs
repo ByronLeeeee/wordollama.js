@@ -47,7 +47,13 @@ public sealed class AgentCodeSandboxFactory : IAgentCodeSandboxFactory
             ? new WindowsAppContainerSandbox(sessionId, workspaceRoot, _pythonExecutable, _nodeExecutable)
             : OperatingSystem.IsMacOS()
                 ? new MacSandboxExecCodeSandbox(_processRunner, workspaceRoot, _pythonExecutable, _nodeExecutable)
-                : new UnsupportedCodeSandbox();
+                : OperatingSystem.IsLinux()
+                    ? new LinuxBubblewrapCodeSandbox(
+                        _processRunner,
+                        workspaceRoot,
+                        _pythonExecutable,
+                        _nodeExecutable)
+                    : new UnsupportedCodeSandbox();
     }
 
     private static string? ResolveExecutable(string? executable)
@@ -91,6 +97,105 @@ public sealed class AgentCodeSandboxFactory : IAgentCodeSandboxFactory
             "use a system-readable runtime location to enable it safely.");
         return null;
     }
+}
+
+internal sealed class LinuxBubblewrapCodeSandbox : IAgentCodeSandbox
+{
+    private readonly IProcessRunner _runner;
+    private readonly string _workspace;
+    private readonly IReadOnlyDictionary<string, string?> _runtimes;
+    private readonly string? _bubblewrapExecutable;
+
+    public LinuxBubblewrapCodeSandbox(
+        IProcessRunner runner,
+        string workspace,
+        string? pythonExecutable,
+        string? nodeExecutable)
+    {
+        _runner = runner;
+        _workspace = Path.GetFullPath(workspace);
+        Directory.CreateDirectory(_workspace);
+        _bubblewrapExecutable = File.Exists("/usr/bin/bwrap") ? "/usr/bin/bwrap" : null;
+        _runtimes = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["python"] = pythonExecutable,
+            ["node"] = nodeExecutable,
+        };
+    }
+
+    public bool Supports(string runtime) =>
+        _bubblewrapExecutable is not null &&
+        _runtimes.TryGetValue(runtime, out var executable) &&
+        executable is not null;
+
+    public async Task<ProcessExecutionResult> RunAsync(
+        string runtime,
+        string code,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Supports(runtime))
+        {
+            throw new PlatformNotSupportedException(
+                $"The {runtime} Bubblewrap sandbox is unavailable. Install the 'bubblewrap' package.");
+        }
+
+        var executable = _runtimes[runtime]!;
+        var extension = runtime.Equals("python", StringComparison.OrdinalIgnoreCase) ? "py" : "mjs";
+        var scriptName = $".wordollama-{Guid.NewGuid():N}.{extension}";
+        var scriptPath = Path.Combine(_workspace, scriptName);
+        await File.WriteAllTextAsync(scriptPath, code, new UTF8Encoding(false), cancellationToken);
+        try
+        {
+            var arguments = new List<string>
+            {
+                "--die-with-parent",
+                "--new-session",
+                "--unshare-all",
+                "--proc", "/proc",
+                "--dev", "/dev",
+                "--tmpfs", "/tmp",
+            };
+            foreach (var systemPath in new[] { "/usr", "/bin", "/lib", "/lib64", "/etc" })
+            {
+                if (Directory.Exists(systemPath))
+                {
+                    arguments.Add("--ro-bind");
+                    arguments.Add(systemPath);
+                    arguments.Add(systemPath);
+                }
+            }
+            arguments.AddRange([
+                "--bind", _workspace, "/workspace",
+                "--chdir", "/workspace",
+                "--setenv", "HOME", "/workspace",
+                "--setenv", "TMPDIR", "/tmp",
+                "--setenv", "PYTHONIOENCODING", "utf-8",
+                "--setenv", "NO_PROXY", "*",
+                executable!, $"/workspace/{scriptName}",
+            ]);
+
+            var result = await _runner.RunAsync(new ProcessExecutionRequest(
+                _bubblewrapExecutable!,
+                arguments,
+                _workspace,
+                new Dictionary<string, string>
+                {
+                    ["HOME"] = _workspace,
+                    ["TMPDIR"] = _workspace,
+                    ["NO_PROXY"] = "*",
+                },
+                timeout), cancellationToken);
+            MacSandboxExecCodeSandbox.EnforceWorkspaceLimit(_workspace);
+            return MacSandboxExecCodeSandbox.BoundOutput(result);
+        }
+        finally
+        {
+            try { File.Delete(scriptPath); } catch (IOException) { }
+        }
+    }
+
+    public void Dispose() { }
 }
 
 internal sealed class UnsupportedCodeSandbox : IAgentCodeSandbox

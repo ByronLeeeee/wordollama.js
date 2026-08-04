@@ -34,6 +34,8 @@ New-Item -ItemType Directory -Force -Path `
     (Join-Path $smokeAddinStaticRoot "wps-addin") | Out-Null
 New-Item -ItemType Directory -Force -Path `
     (Join-Path $smokeAddinStaticRoot "wps-addin/assets/ribbon") | Out-Null
+New-Item -ItemType Directory -Force -Path `
+    (Join-Path $smokeAddinStaticRoot "wps-addin/assets/ribbon/wps") | Out-Null
 Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "index.html") `
     -Value "<!doctype html><title>WordOllama.JS</title><div id=`"root`"></div>" `
     -Encoding utf8NoBOM
@@ -57,6 +59,8 @@ Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "wps-addin/ribbon.xml"
 Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "assets/ribbon/agent.svg") `
     -Value '<svg xmlns="http://www.w3.org/2000/svg" />' -Encoding utf8NoBOM
 Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "wps-addin/assets/ribbon/agent.svg") `
+    -Value '<svg xmlns="http://www.w3.org/2000/svg" />' -Encoding utf8NoBOM
+Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "wps-addin/assets/ribbon/wps/agent.svg") `
     -Value '<svg xmlns="http://www.w3.org/2000/svg" />' -Encoding utf8NoBOM
 Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "assets/app.js") `
     -Value "globalThis.wordOllamaDesktopHost = true;" -Encoding utf8NoBOM
@@ -128,6 +132,7 @@ function Assert-PublishDirectory {
         -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps-addin/main.js") -PathType Leaf) -or
         -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps-addin/ribbon.xml") -PathType Leaf) -or
         -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps-addin/assets/ribbon/agent.svg") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps-addin/assets/ribbon/wps/agent.svg") -PathType Leaf) -or
         -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/assets/ribbon/agent.svg") -PathType Leaf)) {
         throw "Bridge package smoke: locally hosted Add-in payload is missing for $Runtime."
     }
@@ -156,6 +161,7 @@ function Assert-PublishDirectory {
                 $entryNames -notcontains "wwwroot/wps-addin/index.html" -or
                 $entryNames -notcontains "wwwroot/wps-addin/ribbon.xml" -or
                 $entryNames -notcontains "wwwroot/wps-addin/assets/ribbon/agent.svg" -or
+                $entryNames -notcontains "wwwroot/wps-addin/assets/ribbon/wps/agent.svg" -or
                 $entryNames -notcontains "wwwroot/assets/ribbon/agent.svg") {
                 throw "Bridge package smoke: required entries must be at the archive root for $Runtime."
             }
@@ -624,6 +630,8 @@ function Assert-MacInstallerDryRun {
         @($launchAgent.plist.dict.string)[0] -ne "com.wordollama.desktopbridge" -or
         $postinstall -notlike '*current.json*' -or
         $postinstall -notlike '*WordOllama.JS.xml*' -or
+        $postinstall -notlike '*com.kingsoft.wpsoffice.mac*' -or
+        $postinstall -notlike '*wps-registration install*' -or
         $postinstall -notlike '*launchctl bootstrap*' -or
         $postinstall -notlike '*setup-required.txt*' -or
         $postinstall -notlike '*localhost:37421/health*' -or
@@ -637,6 +645,7 @@ function Assert-MacInstallerDryRun {
         $rollbackCommand -notlike '*"installer":"rollback"*' -or
         $uninstaller -notlike '*launchctl bootout*' -or
         $uninstaller -notlike '*WordOllama.JS.xml*' -or
+        $uninstaller -notlike '*wps-registration uninstall*' -or
         $uninstaller -notlike '*WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD*' -or
         $uninstaller -notlike '*security delete-certificate -Z*' -or
         $uninstaller -notlike '*pkgutil --forget com.wordollama.desktopbridge*' -or
@@ -1005,6 +1014,9 @@ if ($hostRuntime -eq "win-x64") {
         $macInstallerSource -notmatch 'certs/bridge\.pfx' -or
         $macInstallerSource -notmatch 'WordOllama\.JS/WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD' -or
         $macInstallerSource -notmatch 'WordOllama\.JS\.xml' -or
+        $macInstallerSource -notmatch 'com\.kingsoft\.wpsoffice\.mac' -or
+        $macInstallerSource -notmatch 'wps-registration install' -or
+        $macInstallerSource -notmatch 'wps-registration uninstall' -or
         $macInstallerSource -notmatch '-a "\$\(id -un\)"' -or
         $macInstallerSource -match 'WordOllama/WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD' -or
         $macInstallerSource -notmatch 'BuildUnsignedForTests' -or

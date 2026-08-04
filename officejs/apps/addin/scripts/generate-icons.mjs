@@ -17,7 +17,7 @@ const writeFileIfChanged = async (path, content, encoding) => {
 // masks can. Keep them neutral and lightweight so they read like native Office
 // glyphs instead of a row of branded blue illustrations. The separate app icon
 // below intentionally retains WordOllama's blue identity.
-const wrap = (body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#202020" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
+const wrap = (body, stroke = "#202020") => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="${stroke}" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
 const icons = [
   ["writing", "Writing", `<path d="M6 3h8l4 4v14H6zM14 3v5h5M9 16l5-5 2 2-5 5-3 1z"/>`],
   ["image", "Image", `<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m5 18 5-5 3 3 2-2 4 4"/>`],
@@ -60,12 +60,16 @@ const icons = [
 ];
 
 const root = join(import.meta.dirname, "..", "assets", "ribbon");
+const wpsRoot = join(root, "wps");
 const ribbonAssetRevision = "mono-2";
 await mkdir(root, { recursive: true });
+await mkdir(wpsRoot, { recursive: true });
 const catalog = [];
 for (const [name, resource, body] of icons) {
   const svg = wrap(body);
+  const wpsSvg = wrap(body, "#2563eb");
   await writeFileIfChanged(join(root, `${name}.svg`), `${svg}\n`, "utf8");
+  await writeFileIfChanged(join(wpsRoot, `${name}.svg`), `${wpsSvg}\n`, "utf8");
   for (const size of [16, 32, 80]) {
     const png = new Resvg(svg, { fitTo: { mode: "width", value: size } }).render().asPng();
     await writeFileIfChanged(join(root, `${name}-${size}.png`), png);

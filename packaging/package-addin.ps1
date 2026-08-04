@@ -6,6 +6,7 @@ param(
     [ValidatePattern("^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$")]
     [string]$ManifestVersion = "1.2.0.0",
     [string]$OutputRoot = "",
+    [switch]$AllowLoopbackHttpForWps,
     [switch]$SkipManifestValidation
 )
 
@@ -15,29 +16,41 @@ $addinRoot = Join-Path $repoRoot "officejs\apps\addin"
 
 [Uri]$baseUri = $null
 if (-not [Uri]::TryCreate($BaseUrl, [UriKind]::Absolute, [ref]$baseUri) -or
-    $baseUri.Scheme -ne [Uri]::UriSchemeHttps -or
+    ($baseUri.Scheme -ne [Uri]::UriSchemeHttps -and
+     -not ($AllowLoopbackHttpForWps -and
+           $baseUri.Scheme -eq [Uri]::UriSchemeHttp -and
+           $baseUri.IsLoopback)) -or
     -not [string]::IsNullOrEmpty($baseUri.UserInfo) -or
     -not [string]::IsNullOrEmpty($baseUri.Query) -or
     -not [string]::IsNullOrEmpty($baseUri.Fragment) -or
     $baseUri.AbsolutePath -ne "/") {
-    throw "BaseUrl must be an HTTPS origin without credentials, path, query, or fragment."
+    throw "BaseUrl must be an HTTPS origin without credentials, path, query, or fragment, or an explicitly allowed loopback HTTP origin for Linux WPS."
 }
 
 [Uri]$bridgeUri = $null
 if (-not [Uri]::TryCreate($BridgeUrl, [UriKind]::Absolute, [ref]$bridgeUri) -or
-    $bridgeUri.Scheme -ne [Uri]::UriSchemeHttps -or
+    ($bridgeUri.Scheme -ne [Uri]::UriSchemeHttps -and
+     -not ($AllowLoopbackHttpForWps -and
+           $bridgeUri.Scheme -eq [Uri]::UriSchemeHttp)) -or
     -not $bridgeUri.IsLoopback -or
     -not [string]::IsNullOrEmpty($bridgeUri.UserInfo) -or
     -not [string]::IsNullOrEmpty($bridgeUri.Query) -or
     -not [string]::IsNullOrEmpty($bridgeUri.Fragment) -or
     $bridgeUri.AbsolutePath -ne "/") {
-    throw "BridgeUrl must be a loopback HTTPS origin without credentials, path, query, or fragment."
+    throw "BridgeUrl must be a loopback HTTPS origin without credentials, path, query, or fragment, or explicitly allowed loopback HTTP for Linux WPS."
 }
 $productionBridgeUrl = $bridgeUri.GetLeftPart([UriPartial]::Authority)
 $productionAddinUrl = $baseUri.GetLeftPart([UriPartial]::Authority)
 if ($baseUri.IsLoopback -and
     -not $productionAddinUrl.Equals($productionBridgeUrl, [StringComparison]::OrdinalIgnoreCase)) {
     throw "A loopback Add-in BaseUrl must use the same origin as BridgeUrl."
+}
+if ($AllowLoopbackHttpForWps -and
+    ($baseUri.Scheme -ne [Uri]::UriSchemeHttp -or
+     $bridgeUri.Scheme -ne [Uri]::UriSchemeHttp -or
+     -not $baseUri.IsLoopback -or
+     -not $SkipManifestValidation)) {
+    throw "Linux WPS loopback HTTP packaging requires matching HTTP origins and -SkipManifestValidation."
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
@@ -122,7 +135,8 @@ if ($javascriptFiles.Count -eq 0) {
     throw "Production Add-in bundle does not contain a JavaScript asset."
 }
 $javascriptText = ($javascriptFiles | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join "`n"
-if ($javascriptText.Contains("http://127.0.0.1:37421", [StringComparison]::OrdinalIgnoreCase) -or
+if ((-not $AllowLoopbackHttpForWps -and
+     $javascriptText.Contains("http://127.0.0.1:37421", [StringComparison]::OrdinalIgnoreCase)) -or
     -not $javascriptText.Contains($productionBridgeUrl, [StringComparison]::OrdinalIgnoreCase)) {
     throw "Production Add-in bundle did not replace the development Bridge URL with $productionBridgeUrl."
 }

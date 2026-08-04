@@ -1,13 +1,14 @@
 # WordOllama.JS
 
-WordOllama.JS 是 WordOllama 的 Windows/macOS 统一版。项目使用 React 19、
-TypeScript、Vite 和 Office.js 实现 Word 界面，使用跨平台 .NET 8 Desktop Bridge
-承载 Agent、Provider、MCP、Skills、本地工具和安全存储。
+WordOllama.JS 是 WordOllama 的 Windows/macOS Word 版与跨平台 WPS 版。项目使用 React 19、
+TypeScript、Vite 和 Office.js 实现 Microsoft Word 界面，并通过独立的
+WPS Writer 适配器复用同一套任务窗格和 Agent；跨平台 .NET 8 Desktop Bridge
+承载 Provider、MCP、Skills、本地工具和安全存储。
 
-桌面发行采用本地自托管架构：Desktop Bridge 在
-`https://localhost:37421` 同时提供 React 前端和本地 API，安装器负责注册
-Office manifest 与当前用户登录自启。完成一次本地 HTTPS 信任配置后，最终用户
-不需要运行 Vite、打开终端或手动启动 Bridge。
+桌面发行采用本地自托管架构：Desktop Bridge 同时提供 React 前端和本地 API，
+安装器负责注册加载项与当前用户登录自启。Windows/macOS 使用
+`https://localhost:37421`；Linux WPS 使用只绑定 `127.0.0.1` 的同源 HTTP。
+最终用户不需要运行 Vite、打开终端或手动启动 Bridge。
 
 旧 COM/VSTO 版保留在公开仓库
 [`wordollama-community`](https://github.com/ByronLeeeee/wordollama-community)。
@@ -30,8 +31,11 @@ Office manifest 与当前用户登录自启。完成一次本地 HTTPS 信任配
 - Node.js 24 或更新版本。
 - .NET SDK 8。
 - PowerShell 7（命令名为 `pwsh`）。
-- Microsoft 365 Word。
+- Microsoft 365 Word（Windows/macOS）；也可使用 WPS Writer（Windows、
+  Apple Silicon macOS 或 Linux x64 测试支持）。
 - Windows 需要 WebView2；macOS 使用系统提供的 Office WebView。
+- Linux WPS 安装包要求 x86_64、systemd 用户服务和 `curl`；保存云端 API Key
+  需要 `libsecret-tools`，Agent 代码沙箱需要 `bubblewrap`。
 - 使用 Ollama 时需另外安装并启动 Ollama。
 
 正式打包还需要目标平台的签名环境。首期采用用户明确确认后安装到当前用户信任库的
@@ -71,6 +75,14 @@ pwsh ./packaging/install-office-addin-dev.ps1
 
 Windows 写入当前用户的 Office WEF Developer 登记；macOS 将 manifest 复制到
 Word 容器的 `wef` 目录。它不会注册 COM/VSTO ProgId。
+
+正式 Windows 安装器会登记 WPS 加载项；macOS PKG 在检测到 WPS 容器时会安全
+维护其 `publish.xml`，因此 Word 和 WPS 共用一个 Bridge 安装包。Mac WPS 当前
+仍需要真实 Apple Silicon 设备完成最终宿主验收。
+
+Linux x64 使用 WPS 官方 `~/.local/share/Kingsoft/wps/jsaddons/publish.xml`
+注册路径，并通过仅监听 `127.0.0.1` 的同源 HTTP Bridge 提供 Ribbon、任务窗格和
+API。Linux 不安装 Microsoft Office manifest，也不会开放非回环 HTTP。
 
 ### 2. 启动 Desktop Bridge
 

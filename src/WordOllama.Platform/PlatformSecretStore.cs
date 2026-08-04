@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using WordOllama.Core;
@@ -36,6 +37,15 @@ public sealed class PlatformSecretStore : IMutableSecretStore
                 MacKeychainStore.Set);
         }
 
+        if (OperatingSystem.IsLinux())
+        {
+            var secret = GetWithLegacyMigration(
+                name,
+                LinuxSecretServiceStore.Get,
+                LinuxSecretServiceStore.Set);
+            return secret ?? _environment.Get(name);
+        }
+
         return _environment.Get(name);
     }
 
@@ -55,7 +65,13 @@ public sealed class PlatformSecretStore : IMutableSecretStore
             MacKeychainStore.Set(ProductServicePrefix + name, value);
             return;
         }
-        throw new PlatformNotSupportedException("Writable secret storage requires Windows Credential Manager or macOS Keychain.");
+        if (OperatingSystem.IsLinux())
+        {
+            LinuxSecretServiceStore.Set(ProductServicePrefix + name, value);
+            return;
+        }
+        throw new PlatformNotSupportedException(
+            "Writable secret storage requires Windows Credential Manager, macOS Keychain, or Linux Secret Service.");
     }
 
     public void Delete(string name)
@@ -63,7 +79,9 @@ public sealed class PlatformSecretStore : IMutableSecretStore
         if (string.IsNullOrWhiteSpace(name)) return;
         if (OperatingSystem.IsWindows()) WindowsCredentialStore.Delete(ProductServicePrefix + name);
         else if (OperatingSystem.IsMacOS()) MacKeychainStore.Delete(ProductServicePrefix + name);
-        else throw new PlatformNotSupportedException("Writable secret storage requires Windows Credential Manager or macOS Keychain.");
+        else if (OperatingSystem.IsLinux()) LinuxSecretServiceStore.Delete(ProductServicePrefix + name);
+        else throw new PlatformNotSupportedException(
+            "Writable secret storage requires Windows Credential Manager, macOS Keychain, or Linux Secret Service.");
     }
 
     private string? GetWithLegacyMigration(
@@ -90,6 +108,112 @@ public sealed class PlatformSecretStore : IMutableSecretStore
         }
         return _environment.Get(name);
     }
+}
+
+internal static class LinuxSecretServiceStore
+{
+    private const string ApplicationAttribute = "WordOllama.JS";
+
+    public static string? Get(string service)
+    {
+        var executable = FindSecretTool();
+        if (executable is null) return null;
+        var result = Run(
+            executable,
+            ["lookup", "application", ApplicationAttribute, "service", service],
+            standardInput: null);
+        return result.ExitCode switch
+        {
+            0 => string.IsNullOrEmpty(result.Output) ? null : result.Output.TrimEnd('\r', '\n'),
+            1 => null,
+            _ => throw new InvalidOperationException(
+                $"Linux Secret Service lookup failed ({result.ExitCode}): {result.Error.Trim()}"),
+        };
+    }
+
+    public static void Set(string service, string value)
+    {
+        var executable = FindSecretTool() ?? throw new PlatformNotSupportedException(
+            "Linux secret storage requires the 'secret-tool' command from libsecret-tools.");
+        var result = Run(
+            executable,
+            [
+                "store",
+                "--label=WordOllama.JS",
+                "application",
+                ApplicationAttribute,
+                "service",
+                service,
+            ],
+            value);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"Linux Secret Service write failed ({result.ExitCode}): {result.Error.Trim()}");
+        }
+    }
+
+    public static void Delete(string service)
+    {
+        var executable = FindSecretTool();
+        if (executable is null) return;
+        var result = Run(
+            executable,
+            ["clear", "application", ApplicationAttribute, "service", service],
+            standardInput: null);
+        if (result.ExitCode is not (0 or 1))
+        {
+            throw new InvalidOperationException(
+                $"Linux Secret Service delete failed ({result.ExitCode}): {result.Error.Trim()}");
+        }
+    }
+
+    private static string? FindSecretTool()
+    {
+        const string standardPath = "/usr/bin/secret-tool";
+        if (File.Exists(standardPath)) return standardPath;
+        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+                     .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var candidate = Path.Combine(directory, "secret-tool");
+            if (File.Exists(candidate)) return candidate;
+        }
+        return null;
+    }
+
+    private static SecretToolResult Run(
+        string executable,
+        IReadOnlyList<string> arguments,
+        string? standardInput)
+    {
+        var startInfo = new ProcessStartInfo(executable)
+        {
+            UseShellExecute = false,
+            RedirectStandardInput = standardInput is not null,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Unable to start Linux secret-tool.");
+        if (standardInput is not null)
+        {
+            process.StandardInput.Write(standardInput);
+            process.StandardInput.Close();
+        }
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(10_000))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new TimeoutException("Linux secret-tool did not finish within 10 seconds.");
+        }
+        return new SecretToolResult(process.ExitCode, outputTask.GetAwaiter().GetResult(),
+            errorTask.GetAwaiter().GetResult());
+    }
+
+    private sealed record SecretToolResult(int ExitCode, string Output, string Error);
 }
 
 internal static class MacKeychainStore

@@ -12,7 +12,7 @@ public interface IMutableSecretStore : ISecretStore
 }
 
 /// <summary>
-/// Injection boundary for Windows DPAPI/Credential Manager and macOS Keychain.
+/// Injection boundary for Windows Credential Manager, macOS Keychain, and Linux Secret Service.
 /// Environment variables are intentionally read-only and are suitable for
 /// managed deployments or a launcher that has already queried the OS vault.
 /// </summary>

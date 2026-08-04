@@ -147,11 +147,193 @@ button { cursor: pointer; }
   background: #fff;
 }
 
-/* WPS renders its task pane behind the expanded Ribbon instead of reducing the
-   webview viewport. Reserve the obscured logical-pixel band inside the flex
-   shell so headers and the top of every workflow remain reachable. */
+/* Current WPS Writer versions size the task-pane viewport below the Ribbon.
+   Older builds needed a fixed 124px inset, but retaining it now creates a large
+   empty band above every workflow. */
 :root[data-host="wps"] .agent-shell {
-  padding-top: 124px;
+  padding-top: 0;
+}
+
+/* DaisyUI 5 uses modern cascade and color functions that are only partially
+   implemented by the WPS embedded browser. Keep the component class contract,
+   but provide plain-CSS host fallbacks so controls do not fall back to browser
+   defaults when a generated DaisyUI declaration is ignored. */
+:root[data-host="wps"] .btn {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface-strong);
+  color: var(--ink);
+  text-decoration: none;
+}
+:root[data-host="wps"] .btn:hover:not(:disabled) {
+  border-color: #a8c5eb;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+:root[data-host="wps"] .btn:disabled {
+  cursor: default;
+  opacity: .5;
+}
+:root[data-host="wps"] .btn-sm {
+  min-height: 30px;
+  padding: 5px 9px;
+}
+:root[data-host="wps"] .btn-xs {
+  min-height: 24px;
+  padding: 3px 7px;
+}
+:root[data-host="wps"] .btn-square {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+}
+:root[data-host="wps"] .btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+:root[data-host="wps"] .btn-primary:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: #fff;
+}
+:root[data-host="wps"] .btn-ghost {
+  border-color: transparent;
+  background: transparent;
+}
+:root[data-host="wps"] .btn-outline {
+  background: var(--canvas);
+}
+:root[data-host="wps"] .btn-error {
+  border-color: #fecaca;
+  color: var(--danger);
+}
+:root[data-host="wps"] .input,
+:root[data-host="wps"] .select,
+:root[data-host="wps"] .textarea,
+:root[data-host="wps"] .file-input {
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  outline: 0;
+  background: var(--canvas);
+  color: var(--ink);
+}
+:root[data-host="wps"] .input,
+:root[data-host="wps"] .select {
+  height: 36px;
+  padding: 0 10px;
+}
+:root[data-host="wps"] .textarea {
+  padding: 8px 10px;
+}
+:root[data-host="wps"] .input:focus,
+:root[data-host="wps"] .select:focus,
+:root[data-host="wps"] .textarea:focus {
+  border-color: var(--accent);
+}
+:root[data-host="wps"] .card-border {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+:root[data-host="wps"] .badge {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--muted);
+}
+:root[data-host="wps"] .alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid #c9dcf4;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+:root[data-host="wps"] .checkbox {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  accent-color: var(--accent);
+}
+:root[data-host="wps"] .toggle {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  appearance: none;
+  background: var(--surface-strong);
+}
+:root[data-host="wps"] .toggle::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  content: "";
+}
+:root[data-host="wps"] .toggle:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+:root[data-host="wps"] .toggle:checked::after {
+  left: 18px;
+}
+:root[data-host="wps"] .modal {
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
+  padding: 12px;
+  border: 0;
+  background: rgba(15, 23, 42, .32);
+}
+:root[data-host="wps"] .modal[open] {
+  display: grid;
+  place-items: center;
+}
+:root[data-host="wps"] .modal-box {
+  position: relative;
+  z-index: 1;
+  width: min(92vw, 520px);
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--canvas);
+  color: var(--ink);
+}
+:root[data-host="wps"] .modal-action {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 14px;
+}
+:root[data-host="wps"] .modal-backdrop {
+  position: absolute;
+  inset: 0;
+}
+:root[data-host="wps"] .modal-backdrop button {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
 }
 
 .react-taskpane-root {

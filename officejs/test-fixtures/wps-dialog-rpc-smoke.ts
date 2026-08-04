@@ -24,6 +24,10 @@ const opener = {
   },
 };
 
+Object.defineProperty(globalThis.crypto, "randomUUID", {
+  configurable: true,
+  value: undefined,
+});
 Object.assign(globalThis, {
   window: {
     opener,
@@ -38,6 +42,7 @@ Object.assign(globalThis, {
 });
 
 const rpc = await import("../apps/addin/src/settings/dialog-rpc.ts");
+assert.doesNotThrow(() => handlers[0]?.({ source: opener, origin, data: "not-json" }));
 assert.deepEqual(await rpc.listWordStyles(), ["正文", "标题 1"]);
 await rpc.createWordParagraphStyle("自定义样式");
 rpc.closeSettingsWindow();
@@ -49,7 +54,7 @@ assert.equal(closed, true);
 closed = false;
 const messageCount = methods.length;
 Object.assign(window.location, { search: "?wpsDialog=1" });
-Object.assign(window, { Application: { ActiveDocument: {} } });
+Object.assign(window, { Application: { ShowDialog() { return true; } } });
 rpc.closeSettingsWindow();
 assert.equal(closed, true);
 assert.equal(methods.length, messageCount);

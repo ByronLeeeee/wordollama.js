@@ -188,6 +188,10 @@ Windows 与 macOS arm64 的安装、升级、证书信任、回滚、卸载（�
   默认 Gatekeeper 无警告分发；安装器必须引导用户执行系统允许的显式信任步骤，
   不能伪造 notarization/stapling 通过状态。
 - [ ] 在真实 Mac Word 检查 16 个独立窗格、设置 Dialog、深浅主题和中英文。
+- [ ] 在真实 Apple Silicon Mac WPS 验证常驻 Ribbon、设置弹窗、任务窗格切换、
+  Writer API 工具矩阵，以及安装/升级/卸载对 `publish.xml` 的完整生命周期。
+- [ ] 在真实 x86_64 Linux WPS 企业版验证 systemd 用户服务、常驻 Ribbon、
+  Secret Service、Bubblewrap、Writer API 工具矩阵和安装/升级/卸载生命周期。
 - [ ] 生成新版 Windows/macOS 补充宿主证据后运行终审脚本。
 
 ## P1：离线产品闭环

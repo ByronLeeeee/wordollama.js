@@ -59,6 +59,13 @@ function cleanText(value: unknown): string {
 }
 
 function paragraphTexts(application: WpsApplication): string[] {
+  const contentText = application.ActiveDocument?.Content?.Text;
+  if (typeof contentText === "string") {
+    // Crossing the WPS JS/native boundary once per paragraph can freeze the
+    // task pane for large documents. Content.Text preserves paragraph marks
+    // (and table cell end markers), which cleanText normalizes consistently.
+    return cleanText(contentText).split("\n");
+  }
   const paragraphs = application.ActiveDocument?.Paragraphs;
   const count = Number(paragraphs?.Count ?? 0);
   if (count > 0 && typeof paragraphs?.Item === "function") {
@@ -95,11 +102,11 @@ function setRangeText(range: any, text: string): void {
 
 function escapeHtml(value: string): string {
   return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replace(/&/gu, "&amp;")
+    .replace(/</gu, "&lt;")
+    .replace(/>/gu, "&gt;")
+    .replace(/"/gu, "&quot;")
+    .replace(/'/gu, "&#39;");
 }
 
 function revisionDate(value: unknown): string {

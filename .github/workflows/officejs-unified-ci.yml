@@ -45,6 +45,8 @@ jobs:
             runtime: win-x64
           - runner: macos-15
             runtime: osx-arm64
+          - runner: ubuntu-latest
+            runtime: linux-x64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     steps:
@@ -73,17 +75,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build unsigned unified artifacts
         shell: pwsh
-        run: >
-          ./packaging/package-unified-release.ps1
-          -Runtime ${{ matrix.runtime }}
-          -Configuration Release
-          -Version test-ci-${{ github.run_number }}-${{ github.run_attempt }}
-          -ManifestVersion 1.2.${{ github.run_number }}.${{ github.run_attempt }}
-          -BaseUrl https://localhost:37421
-          -BridgeUrl https://localhost:37421
-          -UpdateIndexUrl https://updates.wordollama.invalid/ci-${{ github.run_number }}-${{ github.run_attempt }}/index.json
-          -ExpectedUpdatePublisherSubject 'CN=WordOllama CI Unsigned Test'
-          -OutputRoot ./ci-unified
+        run: |
+          $origin = if ('${{ matrix.runtime }}' -eq 'linux-x64') {
+            'http://127.0.0.1:37421'
+          } else {
+            'https://localhost:37421'
+          }
+          ./packaging/package-unified-release.ps1 `
+            -Runtime '${{ matrix.runtime }}' `
+            -Configuration Release `
+            -Version 'test-ci-${{ github.run_number }}-${{ github.run_attempt }}' `
+            -ManifestVersion '1.2.${{ github.run_number }}.${{ github.run_attempt }}' `
+            -BaseUrl $origin `
+            -BridgeUrl $origin `
+            -UpdateIndexUrl 'https://updates.wordollama.invalid/ci-${{ github.run_number }}-${{ github.run_attempt }}/index.json' `
+            -ExpectedUpdatePublisherSubject 'CN=WordOllama CI Unsigned Test' `
+            -OutputRoot ./ci-unified
       - name: Build WPS add-in package
         if: ${{ matrix.runtime == 'win-x64' }}
         shell: pwsh
@@ -97,12 +104,17 @@ jobs:
               -ArtifactRoot ./ci-unified/bridge `
               -Version $version `
               -BuildUnsignedForTests
-          } else {
+          } elseif ('${{ matrix.runtime }}' -eq 'osx-arm64') {
             ./packaging/package-macos-installer.ps1 `
               -Runtime osx-arm64 `
               -ArtifactRoot ./ci-unified/bridge `
               -Version $version `
               -BuildUnsignedForTests
+          } else {
+            ./packaging/package-linux-installer.ps1 `
+              -Runtime linux-x64 `
+              -ArtifactRoot ./ci-unified/bridge `
+              -Version $version
           }
       - name: Upload unsigned build evidence
         uses: actions/upload-artifact@v7

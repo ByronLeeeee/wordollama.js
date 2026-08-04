@@ -1,6 +1,7 @@
 # WordOllama.JS User Guide
 
-WordOllama.JS initially supports Windows x64 and Apple Silicon Mac. Ollama is an
+WordOllama.JS supports Windows x64 and Apple Silicon Mac, with a Linux x64 WPS
+preview. Ollama is an
 optional external dependency. The Desktop Bridge starts for the current user and
 hosts both the add-in UI and local API, so a packaged installation does not need
 Vite or a terminal.
@@ -43,11 +44,21 @@ disable Gatekeeper globally. After installation, run
 `~/Applications/WordOllama.JS/Complete WordOllama.JS Setup.command` and approve the
 separate localhost certificate. Intel Mac is not supported.
 
+## Install for WPS Writer on Linux x64
+
+The Linux build targets WPS Writer only. Verify the `.tar.gz` against its
+`.sha256` sidecar, extract it, and run `./install.sh` as the desktop user—never
+with `sudo`. The installer registers the add-in in
+`~/.local/share/Kingsoft/wps/jsaddons/publish.xml`, enables a systemd user
+service, and checks the loopback Bridge before asking you to restart WPS.
+`libsecret-tools` is required to save cloud API keys and `bubblewrap` enables
+sandboxed Agent Python/Node execution. Linux updates are manual in this preview.
+
 ## Models, updates, offline use, and removal
 
 - Settings > Models can store unlimited models per provider. No active model
   means AI features stop with an activation prompt instead of silently choosing
-  Ollama. API keys live in Credential Manager or Keychain.
+  Ollama. API keys live in Credential Manager, Keychain, or Linux Secret Service.
 - Settings > Updates shows the pinned publisher, certificate thumbprint, and
   public-key SHA-256. The Bridge verifies runtime, size, SHA-256, and platform
   signature before opening an installer; failed downloads are removed.
@@ -67,3 +78,4 @@ separate localhost certificate. Intel Mac is not supported.
 - On Windows, uninstall from Installed apps. On Mac, run
   `~/Applications/WordOllama.JS/Uninstall WordOllama.JS.command`. Removal does not
   delete Ollama, its models, the old COM add-in, or unrelated certificates.
+- On Linux, run `~/.local/share/WordOllama.JS/uninstall.sh`.

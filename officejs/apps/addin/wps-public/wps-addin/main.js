@@ -1,4 +1,5 @@
-var wordOllamaTaskPane = null;
+var wordOllamaTaskPaneId = null;
+var wordOllamaTaskPaneUrl = "";
 var wordOllamaRibbonUI = null;
 
 var WORDOLLAMA_WORKFLOWS = {
@@ -57,26 +58,44 @@ function WordOllamaOrigin() {
   return window.location.protocol + "//" + window.location.host;
 }
 
+function WordOllamaApplication() {
+  if (window.wps) return window.wps;
+  if (window.Application) return window.Application;
+  if (typeof Application !== "undefined") return Application;
+  return null;
+}
+
+function ResetWordOllamaTaskPane() {
+  wordOllamaTaskPaneId = null;
+  wordOllamaTaskPaneUrl = "";
+}
+
 function WordOllamaWorkflowUrl(surface, workflow) {
   return WordOllamaOrigin() + "/wps.html?surface=" +
     encodeURIComponent(surface) + "&workflow=" + encodeURIComponent(workflow);
 }
 
 function OpenWordOllamaSettingsDialog() {
-  return Application.ShowDialog(
-    WordOllamaOrigin() + "/settings.html?wpsDialog=1",
-    "WordOllama.JS 设置",
-    1080,
-    760,
-    false,
-    true,
-    2,
-    "",
-    15000,
-    false,
-    true,
-    true
-  );
+  var application = WordOllamaApplication();
+  if (!application || typeof application.ShowDialog !== "function") return false;
+  try {
+    return application.ShowDialog(
+      WordOllamaOrigin() + "/settings.html?wpsDialog=1",
+      "WordOllama.JS 设置",
+      1080,
+      760,
+      false,
+      true,
+      2,
+      "",
+      15000,
+      false,
+      true,
+      true
+    );
+  } catch (_) {
+    return false;
+  }
 }
 
 function OnAddInLoad(ribbonUI) {
@@ -84,15 +103,45 @@ function OnAddInLoad(ribbonUI) {
   window.wordOllamaRibbonUI = ribbonUI;
 }
 
+function GetWordOllamaTaskPane() {
+  if (wordOllamaTaskPaneId === null) return null;
+  var application = WordOllamaApplication();
+  if (!application || typeof application.GetTaskPane !== "function") {
+    ResetWordOllamaTaskPane();
+    return null;
+  }
+  try {
+    return application.GetTaskPane(wordOllamaTaskPaneId);
+  } catch (_) {
+    ResetWordOllamaTaskPane();
+    return null;
+  }
+}
+
 function OpenWordOllamaWorkflow(surface, workflow, title) {
   var url = WordOllamaWorkflowUrl(surface, workflow);
-  if (!wordOllamaTaskPane) {
-    wordOllamaTaskPane = Application.CreateTaskPane(url, "WordOllama.JS · " + title);
-  } else if (typeof wordOllamaTaskPane.Navigate === "function") {
-    wordOllamaTaskPane.Navigate(url);
+  var application = WordOllamaApplication();
+  if (!application || typeof application.CreateTaskPane !== "function") return false;
+  try {
+    var taskPane = GetWordOllamaTaskPane();
+    if (!taskPane) {
+      taskPane = application.CreateTaskPane(url, "WordOllama.JS · " + title);
+      if (!taskPane) return false;
+      wordOllamaTaskPaneId = taskPane.ID;
+      wordOllamaTaskPaneUrl = url;
+    } else if (wordOllamaTaskPaneUrl !== url && typeof taskPane.Navigate === "function") {
+      taskPane.Navigate(url);
+      wordOllamaTaskPaneUrl = url;
+    }
+    taskPane.Visible = true;
+    return true;
+  } catch (_) {
+    // Never let a stale native proxy escape through a Ribbon callback. WPS runs
+    // these callbacks on its UI path; an uncaught host exception can leave the
+    // entire add-in tab unresponsive until Writer is restarted.
+    ResetWordOllamaTaskPane();
+    return false;
   }
-  if (wordOllamaTaskPane) wordOllamaTaskPane.Visible = true;
-  return Boolean(wordOllamaTaskPane);
 }
 
 function OpenWordOllama() {
@@ -111,11 +160,13 @@ window.OpenWordOllamaSettings = OpenWordOllamaSettingsDialog;
 function GetWordOllamaImage(control) {
   var id = control && (control.Id || control.id);
   var icon = WORDOLLAMA_RIBBON_ICONS[id] || "agent";
-  return "assets/ribbon/" + icon + ".svg";
+  return "assets/ribbon/wps/" + icon + ".svg";
 }
 
 window.OnAddInLoad = OnAddInLoad;
 window.OpenWordOllama = OpenWordOllama;
 window.OpenWordOllamaWorkflow = OpenWordOllamaWorkflow;
+window.WordOllamaApplication = WordOllamaApplication;
+window.GetWordOllamaTaskPane = GetWordOllamaTaskPane;
 window.OpenWordOllamaSettingsDialog = OpenWordOllamaSettingsDialog;
 window.GetWordOllamaImage = GetWordOllamaImage;

@@ -32,9 +32,19 @@ public sealed class SystemFolderLauncher : ISystemFolderLauncher
             };
             startInfo.ArgumentList.Add(fullPath);
         }
+        else if (OperatingSystem.IsLinux())
+        {
+            startInfo = new ProcessStartInfo
+            {
+                FileName = "xdg-open",
+                UseShellExecute = false,
+            };
+            startInfo.ArgumentList.Add(fullPath);
+        }
         else
         {
-            throw new PlatformNotSupportedException("Opening the Skill directory is supported on Windows and macOS.");
+            throw new PlatformNotSupportedException(
+                "Opening the Skill directory is supported on Windows, macOS, and Linux.");
         }
 
         if (Process.Start(startInfo) is null)

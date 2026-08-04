@@ -23,12 +23,16 @@ for (const { name, resource, svg } of catalog) {
   const svgPath = resolve(addinRoot, svg);
   assert(existsSync(svgPath), `missing SVG source for ${name}`);
   const markup = readFileSync(svgPath, "utf8");
+  const wpsSvgPath = resolve(addinRoot, `assets/ribbon/wps/${name}.svg`);
+  assert(existsSync(wpsSvgPath), `missing WPS SVG source for ${name}`);
+  const wpsMarkup = readFileSync(wpsSvgPath, "utf8");
   assert(markup.includes('viewBox="0 0 24 24"'), `${name} SVG must be resolution independent`);
   assert(!/fill="(?:white|#fff(?:fff)?)"/iu.test(markup), `${name} SVG must not paint a light background`);
   const colors = Array.from(markup.matchAll(/#([0-9a-f]{6})/giu), ([, hex]) => hex);
   assert(colors.length > 0, `${name} SVG must declare a neutral Ribbon stroke`);
   assert(colors.every((hex) => hex.slice(0, 2) === hex.slice(2, 4) && hex.slice(2, 4) === hex.slice(4, 6)), `${name} Ribbon icon must remain grayscale`);
   assert(!markup.includes("#2563eb"), `${name} Ribbon icon must not use the branded blue stroke`);
+  assert(wpsMarkup.includes('stroke="#2563eb"'), `${name} WPS Ribbon icon must retain the branded blue stroke`);
   for (const size of [16, 32, 80]) {
     const file = resolve(addinRoot, `assets/ribbon/${name}-${size}.png`);
     assert(existsSync(file) && statSync(file).size > 100, `missing ${size}px Ribbon PNG for ${name}`);
