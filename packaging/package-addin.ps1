@@ -109,8 +109,8 @@ if (-not (Test-Path -LiteralPath $packagedCommandsPath -PathType Leaf)) {
     throw "Production Add-in bundle does not contain commands.html."
 }
 $packagedCommandsText = Get-Content -LiteralPath $packagedCommandsPath -Raw
-if ($packagedCommandsText -match '(?i)(?:src|href)=["'']/?src/' -or
-    $packagedCommandsText -notmatch '(?i)src=["'']/assets/commands-[^"'']+\.js') {
+if ($packagedCommandsText -match '(?i)(?:src|href)=["''](?:\./|/)?src/' -or
+    $packagedCommandsText -notmatch '(?i)src=["''](?:\./|/)?assets/commands-[^"'']+\.js') {
     throw "Production commands.html still references source code instead of its Vite bundle."
 }
 
