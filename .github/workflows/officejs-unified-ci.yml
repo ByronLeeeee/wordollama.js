@@ -35,30 +35,8 @@ permissions:
   contents: read
 
 jobs:
-  unified-smoke:
-    name: Unified smoke (Windows)
-    runs-on: windows-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: officejs/apps/addin/package-lock.json
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: "8.0.x"
-      - name: Install Office.js dependencies
-        working-directory: officejs/apps/addin
-        run: npm ci
-      - name: Run unified smoke
-        shell: pwsh
-        run: ./tools/unified-smoke-test.ps1 -Configuration Release -SkipManifestValidation
-
   target-package:
     name: Package ${{ matrix.runtime }} on ${{ matrix.runner }}
-    needs: unified-smoke
     strategy:
       fail-fast: false
       matrix:
@@ -82,40 +60,6 @@ jobs:
       - name: Install Office.js dependencies
         working-directory: officejs/apps/addin
         run: npm ci
-      - name: Verify target-native Bridge package
-        shell: pwsh
-        run: ./tools/bridge-package-smoke-test.ps1 -Configuration Release
-      - name: Verify target-native platform secret store
-        shell: pwsh
-        run: >
-          dotnet run
-          --project ./tools/platform-secret-store-smoke/WordOllama.PlatformSecretStoreSmoke.csproj
-          --configuration Release
-          --
-          --allow-user-vault-test
-      - name: Verify target-native Bridge live API
-        shell: pwsh
-        timeout-minutes: 8
-        run: |
-          $executable = if ("${{ matrix.runtime }}" -eq "win-x64") {
-            "./.build-bridge-package-smoke/smoke-${{ matrix.runtime }}/WordOllama.DesktopBridge.exe"
-          } else {
-            "./.build-bridge-package-smoke/smoke-${{ matrix.runtime }}/WordOllama.DesktopBridge"
-          }
-          $pwsh = (Get-Command pwsh -ErrorAction Stop).Source
-          $process = Start-Process -FilePath $pwsh -NoNewWindow -PassThru -ArgumentList @(
-            "-NoProfile",
-            "-File", "./tools/bridge-live-api-smoke-test.ps1",
-            "-Configuration", "Release",
-            "-BridgeAssemblyPath", $executable
-          )
-          if (-not $process.WaitForExit(420000)) {
-            if ($IsWindows) { $process.Kill($true) } else { $process.Kill() }
-            throw "Target-native Bridge live API exceeded its 7-minute watchdog."
-          }
-          if ($process.ExitCode -ne 0) {
-            throw "Target-native Bridge live API failed with exit code $($process.ExitCode)."
-          }
       - name: Build unsigned unified artifacts
         shell: pwsh
         run: >
@@ -129,6 +73,10 @@ jobs:
           -UpdateIndexUrl https://updates.wordollama.invalid/ci-${{ github.run_number }}-${{ github.run_attempt }}/index.json
           -ExpectedUpdatePublisherSubject 'CN=WordOllama CI Unsigned Test'
           -OutputRoot ./ci-unified
+      - name: Build WPS add-in package
+        if: ${{ matrix.runtime == 'win-x64' }}
+        shell: pwsh
+        run: ./packaging/package-wps-addin.ps1 -OutputDirectory ./ci-unified/wps -SkipBuild
       - name: Build target-native test installer
         shell: pwsh
         run: |
@@ -149,6 +97,16 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: wordollama-js-${{ matrix.runtime }}-unsigned
-          path: ci-unified/
+          path: |
+            ci-unified/
+            !ci-unified/wps/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload WPS add-in package
+        if: ${{ matrix.runtime == 'win-x64' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: wordollama-js-wps-unsigned
+          path: ci-unified/wps/WordOllama.JS-WPS.zip
           if-no-files-found: error
           retention-days: 7

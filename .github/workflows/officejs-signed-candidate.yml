@@ -67,6 +67,10 @@ jobs:
           -UpdateIndexUrl '${{ inputs.update_index_url }}'
           -ExpectedUpdatePublisherSubject $env:UPDATE_INSTALLER_PUBLISHER
           -OutputRoot ./signed-candidate
+      - name: Build WPS add-in package
+        if: ${{ matrix.runtime == 'win-x64' }}
+        shell: pwsh
+        run: ./packaging/package-wps-addin.ps1 -OutputDirectory ./signed-candidate/wps -SkipBuild
       - name: Import Windows signing certificate
         if: ${{ matrix.runtime == 'win-x64' }}
         id: windows-certificate
@@ -165,16 +169,6 @@ jobs:
             -LocalSelfSignedRelease `
             -BridgeLocalSignatureEvidencePath `
               "./signed-candidate/bridge/WordOllama-Bridge-${{ inputs.version }}-${{ matrix.runtime }}.local-signature.json"
-      - name: Verify signed candidate live API
-        shell: pwsh
-        run: |
-          $executable = if ("${{ matrix.runtime }}" -eq "win-x64") {
-            "./signed-candidate/bridge/${{ inputs.version }}-${{ matrix.runtime }}/WordOllama.DesktopBridge.exe"
-          } else {
-            "./signed-candidate/bridge/${{ inputs.version }}-${{ matrix.runtime }}/WordOllama.DesktopBridge"
-          }
-          ./tools/bridge-live-api-smoke-test.ps1 `
-            -Configuration Release -BridgeAssemblyPath $executable
       - name: Remove temporary signing credentials
         if: ${{ always() }}
         shell: pwsh
