@@ -72,11 +72,6 @@ pwsh ./packaging/install-office-addin-dev.ps1
 Windows 写入当前用户的 Office WEF Developer 登记；macOS 将 manifest 复制到
 Word 容器的 `wef` 目录。它不会注册 COM/VSTO ProgId。
 
-正式 Windows 安装包还提供开始菜单入口 `WordOllama.JS > Repair WordOllama.JS
-Ribbon`。它会在用户确认并完全关闭 Office 后备份 WEF 缓存、恢复当前版本 manifest
-注册，并输出诊断报告和根据实际安装路径生成的备用 `.reg` 文件；不会添加 VSTO
-启动器或额外 Ribbon 按钮。
-
 ### 2. 启动 Desktop Bridge
 
 终端 A：

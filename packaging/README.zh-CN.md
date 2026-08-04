@@ -183,8 +183,6 @@ pwsh ./packaging/register-bridge-autostart.ps1 -InstallRoot <install-root>
 
 Windows 会创建 Startup `.lnk` 和安装根目录下的 `start-bridge.cmd`；每次登录启动时，launcher 还会只校验并修复 WordOllama.JS 自己的当前用户 WEF manifest 值，避免 Office 刷新开发缓存后出现“Bridge 已安装但 Ribbon 不见了”，不会触碰 COM/VSTO 注册或重新生成 localhost 证书。macOS 会创建 `~/Library/LaunchAgents/com.wordollama.desktopbridge.plist` 和 `start-bridge`。两者都不要求系统级服务权限。卸载前执行：
 
-Windows 安装器还会在当前用户开始菜单的 `WordOllama.JS` 目录加入 `Repair WordOllama.JS Ribbon`。该修复入口不常驻 Word，也不安装 COM/VSTO 组件；用户确认后，它会要求完全关闭 Word、Excel 和 PowerPoint，将当前用户的 Office `16.0\Wef` 缓存整体移动到安装目录下带时间戳的 `diagnostics/ribbon-repair-*` 备份，重新登记当前版本 manifest、关闭残留调试等待标志、启动 Bridge，并生成诊断报告。安装根目录同时保存根据实际安装路径动态生成的 `WordOllama.JS-Ribbon-Repair.reg`，仅作为人工检查和兜底导入文件。由于 WEF 缓存由 Office Web 加载项共用，修复器不会静默运行，也不会提供无人值守的清缓存参数。
-
 ```powershell
 pwsh ./packaging/unregister-bridge-autostart.ps1 -InstallRoot <install-root>
 ```

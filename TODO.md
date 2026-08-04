@@ -51,8 +51,6 @@ Windows 与 macOS arm64 的安装、升级、证书信任、回滚、卸载（�
 - [x] Bridge 同时托管 React 前端和本地 API。
 - [x] 桌面 manifest 默认指向 `https://localhost:37421`。
 - [x] Windows 安装器将 manifest 注册到当前用户 Office WEF Developer。
-- [x] Windows 安装器提供非 VSTO 的一键 Ribbon 修复入口：先备份 Office WEF
-  缓存，再恢复当前版本 manifest 注册、生成动态 REG 和诊断报告。
 - [x] macOS PKG 将 manifest 安装到 Word 容器 `wef` 目录。
 - [x] Windows Startup 与 macOS LaunchAgent 当前用户登录自启。
 - [x] 完整统一回归和 Windows 发布包生命周期回归。
