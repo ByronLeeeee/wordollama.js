@@ -292,6 +292,16 @@ public sealed record DocumentCompareRequest(
     string RevisedBase64,
     bool IgnoreCase = false);
 
+public sealed record NativeWordCompareRequest(
+    string OriginalBase64,
+    string RevisedBase64);
+
+public sealed record NativeWordCompareResponse(
+    bool Available,
+    string? FileName = null,
+    string? DocumentBase64 = null,
+    string? Reason = null);
+
 public sealed record DocumentDiff(
     string Kind,
     int ParagraphIndex,

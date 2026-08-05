@@ -213,6 +213,45 @@ const descriptors: OfficeToolDescriptor[] = [
     },
   },
   {
+    name: "edit_table_structure",
+    description: "edit_table_structure",
+    isWriteOperation: true,
+    parameterSchema: {
+      type: "object",
+      properties: {
+        table_index: { type: "integer" },
+        action: { type: "string", enum: ["insert_row", "delete_row", "insert_column", "delete_column", "merge_cells", "split_cell"] },
+        row: { type: "integer" },
+        column: { type: "integer" },
+        end_row: { type: "integer" },
+        end_column: { type: "integer" },
+        count: { type: "integer" },
+      },
+      required: ["table_index", "action"],
+    },
+  },
+  {
+    name: "format_table",
+    description: "format_table",
+    isWriteOperation: true,
+    parameterSchema: {
+      type: "object",
+      properties: {
+        table_index: { type: "integer" },
+        style_name: { type: "string" },
+        header_rows: { type: "integer" },
+        alignment: { type: "string", enum: ["Left", "Centered", "Right"] },
+        cell_alignment: { type: "string", enum: ["Left", "Centered", "Right", "Justified"] },
+        vertical_alignment: { type: "string", enum: ["Top", "Center", "Bottom"] },
+        shading_color: { type: "string" },
+        border_color: { type: "string" },
+        border_width: { type: "number" },
+        autofit: { type: "string", enum: ["window", "content", "fixed"] },
+      },
+      required: ["table_index"],
+    },
+  },
+  {
     name: "get_document_outline",
     description: "get_document_outline",
     isWriteOperation: false,
@@ -312,6 +351,15 @@ const descriptors: OfficeToolDescriptor[] = [
         margin_left: { type: "number" },
         margin_right: { type: "number" },
         orientation: { type: "string", enum: ["Portrait", "Landscape"] },
+        paper_size: { type: "string", enum: ["A3", "A4", "A5", "Letter", "Legal", "Custom"] },
+        page_width: { type: "number" },
+        page_height: { type: "number" },
+        gutter: { type: "number" },
+        header_distance: { type: "number" },
+        footer_distance: { type: "number" },
+        different_first_page: { type: "boolean" },
+        odd_even_pages: { type: "boolean" },
+        mirror_margins: { type: "boolean" },
       },
       required: [],
     },
@@ -322,8 +370,14 @@ const descriptors: OfficeToolDescriptor[] = [
     isWriteOperation: true,
     parameterSchema: {
       type: "object",
-      properties: { element: { type: "string", enum: ["header", "footer"] }, text: { type: "string" } },
-      required: ["element", "text"],
+      properties: {
+        element: { type: "string", enum: ["header", "footer", "page_number"] },
+        text: { type: "string" },
+        section_index: { type: "integer" },
+        kind: { type: "string", enum: ["primary", "first", "even"] },
+        alignment: { type: "string", enum: ["Left", "Centered", "Right"] },
+      },
+      required: ["element"],
     },
   },
   {
@@ -332,7 +386,14 @@ const descriptors: OfficeToolDescriptor[] = [
     isWriteOperation: true,
     parameterSchema: {
       type: "object",
-      properties: { action: { type: "string", enum: ["update", "insert"] } },
+      properties: {
+        action: { type: "string", enum: ["update", "insert"] },
+        upper_heading_level: { type: "integer" },
+        lower_heading_level: { type: "integer" },
+        include_page_numbers: { type: "boolean" },
+        right_align_page_numbers: { type: "boolean" },
+        use_hyperlinks: { type: "boolean" },
+      },
       required: ["action"],
     },
   },
@@ -492,13 +553,62 @@ export class OfficeJsToolRegistry {
           marginLeft: this.optionalNumber(args, "margin_left"),
           marginRight: this.optionalNumber(args, "margin_right"),
           orientation: this.optionalString(args, "orientation"),
+          paperSize: this.optionalString(args, "paper_size"),
+          pageWidth: this.optionalNumber(args, "page_width"),
+          pageHeight: this.optionalNumber(args, "page_height"),
+          gutter: this.optionalNumber(args, "gutter"),
+          headerDistance: this.optionalNumber(args, "header_distance"),
+          footerDistance: this.optionalNumber(args, "footer_distance"),
+          differentFirstPage: this.optionalBoolean(args, "different_first_page"),
+          oddEvenPages: this.optionalBoolean(args, "odd_even_pages"),
+          mirrorMargins: this.optionalBoolean(args, "mirror_margins"),
         });
         return { updated: true };
       case "header_footer":
-        await this.word.headerFooter(this.requireString(args, "element"), this.requireString(args, "text"));
+        await this.word.headerFooter(
+          this.requireString(args, "element"),
+          this.optionalString(args, "text") ?? "",
+          {
+            sectionIndex: this.optionalInt(args, "section_index"),
+            kind: this.optionalString(args, "kind"),
+            alignment: this.optionalString(args, "alignment"),
+          },
+        );
+        return { updated: true };
+      case "edit_table_structure":
+        await this.word.editTableStructure(
+          this.requireInt(args, "table_index"),
+          this.requireString(args, "action"),
+          {
+            row: this.optionalInt(args, "row"),
+            column: this.optionalInt(args, "column"),
+            endRow: this.optionalInt(args, "end_row"),
+            endColumn: this.optionalInt(args, "end_column"),
+            count: this.optionalInt(args, "count"),
+          },
+        );
+        return { updated: true };
+      case "format_table":
+        await this.word.formatTable(this.requireInt(args, "table_index"), {
+          styleName: this.optionalString(args, "style_name"),
+          headerRows: this.optionalInt(args, "header_rows"),
+          alignment: this.optionalString(args, "alignment"),
+          cellAlignment: this.optionalString(args, "cell_alignment"),
+          verticalAlignment: this.optionalString(args, "vertical_alignment"),
+          shadingColor: this.optionalString(args, "shading_color"),
+          borderColor: this.optionalString(args, "border_color"),
+          borderWidth: this.optionalNumber(args, "border_width"),
+          autofit: this.optionalString(args, "autofit"),
+        });
         return { updated: true };
       case "update_toc":
-        return this.word.updateToc(this.requireString(args, "action"));
+        return this.word.updateToc(this.requireString(args, "action"), {
+          upperHeadingLevel: this.optionalInt(args, "upper_heading_level"),
+          lowerHeadingLevel: this.optionalInt(args, "lower_heading_level"),
+          includePageNumbers: this.optionalBoolean(args, "include_page_numbers"),
+          rightAlignPageNumbers: this.optionalBoolean(args, "right_align_page_numbers"),
+          useHyperlinks: this.optionalBoolean(args, "use_hyperlinks"),
+        });
       case "replace_exact_text":
         return this.word.findReplace(this.requireString(args, "find"), this.requireString(args, "replace"));
       case "ask_human":

@@ -1,4 +1,5 @@
 import {
+  hashReviewText,
   resolveReviewAnchorIndex,
   reviewDocumentFingerprint,
   type ReviewAnchor,
@@ -96,6 +97,72 @@ export class OfficeJsWordAdapter {
     this.askHumanHandler = askHumanHandler;
   }
 
+  async readDocumentSetting<T>(key: string): Promise<T | null> {
+    const settings = typeof Office !== "undefined" ? Office.context?.document?.settings : undefined;
+    if (!settings) return null;
+    const value = settings.get(key) as T | undefined;
+    return value ?? null;
+  }
+
+  async writeDocumentSetting(key: string, value: unknown): Promise<boolean> {
+    const settings = typeof Office !== "undefined" ? Office.context?.document?.settings : undefined;
+    if (!settings) return false;
+    settings.set(key, value);
+    await new Promise<void>((resolve, reject) => {
+      settings.saveAsync((result) => {
+        if (result.status === Office.AsyncResultStatus.Succeeded) resolve();
+        else reject(new Error(result.error?.message || "document settings save failed"));
+      });
+    });
+    return true;
+  }
+
+  async captureDocumentSnapshot(maximumCharacters = 8_000_000): Promise<string | null> {
+    if (typeof Word === "undefined") return null;
+    return Word.run(async (context) => {
+      const result = context.document.body.getOoxml();
+      await context.sync();
+      return result.value.length <= maximumCharacters ? result.value : null;
+    });
+  }
+
+  async restoreDocumentSnapshot(ooxml: string): Promise<void> {
+    if (!ooxml || typeof Word === "undefined") {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.snapshotUnavailable"));
+    }
+    await Word.run(async (context) => {
+      context.document.body.insertOoxml(ooxml, Word.InsertLocation.replace);
+      await context.sync();
+    });
+  }
+
+  async createReviewBookmarks(
+    anchors: Map<number, ReviewAnchor>,
+  ): Promise<Map<number, ReviewAnchor>> {
+    if (!anchors.size ||
+        !Office.context?.requirements?.isSetSupported?.("WordApi", "1.4")) {
+      return anchors;
+    }
+    return Word.run(async (context) => {
+      const paragraphs = context.document.body.paragraphs;
+      paragraphs.load("items");
+      await context.sync();
+      const hydrated = new Map<number, ReviewAnchor>();
+      for (const [paragraphIndex, anchor] of anchors) {
+        const paragraph = paragraphs.items[paragraphIndex - 1];
+        if (!paragraph) {
+          hydrated.set(paragraphIndex, anchor);
+          continue;
+        }
+        const bookmarkName = `_WordOllamaReview_${anchor.textHash}_${paragraphIndex}`;
+        paragraph.getRange().insertBookmark(bookmarkName);
+        hydrated.set(paragraphIndex, { ...anchor, bookmarkName });
+      }
+      await context.sync();
+      return hydrated;
+    });
+  }
+
   supportsTool(name: string): boolean {
     const requirements = Office.context?.requirements;
     if (!requirements?.isSetSupported) {
@@ -103,11 +170,15 @@ export class OfficeJsWordAdapter {
     }
 
     const wordApi14 = ["read_comments", "add_comment"];
+    const wordApi13 = ["edit_table_structure", "format_table"];
     const wordApi12 = ["insert_image"];
     const desktop13 = ["page_setup"];
     const desktop14 = ["update_toc", "revisions"];
     if (wordApi14.includes(name)) {
       return requirements.isSetSupported("WordApi", "1.4");
+    }
+    if (wordApi13.includes(name)) {
+      return requirements.isSetSupported("WordApi", "1.3");
     }
     if (wordApi12.includes(name)) {
       return requirements.isSetSupported("WordApi", "1.2");
@@ -273,6 +344,51 @@ export class OfficeJsWordAdapter {
     });
   }
 
+  async focusToolTarget(name: string, args: Record<string, unknown>): Promise<boolean> {
+    if (typeof Word === "undefined") return false;
+    const paragraphIndex = Number(args.paragraph_index ?? 0);
+    const tableIndex = Number(args.table_index ?? 0);
+    const row = Number(args.row ?? 0);
+    const column = Number(args.column ?? 0);
+    const searchText = String(args.keyword ?? args.find ?? args.anchor ?? "").trim();
+    return Word.run(async (context) => {
+      if (Number.isInteger(paragraphIndex) && paragraphIndex > 0) {
+        const paragraphs = context.document.body.paragraphs;
+        paragraphs.load("items");
+        await context.sync();
+        const paragraph = paragraphs.items[paragraphIndex - 1];
+        if (!paragraph) return false;
+        paragraph.getRange().select();
+        await context.sync();
+        return true;
+      }
+      if (Number.isInteger(tableIndex) && tableIndex > 0) {
+        const tables = context.document.body.tables;
+        tables.load("items");
+        await context.sync();
+        const table = tables.items[tableIndex - 1];
+        if (!table) return false;
+        if (row > 0 && column > 0) table.getCell(row - 1, column - 1).body.getRange().select();
+        else table.getRange().select();
+        await context.sync();
+        return true;
+      }
+      if (searchText) {
+        const matches = context.document.body.search(searchText.slice(0, 200), {
+          matchCase: false,
+          matchWholeWord: false,
+        });
+        matches.load("items");
+        await context.sync();
+        if (!matches.items.length) return false;
+        matches.items[0].select();
+        await context.sync();
+        return true;
+      }
+      return false;
+    });
+  }
+
   async applyPreciseRevision(original: string, revised: string): Promise<boolean> {
     const hunks = buildTextRevisionHunks(original, revised);
     if (!hunks.length) return true;
@@ -421,6 +537,16 @@ export class OfficeJsWordAdapter {
       const paragraphs = context.document.body.paragraphs;
       paragraphs.load("items/text,items/style");
       await context.sync();
+      if (anchor?.bookmarkName) {
+        const bookmarked = context.document.getBookmarkRangeOrNullObject(anchor.bookmarkName);
+        bookmarked.load("isNullObject,text");
+        await context.sync();
+        if (!bookmarked.isNullObject && hashReviewText(bookmarked.text) === anchor.textHash) {
+          bookmarked.select();
+          await context.sync();
+          return;
+        }
+      }
       if (paragraphIndex > 0) {
         const resolved = resolveReviewAnchorIndex(
           paragraphs.items.map((paragraph) => paragraph.text),
@@ -478,6 +604,16 @@ export class OfficeJsWordAdapter {
       const paragraphs = context.document.body.paragraphs;
       paragraphs.load("items/text");
       await context.sync();
+      if (anchor?.bookmarkName) {
+        const bookmarked = context.document.getBookmarkRangeOrNullObject(anchor.bookmarkName);
+        bookmarked.load("isNullObject,text");
+        await context.sync();
+        if (!bookmarked.isNullObject && hashReviewText(bookmarked.text) === anchor.textHash) {
+          bookmarked.insertComment(comment);
+          await context.sync();
+          return;
+        }
+      }
       if (paragraphIndex > 0) {
         const resolved = resolveReviewAnchorIndex(
           paragraphs.items.map((paragraph) => paragraph.text),
@@ -533,28 +669,50 @@ export class OfficeJsWordAdapter {
       paragraphs.load("items/text");
       await context.sync();
       const paragraphTexts = paragraphs.items.map((paragraph) => paragraph.text);
-      const resolved = items.map((item) => ({
-        item,
-        paragraphIndex: resolveReviewAnchorIndex(
-          paragraphTexts,
-          item.anchor,
-          item.originalText,
-          item.paragraphIndex,
-        ),
-      }));
-      const uniqueTargets = new Set(resolved.map((entry) => entry.paragraphIndex));
+      const candidates = items.map((item) => {
+        const range = item.anchor?.bookmarkName
+          ? context.document.getBookmarkRangeOrNullObject(item.anchor.bookmarkName)
+          : undefined;
+        range?.load("isNullObject,text");
+        return { item, range };
+      });
+      if (candidates.some((entry) => entry.range)) await context.sync();
+      const resolved = candidates.map(({ item, range }) => {
+        const validBookmark = Boolean(
+          range && !range.isNullObject && item.anchor &&
+          hashReviewText(range.text) === item.anchor.textHash,
+        );
+        const paragraphIndex = validBookmark
+          ? item.paragraphIndex
+          : resolveReviewAnchorIndex(
+              paragraphTexts,
+              item.anchor,
+              item.originalText,
+              item.paragraphIndex,
+            );
+        return {
+          item,
+          range: validBookmark ? range : undefined,
+          paragraphIndex,
+          targetKey: validBookmark
+            ? `bookmark:${item.anchor?.bookmarkName}`
+            : `paragraph:${paragraphIndex}`,
+        };
+      });
+      const uniqueTargets = new Set(resolved.map((entry) => entry.targetKey));
       if (uniqueTargets.size !== resolved.length) {
         throw new Error(i18n.t("taskpane.wordAdapter.errors.duplicateSuggestionTarget"));
       }
       for (const entry of resolved) {
         const paragraph = paragraphs.items[entry.paragraphIndex - 1];
-        if (!paragraph) throw new Error(`paragraph ${entry.paragraphIndex} is out of range`);
+        const target = entry.range ?? paragraph;
+        if (!target) throw new Error(`paragraph ${entry.paragraphIndex} is out of range`);
         if (action === "accept") {
-          paragraph.insertText(entry.item.suggestedText, Word.InsertLocation.replace);
+          target.insertText(entry.item.suggestedText, Word.InsertLocation.replace);
         } else if (action === "insert") {
-          paragraph.insertParagraph(entry.item.suggestedText, Word.InsertLocation.after);
+          target.insertParagraph(entry.item.suggestedText, Word.InsertLocation.after);
         } else {
-          paragraph.getRange().insertComment(
+          (entry.range ?? paragraph.getRange()).insertComment(
             i18n.t("taskpane.wordAdapter.suggestionComment", {
               reason: entry.item.reason,
               text: entry.item.suggestedText,
@@ -1217,7 +1375,22 @@ export class OfficeJsWordAdapter {
     });
   }
 
-  async pageSetup(options: { marginTop?: number; marginBottom?: number; marginLeft?: number; marginRight?: number; orientation?: string }): Promise<void> {
+  async pageSetup(options: {
+    marginTop?: number;
+    marginBottom?: number;
+    marginLeft?: number;
+    marginRight?: number;
+    orientation?: string;
+    paperSize?: string;
+    pageWidth?: number;
+    pageHeight?: number;
+    gutter?: number;
+    headerDistance?: number;
+    footerDistance?: number;
+    differentFirstPage?: boolean;
+    oddEvenPages?: boolean;
+    mirrorMargins?: boolean;
+  }): Promise<void> {
     await Word.run(async (context) => {
       const sections = context.document.sections;
       sections.load("items");
@@ -1229,32 +1402,192 @@ export class OfficeJsWordAdapter {
         if (typeof options.marginLeft === "number") setup.leftMargin = options.marginLeft;
         if (typeof options.marginRight === "number") setup.rightMargin = options.marginRight;
         if (options.orientation) setup.orientation = options.orientation as Word.PageOrientation;
+        if (options.paperSize) setup.paperSize = options.paperSize as Word.PaperSize;
+        if (typeof options.pageWidth === "number") setup.pageWidth = options.pageWidth;
+        if (typeof options.pageHeight === "number") setup.pageHeight = options.pageHeight;
+        if (typeof options.gutter === "number") setup.gutter = options.gutter;
+        if (typeof options.headerDistance === "number") setup.headerDistance = options.headerDistance;
+        if (typeof options.footerDistance === "number") setup.footerDistance = options.footerDistance;
+        if (typeof options.differentFirstPage === "boolean") {
+          setup.differentFirstPageHeaderFooter = options.differentFirstPage;
+        }
+        if (typeof options.oddEvenPages === "boolean") {
+          setup.oddAndEvenPagesHeaderFooter = options.oddEvenPages;
+        }
+        if (typeof options.mirrorMargins === "boolean") setup.mirrorMargins = options.mirrorMargins;
       });
       await context.sync();
     });
   }
 
-  async headerFooter(element: string, text: string): Promise<void> {
+  async headerFooter(
+    element: string,
+    text: string,
+    options: { sectionIndex?: number; kind?: string; alignment?: string } = {},
+  ): Promise<void> {
     const target = element.toLowerCase();
-    if (target !== "header" && target !== "footer") throw new Error("element must be header or footer");
+    if (!["header", "footer", "page_number"].includes(target)) {
+      throw new Error("element must be header, footer, or page_number");
+    }
     await Word.run(async (context) => {
-      const section = context.document.sections.getFirst();
+      const sections = context.document.sections;
+      sections.load("items");
+      await context.sync();
+      const sectionIndex = Math.max(1, options.sectionIndex ?? 1);
+      const section = sections.items[sectionIndex - 1];
+      if (!section) throw new Error(`section ${sectionIndex} is out of range`);
+      const kind = options.kind?.toLowerCase() === "first"
+        ? Word.HeaderFooterType.firstPage
+        : options.kind?.toLowerCase() === "even"
+          ? Word.HeaderFooterType.evenPages
+          : Word.HeaderFooterType.primary;
       const body = target === "header"
-        ? section.getHeader(Word.HeaderFooterType.primary)
-        : section.getFooter(Word.HeaderFooterType.primary);
+        ? section.getHeader(kind)
+        : section.getFooter(kind);
       body.clear();
-      body.insertText(text, Word.InsertLocation.start);
+      if (target === "page_number") {
+        if (!Office.context?.requirements?.isSetSupported?.("WordApi", "1.5")) {
+          throw new Error(i18n.t("taskpane.wordAdapter.errors.pageNumberUnsupported"));
+        }
+        const range = body.getRange(Word.RangeLocation.start);
+        range.insertField(Word.InsertLocation.start, Word.FieldType.page);
+        range.insertText(" / ", Word.InsertLocation.end);
+        range.insertField(Word.InsertLocation.end, Word.FieldType.numPages);
+      } else {
+        body.insertText(text, Word.InsertLocation.start);
+      }
+      if (options.alignment) {
+        const paragraphs = body.paragraphs;
+        paragraphs.load("items");
+        await context.sync();
+        paragraphs.items.forEach((paragraph) => {
+          paragraph.alignment = options.alignment as Word.Alignment;
+        });
+      }
       await context.sync();
     });
   }
 
-  async updateToc(action: string): Promise<{ count: number }> {
+  async editTableStructure(
+    tableIndex: number,
+    action: string,
+    options: { row?: number; column?: number; endRow?: number; endColumn?: number; count?: number } = {},
+  ): Promise<void> {
+    await Word.run(async (context) => {
+      const tables = context.document.body.tables;
+      tables.load("items");
+      await context.sync();
+      const table = tables.items[tableIndex - 1];
+      if (!table) throw new Error(`table ${tableIndex} is out of range`);
+      const row = Math.max(1, options.row ?? 1);
+      const column = Math.max(1, options.column ?? 1);
+      const count = Math.max(1, options.count ?? 1);
+      switch (action.toLocaleLowerCase()) {
+        case "insert_row":
+          table.getCell(row - 1, 0).insertRows(Word.InsertLocation.after, count);
+          break;
+        case "delete_row":
+          table.deleteRows(row - 1, count);
+          break;
+        case "insert_column":
+          table.getCell(0, column - 1).insertColumns(Word.InsertLocation.after, count);
+          break;
+        case "delete_column":
+          table.deleteColumns(column - 1, count);
+          break;
+        case "merge_cells":
+          if (!Office.context?.requirements?.isSetSupported?.("WordApiDesktop", "1.4")) {
+            throw new Error(i18n.t("taskpane.wordAdapter.errors.tableMergeUnsupported"));
+          }
+          table.getCell(row - 1, column - 1).merge(
+            table.getCell((options.endRow ?? row) - 1, (options.endColumn ?? column) - 1),
+          );
+          break;
+        case "split_cell":
+          if (!Office.context?.requirements?.isSetSupported?.("WordApi", "1.4")) {
+            throw new Error(i18n.t("taskpane.wordAdapter.errors.tableSplitUnsupported"));
+          }
+          table.getCell(row - 1, column - 1).split(
+            Math.max(1, options.endRow ?? 1),
+            Math.max(1, options.endColumn ?? count),
+          );
+          break;
+        default:
+          throw new Error(`unsupported table structure action: ${action}`);
+      }
+      await context.sync();
+    });
+  }
+
+  async formatTable(
+    tableIndex: number,
+    options: {
+      styleName?: string;
+      headerRows?: number;
+      alignment?: string;
+      cellAlignment?: string;
+      verticalAlignment?: string;
+      shadingColor?: string;
+      borderColor?: string;
+      borderWidth?: number;
+      autofit?: string;
+    },
+  ): Promise<void> {
+    await Word.run(async (context) => {
+      const tables = context.document.body.tables;
+      tables.load("items");
+      await context.sync();
+      const table = tables.items[tableIndex - 1];
+      if (!table) throw new Error(`table ${tableIndex} is out of range`);
+      if (options.styleName) table.style = options.styleName;
+      if (typeof options.headerRows === "number") table.headerRowCount = Math.max(0, options.headerRows);
+      if (options.alignment) table.alignment = options.alignment as Word.Alignment;
+      if (options.cellAlignment) table.horizontalAlignment = options.cellAlignment as Word.Alignment;
+      if (options.verticalAlignment) {
+        table.verticalAlignment = options.verticalAlignment as Word.VerticalAlignment;
+      }
+      if (options.shadingColor) table.shadingColor = options.shadingColor;
+      if (options.borderColor || typeof options.borderWidth === "number") {
+        const border = table.getBorder(Word.BorderLocation.all);
+        border.type = Word.BorderType.single;
+        if (options.borderColor) border.color = options.borderColor;
+        if (typeof options.borderWidth === "number") border.width = options.borderWidth;
+      }
+      const autofit = options.autofit?.toLocaleLowerCase();
+      if (autofit === "window") {
+        table.autoFitWindow();
+      } else if (autofit === "content" || autofit === "fixed") {
+        if (!Office.context?.requirements?.isSetSupported?.("WordApiDesktop", "1.4")) {
+          throw new Error(i18n.t("taskpane.wordAdapter.errors.tableAutofitUnsupported"));
+        }
+        table.autoFitBehavior(autofit === "content" ? Word.AutoFitBehavior.content : Word.AutoFitBehavior.fixedSize);
+      }
+      await context.sync();
+    });
+  }
+
+  async updateToc(
+    action: string,
+    options: {
+      upperHeadingLevel?: number;
+      lowerHeadingLevel?: number;
+      includePageNumbers?: boolean;
+      rightAlignPageNumbers?: boolean;
+      useHyperlinks?: boolean;
+    } = {},
+  ): Promise<{ count: number }> {
     return Word.run(async (context) => {
       const tables = context.document.tablesOfContents;
       tables.load("items");
       await context.sync();
       if (action.toLowerCase() === "insert") {
-        tables.add(context.document.body.getRange(Word.RangeLocation.start), { upperHeadingLevel: 1, lowerHeadingLevel: 3 });
+        tables.add(context.document.body.getRange(Word.RangeLocation.start), {
+          upperHeadingLevel: Math.max(1, Math.min(8, options.upperHeadingLevel ?? 1)),
+          lowerHeadingLevel: Math.max(2, Math.min(9, options.lowerHeadingLevel ?? 3)),
+          includePageNumbers: options.includePageNumbers ?? true,
+          rightAlignPageNumbers: options.rightAlignPageNumbers ?? true,
+          useHyperlinksOnWeb: options.useHyperlinks ?? true,
+        });
       } else {
         tables.items.forEach((table) => table.updatePageNumbers());
       }

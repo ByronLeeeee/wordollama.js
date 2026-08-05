@@ -56,7 +56,7 @@ assert(capturedPrompt.includes("Return only one JSON object"), "table prompt doe
 const markdown = [
   "# 标题",
   "",
-  "含 **粗体**、*斜体*、`code` 和 [链接](https://example.com)。",
+  "含 **粗体**、*斜体*、~~删除线~~、`code` 和 [链接](https://example.com)。",
   "带脚注的内容[^source]。",
   "",
   "- 第一项",
@@ -80,7 +80,7 @@ const markdownBlocks = markdownToBlocks(markdown, { notePlacement: "footnote" })
 assert(markdownBlocks[0]?.kind === "heading1", "Markdown heading block type was lost");
 assert(markdownBlocks.some((block) => block.kind === "unorderedList"), "Markdown unordered-list block type was lost");
 assert(markdownBlocks.some((block) => block.kind === "orderedList"), "Markdown ordered-list block type was lost");
-for (const contract of ["<h1>", "<strong>", "<em>", "<code>", "<ul>", "<ol>", "<table>", "<pre>"]) {
+for (const contract of ["<h1>", "<strong>", "<em>", "<s>", "<code>", "<ul>", "<ol>", "<table>", "<pre>"]) {
   assert(html.includes(contract), `Markdown conversion lost ${contract}`);
 }
 const styleMappings = buildMarkdownStyleMappings({
@@ -133,6 +133,10 @@ assert(adapter.includes("async insertStructuredTable("), "Word adapter lacks str
 assert(adapter.includes("selection.insertTable("), "table insertion must use the current selection");
 assert(adapter.includes("async insertHtmlAtSelection("), "Word adapter lacks HTML insertion");
 assert(adapter.includes("async insertStyledHtmlBlocksAtSelection("), "Word adapter lacks style-mapped Markdown insertion");
+assert(
+  adapter.includes("anchor.insertHtml(") && adapter.indexOf("inserted.styleBuiltIn") > adapter.indexOf("anchor.insertHtml("),
+  "Markdown insertion must preserve inline HTML formatting before applying the paragraph style",
+);
 assert(adapter.includes("reference.insertFootnote(text)") && adapter.includes("reference.insertEndnote(text)"),
   "Word adapter lacks native footnote/endnote insertion");
 assert(adapter.includes("async listStyles("), "Word adapter lacks cross-platform style discovery");

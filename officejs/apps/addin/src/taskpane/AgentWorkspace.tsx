@@ -1,4 +1,4 @@
-import { ArrowUp, ImagePlus, Target } from "lucide-react";
+import { ArrowUp, ImagePlus, Target, Undo2 } from "lucide-react";
 import { FeatureIcon } from "./FeatureIcon";
 
 export function AgentWorkspace() {
@@ -124,6 +124,16 @@ export function AgentWorkspace() {
             >
               <Target size={15} strokeWidth={2} aria-hidden="true" />
               <span data-i18n="taskpane.agent.goal">Goal</span>
+            </button>
+            <button
+              id="agent-undo-task"
+              className="btn btn-ghost btn-sm"
+              type="button"
+              hidden
+              data-i18n-title="taskpane.agent.undoTaskDetail"
+            >
+              <Undo2 size={15} strokeWidth={2} aria-hidden="true" />
+              <span data-i18n="taskpane.agent.undoTask">Undo task</span>
             </button>
           </div>
           <div id="agent-goal-row" className="agent-goal-row" hidden>

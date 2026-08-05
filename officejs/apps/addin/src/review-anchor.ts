@@ -5,6 +5,7 @@ export interface ReviewAnchor {
   textHash: string;
   previousHash: string;
   nextHash: string;
+  bookmarkName?: string;
 }
 
 export function normalizeReviewText(value: string): string {

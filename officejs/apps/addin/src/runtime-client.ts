@@ -32,6 +32,7 @@ import {
   type McpToolDefinition,
   type ToolCatalogResponse,
   type DocumentCompareResponse,
+  type NativeWordCompareResponse,
   type LawArticleResult,
   type UpdateCheckResult,
   type UpdateInstallResult,
@@ -656,6 +657,27 @@ export class RuntimeClient {
       throw new Error(tr("runtime.skillsReadFailed", { status: response.status }));
     }
     return response.json() as Promise<SkillSummary[]>;
+  }
+
+  async compareDocumentsWithNativeWord(
+    originalBase64: string,
+    revisedBase64: string,
+  ): Promise<NativeWordCompareResponse> {
+    if (!this.sessionToken) throw new Error(tr("runtime.pairFirst"));
+    const response = await this.sessionFetch(BRIDGE_URL + "/documents/compare/native-word", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-WordOllama-Session": this.sessionToken,
+      },
+      body: JSON.stringify({ originalBase64, revisedBase64 }),
+    });
+    const payload = await response.json() as NativeWordCompareResponse & { error?: string; detail?: string };
+    if (!response.ok) {
+      throw new Error(payload.reason || payload.error || payload.detail ||
+        tr("runtime.documentCompareFailed", { status: response.status, detail: "" }));
+    }
+    return payload;
   }
 
   async readSkill(name: string): Promise<string> {

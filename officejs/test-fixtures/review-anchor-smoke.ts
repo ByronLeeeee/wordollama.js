@@ -12,6 +12,12 @@ function assert(condition: unknown, message: string): asserts condition {
 const original = ["标题", "重复条款", "甲方义务", "重复条款", "乙方义务"];
 const anchors = createReviewAnchors(original);
 const secondDuplicate = anchors[3];
+const bookmarkedDuplicate = { ...secondDuplicate, bookmarkName: "_WordOllamaReview_test_4" };
+
+assert(
+  JSON.parse(JSON.stringify(bookmarkedDuplicate)).bookmarkName === bookmarkedDuplicate.bookmarkName,
+  "bookmark-backed review anchors must survive document-settings serialization",
+);
 
 const inserted = ["新增说明", ...original];
 assert(
@@ -20,7 +26,7 @@ assert(
 );
 
 assert(
-  resolveReviewAnchorIndex(original, secondDuplicate, "重复条款", 2) === 4,
+  resolveReviewAnchorIndex(original, bookmarkedDuplicate, "重复条款", 2) === 4,
   "neighbor fingerprints must disambiguate repeated paragraph text",
 );
 

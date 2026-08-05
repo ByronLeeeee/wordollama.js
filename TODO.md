@@ -46,7 +46,7 @@ Windows 与 macOS arm64 的安装、升级、证书信任、回滚、卸载（�
 - [x] 新仓库只保留 `main`，没有 `office.js` 分支。
 - [x] React 19 + TypeScript + Vite 8 + Tailwind CSS 4 + daisyUI 5。
 - [x] 设置、Skills、MCP、Agent、审阅等 UI 重构与 i18n。
-- [x] 36 个 Office.js Word 工具和四档宿主能力矩阵。
+- [x] 38 个 Office.js Word 工具和四档宿主能力矩阵。
 - [x] Desktop Bridge 的 Provider、Agent、MCP、Skills、本地工具和安全存储。
 - [x] Bridge 同时托管 React 前端和本地 API。
 - [x] 桌面 manifest 默认指向 `https://localhost:37421`。
@@ -181,7 +181,7 @@ Windows 与 macOS arm64 的安装、升级、证书信任、回滚、卸载（�
   文档明确说明
   自签名无法获得 SmartScreen 公共信誉。
 - [ ] 在干净 Windows 用户账户完成安装、升级、回滚和卸载。
-- [ ] 在真实 Windows Word 重新执行 36/36 工具、长文档和修订验收。
+- [ ] 在真实 Windows Word 重新执行 38/38 工具、长文档和修订验收。
 - [ ] 在 Apple Silicon Mac 构建并使用自签名/本地信任方式验收 arm64 PKG。
 - [x] 产品支持范围确定为 Apple Silicon Mac；不构建或发布 Intel Mac 版本。
 - [x] macOS 安装文档明确说明：没有 Apple Developer ID 时不能完成 Apple 公证和
@@ -300,7 +300,7 @@ git status
 
 - TypeScript 类型检查、23 组 Office.js smoke 与 Vite 生产构建：通过。
 - Desktop Bridge Release 构建：0 警告、0 错误；统一 Core smoke：通过。
-- 统一 Release 冒烟已通过前端构建、36 工具注册、宿主能力矩阵、Golden、
+- 统一 Release 冒烟已通过前端构建、38 工具注册、宿主能力矩阵、Golden、
   长文档、修订、Provider 设置、结构化记忆存储、MCP/Ollama 设置、更新安全测试和
   双平台生命周期证据防篡改门禁。
 - 独立 Bridge live API 已通过配对、Provider 模型读取、MCP、加密 Agent 恢复和

@@ -20,7 +20,7 @@ const WPS_SUPPORTED_TOOLS = new Set([
   "read_bookmarks", "apply_style", "replace_paragraph", "insert_at_cursor",
   "add_comment", "find_replace", "format_paragraph", "format_text",
   "insert_page_break", "read_table", "insert_table", "table_insert_row",
-  "table_set_cell", "get_document_outline", "read_clause", "extract_definitions",
+  "table_set_cell", "edit_table_structure", "format_table", "get_document_outline", "read_clause", "extract_definitions",
   "check_cross_references", "insert_clause_after", "highlight_risk",
   "apply_legal_format", "validate_citation", "format_list", "page_setup",
   "header_footer", "update_toc", "replace_exact_text", "insert_image",
@@ -548,6 +548,123 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     setRangeText(cell.Range, text);
   }
 
+  override async focusToolTarget(name: string, args: Record<string, unknown>): Promise<boolean> {
+    const application = this.application();
+    const paragraphIndex = Number(args.paragraph_index ?? 0);
+    const tableIndex = Number(args.table_index ?? 0);
+    const row = Number(args.row ?? 0);
+    const column = Number(args.column ?? 0);
+    const searchText = String(args.keyword ?? args.find ?? args.anchor ?? "").trim();
+    if (Number.isInteger(paragraphIndex) && paragraphIndex > 0) {
+      const paragraph = application.ActiveDocument?.Paragraphs?.Item?.(paragraphIndex);
+      if (!paragraph?.Range?.Select) return false;
+      paragraph.Range.Select();
+      return true;
+    }
+    if (Number.isInteger(tableIndex) && tableIndex > 0) {
+      const table = application.ActiveDocument?.Tables?.Item?.(tableIndex);
+      const range = row > 0 && column > 0 ? table?.Cell?.(row, column)?.Range : table?.Range;
+      if (!range?.Select) return false;
+      range.Select();
+      return true;
+    }
+    if (searchText) {
+      const range = application.ActiveDocument?.Content?.Duplicate;
+      const find = range?.Find;
+      if (!range || !find || typeof find.Execute !== "function") return false;
+      if (!find.Execute(searchText.slice(0, 200))) return false;
+      range.Select?.();
+      return true;
+    }
+    return false;
+  }
+
+  override async editTableStructure(
+    tableIndex: number,
+    action: string,
+    options: { row?: number; column?: number; endRow?: number; endColumn?: number; count?: number } = {},
+  ): Promise<void> {
+    const table = requireCollectionItem(this.application().ActiveDocument?.Tables, tableIndex, "table");
+    const row = Math.max(1, options.row ?? 1);
+    const column = Math.max(1, options.column ?? 1);
+    const count = Math.max(1, options.count ?? 1);
+    switch (action.toLocaleLowerCase()) {
+      case "insert_row":
+        for (let index = 0; index < count; index += 1) table.Rows.Add?.(table.Rows.Item?.(row + 1));
+        break;
+      case "delete_row":
+        for (let index = 0; index < count; index += 1) table.Rows.Item?.(row)?.Delete?.();
+        break;
+      case "insert_column":
+        for (let index = 0; index < count; index += 1) table.Columns.Add?.(table.Columns.Item?.(column + 1));
+        break;
+      case "delete_column":
+        for (let index = 0; index < count; index += 1) table.Columns.Item?.(column)?.Delete?.();
+        break;
+      case "merge_cells": {
+        const start = table.Cell?.(row, column);
+        const end = table.Cell?.(options.endRow ?? row, options.endColumn ?? column);
+        if (!start || !end || typeof start.Merge !== "function") unsupported("merge table cells");
+        start.Merge(end);
+        break;
+      }
+      case "split_cell": {
+        const cell = table.Cell?.(row, column);
+        if (!cell || typeof cell.Split !== "function") unsupported("split table cell");
+        cell.Split(Math.max(1, options.endRow ?? 1), Math.max(1, options.endColumn ?? count));
+        break;
+      }
+      default:
+        throw new Error(`unsupported table structure action: ${action}`);
+    }
+  }
+
+  override async formatTable(
+    tableIndex: number,
+    options: {
+      styleName?: string;
+      headerRows?: number;
+      alignment?: string;
+      cellAlignment?: string;
+      verticalAlignment?: string;
+      shadingColor?: string;
+      borderColor?: string;
+      borderWidth?: number;
+      autofit?: string;
+    },
+  ): Promise<void> {
+    const table = requireCollectionItem(this.application().ActiveDocument?.Tables, tableIndex, "table");
+    if (options.styleName) table.Style = options.styleName;
+    const headerRows = Math.max(0, options.headerRows ?? 0);
+    for (let index = 1; index <= headerRows && index <= Number(table.Rows?.Count ?? 0); index += 1) {
+      table.Rows.Item(index).HeadingFormat = -1;
+    }
+    if (options.alignment) {
+      const alignment = PARAGRAPH_ALIGNMENT[options.alignment.toLocaleLowerCase()];
+      if (alignment !== undefined && table.Rows) table.Rows.Alignment = alignment;
+    }
+    if (options.cellAlignment) {
+      const alignment = PARAGRAPH_ALIGNMENT[options.cellAlignment.toLocaleLowerCase()];
+      if (alignment !== undefined && table.Range?.ParagraphFormat) {
+        table.Range.ParagraphFormat.Alignment = alignment;
+      }
+    }
+    if (options.verticalAlignment && table.Range?.Cells) {
+      const vertical: Record<string, number> = { top: 0, center: 1, bottom: 3 };
+      const value = vertical[options.verticalAlignment.toLocaleLowerCase()];
+      if (value !== undefined) table.Range.Cells.VerticalAlignment = value;
+    }
+    if (options.shadingColor && table.Shading) table.Shading.BackgroundPatternColor = options.shadingColor;
+    if (table.Borders) {
+      table.Borders.Enable = 1;
+      if (options.borderColor) table.Borders.Color = options.borderColor;
+      if (typeof options.borderWidth === "number") table.Borders.OutsideLineWidth = options.borderWidth;
+    }
+    const autofit: Record<string, number> = { fixed: 0, content: 1, window: 2 };
+    const behavior = options.autofit ? autofit[options.autofit.toLocaleLowerCase()] : undefined;
+    if (behavior !== undefined) table.AutoFitBehavior?.(behavior);
+  }
+
   override async getDocumentOutline(): Promise<Array<{ paragraph: number; text: string; style: string }>> {
     const paragraphs = this.application().ActiveDocument?.Paragraphs;
     const result: Array<{ paragraph: number; text: string; style: string }> = [];
@@ -653,6 +770,15 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     marginLeft?: number;
     marginRight?: number;
     orientation?: string;
+    paperSize?: string;
+    pageWidth?: number;
+    pageHeight?: number;
+    gutter?: number;
+    headerDistance?: number;
+    footerDistance?: number;
+    differentFirstPage?: boolean;
+    oddEvenPages?: boolean;
+    mirrorMargins?: boolean;
   }): Promise<void> {
     const setup = this.application().ActiveDocument?.PageSetup;
     if (!setup) unsupported("page setup");
@@ -660,6 +786,19 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     if (typeof options.marginBottom === "number") setup.BottomMargin = options.marginBottom;
     if (typeof options.marginLeft === "number") setup.LeftMargin = options.marginLeft;
     if (typeof options.marginRight === "number") setup.RightMargin = options.marginRight;
+    if (typeof options.pageWidth === "number") setup.PageWidth = options.pageWidth;
+    if (typeof options.pageHeight === "number") setup.PageHeight = options.pageHeight;
+    if (typeof options.gutter === "number") setup.Gutter = options.gutter;
+    if (typeof options.headerDistance === "number") setup.HeaderDistance = options.headerDistance;
+    if (typeof options.footerDistance === "number") setup.FooterDistance = options.footerDistance;
+    if (typeof options.differentFirstPage === "boolean") setup.DifferentFirstPageHeaderFooter = options.differentFirstPage ? -1 : 0;
+    if (typeof options.oddEvenPages === "boolean") setup.OddAndEvenPagesHeaderFooter = options.oddEvenPages ? -1 : 0;
+    if (typeof options.mirrorMargins === "boolean") setup.MirrorMargins = options.mirrorMargins ? -1 : 0;
+    if (options.paperSize) {
+      const paperSizes: Record<string, number> = { letter: 2, legal: 4, a3: 6, a4: 7, a5: 9 };
+      const value = paperSizes[options.paperSize.toLocaleLowerCase()];
+      if (value) setup.PaperSize = value;
+    }
     if (options.orientation) {
       const normalized = options.orientation.toLocaleLowerCase();
       if (normalized !== "landscape" && normalized !== "portrait") {
@@ -669,23 +808,57 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     }
   }
 
-  override async headerFooter(element: string, text: string): Promise<void> {
+  override async headerFooter(
+    element: string,
+    text: string,
+    options: { sectionIndex?: number; kind?: string; alignment?: string } = {},
+  ): Promise<void> {
     const normalized = element.toLocaleLowerCase();
-    if (normalized !== "header" && normalized !== "footer") {
-      throw new Error("element must be header or footer");
+    if (!["header", "footer", "page_number"].includes(normalized)) {
+      throw new Error("element must be header, footer, or page_number");
     }
     const sections = this.application().ActiveDocument?.Sections;
     if (!sections?.Count) unsupported("header and footer");
-    for (let index = 1; index <= Number(sections.Count); index += 1) {
+    const first = Math.max(1, options.sectionIndex ?? 1);
+    const last = options.sectionIndex ? first : Number(sections.Count);
+    const kind = options.kind?.toLocaleLowerCase() === "first"
+      ? 2
+      : options.kind?.toLocaleLowerCase() === "even" ? 3 : 1;
+    for (let index = first; index <= last; index += 1) {
       const section = sections.Item(index);
       const collection = normalized === "header" ? section?.Headers : section?.Footers;
-      const primary = collection?.Item?.(1);
+      const primary = collection?.Item?.(kind);
       if (!primary?.Range) unsupported(`${normalized} range`);
-      primary.Range.Text = text;
+      const range = primary.Range;
+      range.Text = "";
+      if (normalized === "page_number") {
+        if (typeof range.Fields?.Add !== "function") unsupported("page number fields");
+        range.Fields.Add(range, -1, "PAGE", true);
+        range.InsertAfter?.(" / ");
+        const end = primary.Range;
+        end.Collapse?.(0);
+        end.Fields.Add(end, -1, "NUMPAGES", true);
+      } else {
+        range.Text = text;
+      }
+      if (options.alignment && range.ParagraphFormat) {
+        const alignments: Record<string, number> = { left: 0, centered: 1, right: 2 };
+        const alignment = alignments[options.alignment.toLocaleLowerCase()];
+        if (alignment !== undefined) range.ParagraphFormat.Alignment = alignment;
+      }
     }
   }
 
-  override async updateToc(action: string): Promise<{ count: number }> {
+  override async updateToc(
+    action: string,
+    options: {
+      upperHeadingLevel?: number;
+      lowerHeadingLevel?: number;
+      includePageNumbers?: boolean;
+      rightAlignPageNumbers?: boolean;
+      useHyperlinks?: boolean;
+    } = {},
+  ): Promise<{ count: number }> {
     const application = this.application();
     const document = application.ActiveDocument;
     const tables = document?.TablesOfContents;
@@ -694,7 +867,18 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     if (normalized === "insert") {
       const range = application.Selection?.Range ?? document.Range?.(0, 0);
       if (typeof tables.Add !== "function") unsupported("insert table of contents");
-      tables.Add(range, true, 1, 3);
+      tables.Add(
+        range,
+        true,
+        Math.max(1, Math.min(8, options.upperHeadingLevel ?? 1)),
+        Math.max(2, Math.min(9, options.lowerHeadingLevel ?? 3)),
+        undefined,
+        undefined,
+        options.useHyperlinks ?? true,
+        true,
+        options.includePageNumbers ?? true,
+        options.rightAlignPageNumbers ?? true,
+      );
     } else if (normalized === "update") {
       for (let index = 1; index <= Number(tables.Count ?? 0); index += 1) {
         const table = tables.Item(index);

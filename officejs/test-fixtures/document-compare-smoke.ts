@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   MAX_COMPARE_TOTAL_BYTES,
   buildComparePreview,
@@ -156,6 +158,31 @@ await i18n.changeLanguage("en-US");
 const englishSummary = formatCompareSummary(report);
 if (!englishSummary.includes("Added 1") || !englishSummary.includes("table cells 1")) {
   throw new Error(`English compare summary was not localized: ${englishSummary}`);
+}
+
+const repoRoot = resolve(import.meta.dirname, "../..");
+const nativeCompareService = readFileSync(
+  resolve(repoRoot, "src/WordOllama.DesktopBridge/NativeWordCompareService.cs"),
+  "utf8",
+);
+const bridgeProgram = readFileSync(
+  resolve(repoRoot, "src/WordOllama.DesktopBridge/Program.cs"),
+  "utf8",
+);
+for (const contract of [
+  "ApartmentState.STA",
+  "AutomationSecurity = 3",
+  "CompareDocuments(originalDocument, revisedDocument)",
+  "Directory.Delete(workRoot, recursive: true)",
+  "SemaphoreSlim",
+]) {
+  if (!nativeCompareService.includes(contract)) {
+    throw new Error(`native Word compare safety contract is missing: ${contract}`);
+  }
+}
+if (!bridgeProgram.includes('MapPost("/documents/compare/native-word"') ||
+    !bridgeProgram.includes("sessions.TryGet(token, origin, out _)")) {
+  throw new Error("native Word compare endpoint is missing or bypasses Bridge authentication");
 }
 
 console.log("Office.js document compare UI smoke passed.");

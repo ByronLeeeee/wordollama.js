@@ -426,11 +426,11 @@ $golden = $goldenRecord.Value
 Assert-ReleaseIdentity -Report $golden -Label "Golden report" -Version $version
 Assert-Host -Report $golden -Label "Golden report" -ExpectedPlatform $expectedPlatform
 Assert-AfterBuild -Timestamp $golden.startedAt -Label "Golden report" -BuildTime $buildTime
-if ($golden.schemaVersion -ne 1 -or $golden.passed -ne 36 -or $golden.failed -ne 0 -or
+if ($golden.schemaVersion -ne 1 -or $golden.passed -ne 38 -or $golden.failed -ne 0 -or
     $golden.unsupported -ne 0 -or $golden.blocked -ne 0 -or
-    @($golden.results).Count -ne 36 -or
+    @($golden.results).Count -ne 38 -or
     @($golden.results | Where-Object { $_.status -ne "passed" }).Count -ne 0) {
-    throw "Golden report does not prove all 36 Word tools passed."
+    throw "Golden report does not prove all 38 Word tools passed."
 }
 
 $longRecord = Read-JsonFile -Path $LongDocumentReportPath -Label "Long-document report"

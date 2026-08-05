@@ -302,6 +302,7 @@ const agentGoal = required<HTMLInputElement>("#agent-goal");
 const agentGoalRow = required<HTMLDivElement>("#agent-goal-row");
 const toggleAgentGoal = required<HTMLButtonElement>("#toggle-agent-goal");
 const agentRunButton = required<HTMLButtonElement>("#agent-run");
+const agentUndoTaskButton = required<HTMLButtonElement>("#agent-undo-task");
 const agentImageInput = required<HTMLInputElement>("#agent-image-input");
 const agentImagePreview = required<HTMLDivElement>("#agent-image-preview");
 const agentImagePreviewImage = required<HTMLImageElement>("#agent-image-preview-img");
@@ -334,6 +335,7 @@ const revisionHostCopyButton = required<HTMLButtonElement>("#revision-host-copy"
 const compareOriginalInput = required<HTMLInputElement>("#compare-original");
 const compareRevisedInput = required<HTMLInputElement>("#compare-revised");
 const compareRunButton = required<HTMLButtonElement>("#compare-run");
+const compareNativeWordButton = required<HTMLButtonElement>("#compare-native-word");
 const compareSummary = required<HTMLParagraphElement>("#compare-summary");
 const compareAnalysisStatus = required<HTMLElement>("#compare-analysis-status");
 const compareAnalysis = required<HTMLElement>("#compare-analysis");
@@ -401,6 +403,7 @@ let lastLongDocumentReport = "";
 let lastRevisionHostReport = "";
 let compareAnalysisAbortController: AbortController | null = null;
 let activeSessionId: string | null = null;
+let lastAgentDocumentSnapshot: string | null = null;
 let reviewScope = "";
 let reviewScopeLabel = "";
 let reviewScopeKind: "selection" | "paragraphs" | "document" | "" = "";
@@ -2415,6 +2418,29 @@ function updateActivity(
   bubble.closest(".chat-message")?.classList.toggle("failed", failed);
 }
 
+function appendToolFocusAction(
+  bubble: HTMLDivElement,
+  name: string,
+  args: Record<string, unknown>,
+): void {
+  if (!["paragraph_index", "table_index", "keyword", "find", "anchor"].some((key) => args[key] !== undefined)) {
+    return;
+  }
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn btn-ghost btn-xs";
+  button.textContent = i18n.t("taskpane.agent.focusTarget");
+  button.addEventListener("click", async () => {
+    try {
+      const focused = await word.focusToolTarget(name, args);
+      if (!focused) throw new Error(i18n.t("taskpane.agent.focusTargetUnavailable"));
+    } catch (error) {
+      showError(error);
+    }
+  });
+  bubble.append(document.createElement("br"), button);
+}
+
 function setAgentRunning(running: boolean, status = i18n.t("taskpane.common.ready")): void {
   agentRunButton.disabled = running;
   agentStopButton.hidden = !running;
@@ -2834,6 +2860,7 @@ async function consumeAgentSession(
         const result = await tools.execute(call.name, call.params || {});
         await runtime.submitToolResult(sessionId, call.callId, result);
         updateActivity(activity, i18n.t("taskpane.agent.toolComplete", { name: call.name }));
+        appendToolFocusAction(activity, call.name, call.params || {});
         if (writeToolNames.has(call.name)) successfulWordWrites += 1;
       } catch (toolError) {
         const message = toolError instanceof Error ? toolError.message : String(toolError);
@@ -2987,6 +3014,8 @@ async function runAgent(requirement: string): Promise<void> {
   clearAgentImage();
   setAgentRunning(true, i18n.t("taskpane.agent.creatingTask"));
   let previousTrackingMode: string | null = null;
+  lastAgentDocumentSnapshot = null;
+  agentUndoTaskButton.hidden = true;
   try {
     const currentAgentSettings = readLocalSettings("wordollama-agent-settings", {
       maxIterations: 20,
@@ -3026,6 +3055,12 @@ async function runAgent(requirement: string): Promise<void> {
       }
       agentStatusBar.dataset.permissionMode = "full";
       agentStatusText.textContent = i18n.t("taskpane.agent.fullAccessActive");
+    }
+    if (executionMode !== "ViewOnly") {
+      lastAgentDocumentSnapshot = await word.captureDocumentSnapshot();
+      if (!lastAgentDocumentSnapshot) {
+        appendDiagnostic("agent", "task undo snapshot unavailable or exceeds the safe size limit");
+      }
     }
     if (executionMode === "TrackedChanges") {
       previousTrackingMode = await word.beginTrackedChanges();
@@ -3076,8 +3111,27 @@ async function runAgent(requirement: string): Promise<void> {
     }
     activeSessionId = null;
     setAgentRunning(false);
+    agentUndoTaskButton.hidden = !lastAgentDocumentSnapshot;
   }
 }
+
+agentUndoTaskButton.addEventListener("click", async () => {
+  if (!lastAgentDocumentSnapshot) return;
+  const approved = await requestDecision(
+    i18n.t("taskpane.agent.undoTaskConfirm"),
+    i18n.t("taskpane.agent.undoTask"),
+    i18n.t("taskpane.common.cancel"),
+  );
+  if (!approved) return;
+  try {
+    await word.restoreDocumentSnapshot(lastAgentDocumentSnapshot);
+    lastAgentDocumentSnapshot = null;
+    agentUndoTaskButton.hidden = true;
+    appendMessage(i18n.t("taskpane.agent.undoTaskComplete"), "system");
+  } catch (error) {
+    showError(error);
+  }
+});
 
 agentRunButton.addEventListener("click", async () => {
   try {
@@ -3352,6 +3406,32 @@ function anchorMap(paragraphs: string[], start: number): Map<number, ReviewAncho
   return new Map(createReviewAnchors(paragraphs, start).map((anchor) => [anchor.originalIndex, anchor]));
 }
 
+async function anchoredReviewMap(
+  paragraphs: string[],
+  start: number,
+): Promise<Map<number, ReviewAnchor>> {
+  const anchors = anchorMap(paragraphs, start);
+  try {
+    return await word.createReviewBookmarks(anchors);
+  } catch (error) {
+    appendDiagnostic("review", `bookmark fallback: ${error instanceof Error ? error.message : String(error)}`);
+    return anchors;
+  }
+}
+
+function reuseAnchors(
+  chunks: Array<{ source: string; anchors: Map<number, ReviewAnchor> }>,
+  anchors: Map<number, ReviewAnchor>,
+): Array<{ source: string; anchors: Map<number, ReviewAnchor> }> {
+  return chunks.map((chunk) => ({
+    source: chunk.source,
+    anchors: new Map([...chunk.anchors].map(([index, anchor]) => [
+      index,
+      anchors.get(index) ?? anchor,
+    ])),
+  }));
+}
+
 function attachReviewAnchors<T extends { paragraphIndex: number; anchor?: ReviewAnchor }>(
   items: T[],
   anchors: Map<number, ReviewAnchor>,
@@ -3373,16 +3453,20 @@ function reviewIssueKey(issue: ReviewIssue): string {
 
 function persistReviewState(): void {
   if (!currentReviewFingerprint) return;
-  writeLocalSettings(REVIEW_STATE_KEY, {
+  const state: PersistedReviewState = {
     fingerprint: currentReviewFingerprint,
     issues: reviewIssues.slice(-100),
     suggestions: reviewSuggestions.slice(-100),
-  });
+  };
+  writeLocalSettings(REVIEW_STATE_KEY, state);
+  void word.writeDocumentSetting(REVIEW_STATE_KEY, state).catch((error) =>
+    appendDiagnostic("review", `document state save fallback: ${error instanceof Error ? error.message : String(error)}`));
 }
 
 async function restoreReviewState(): Promise<void> {
   if (activeSurface !== "review") return;
-  const saved = readLocalSettings<PersistedReviewState | null>(REVIEW_STATE_KEY, null);
+  const saved = await word.readDocumentSetting<PersistedReviewState>(REVIEW_STATE_KEY)
+    ?? readLocalSettings<PersistedReviewState | null>(REVIEW_STATE_KEY, null);
   const fingerprint = await word.getReviewDocumentFingerprint();
   currentReviewFingerprint = fingerprint;
   const handoff = readLocalSettings<ReviewHandoff | null>(REVIEW_HANDOFF_KEY, null);
@@ -3591,7 +3675,7 @@ async function readDocumentReviewSource(
     start: boundedStart,
     end,
     paragraphs,
-    anchors: anchorMap(paragraphs, boundedStart),
+    anchors: await anchoredReviewMap(paragraphs, boundedStart),
   };
 }
 
@@ -3714,8 +3798,11 @@ async function loadReviewScope(
         Math.min(reviewPageStart + 9, overview.paragraphCount),
       );
       reviewScope = paragraphSource(result.paragraphs, result.start);
-      reviewScopeAnchors = anchorMap(result.paragraphs, result.start);
-      reviewScopeChunks = buildReviewChunks(result.paragraphs, result.start);
+      reviewScopeAnchors = await anchoredReviewMap(result.paragraphs, result.start);
+      reviewScopeChunks = reuseAnchors(
+        buildReviewChunks(result.paragraphs, result.start),
+        reviewScopeAnchors,
+      );
       reviewScopeKind = "paragraphs";
       reviewScopeLabel = i18n.t("taskpane.review.paragraphRange", {
         start: result.start,
@@ -3727,7 +3814,10 @@ async function loadReviewScope(
       reviewPageStart = result.start;
       reviewScope = result.source;
       reviewScopeAnchors = result.anchors;
-      reviewScopeChunks = buildReviewChunks(result.paragraphs, result.start);
+      reviewScopeChunks = reuseAnchors(
+        buildReviewChunks(result.paragraphs, result.start),
+        reviewScopeAnchors,
+      );
       reviewScopeKind = "document";
       reviewScopeLabel = result.included < result.total
         ? i18n.t("taskpane.review.documentRange", {
@@ -4235,6 +4325,7 @@ required<HTMLButtonElement>("#generate-review").addEventListener("click", async 
 });
 required<HTMLButtonElement>("#cancel-review").addEventListener("click", () => reviewAbortController?.abort());
 required<HTMLButtonElement>("#review-document").addEventListener("click", () => void runIssueReview());
+required<HTMLButtonElement>("#review-before-save").addEventListener("click", () => void runIssueReview());
 required<HTMLButtonElement>("#clear-issues").addEventListener("click", () => {
   reviewIssues = [];
   persistReviewState();
@@ -4330,6 +4421,41 @@ compareRunButton.addEventListener("click", async () => {
   } finally {
     compareAnalysisAbortController = null;
     compareRunButton.disabled = false;
+  }
+});
+
+compareNativeWordButton.addEventListener("click", async () => {
+  const original = compareOriginalInput.files?.[0];
+  const revised = compareRevisedInput.files?.[0];
+  compareNativeWordButton.disabled = true;
+  clearError();
+  try {
+    if (!original || !revised) throw new Error(i18n.t("taskpane.utility.compare.filesRequired"));
+    validateCompareFiles(original, revised);
+    compareSummary.textContent = i18n.t("taskpane.utility.compare.nativeRunning");
+    const [originalBase64, revisedBase64] = await Promise.all([
+      fileToBase64(original),
+      fileToBase64(revised),
+    ]);
+    const result = await runtime.compareDocumentsWithNativeWord(originalBase64, revisedBase64);
+    if (!result.available || !result.documentBase64) {
+      throw new Error(result.reason || i18n.t("taskpane.utility.compare.nativeUnavailable"));
+    }
+    const bytes = Uint8Array.from(atob(result.documentBase64), (character) => character.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = result.fileName || "WordOllama-native-comparison.docx";
+    link.click();
+    URL.revokeObjectURL(url);
+    compareSummary.textContent = i18n.t("taskpane.utility.compare.nativeReady");
+  } catch (error) {
+    compareSummary.textContent = i18n.t("taskpane.utility.compare.failed");
+    showError(error);
+  } finally {
+    compareNativeWordButton.disabled = false;
   }
 });
 

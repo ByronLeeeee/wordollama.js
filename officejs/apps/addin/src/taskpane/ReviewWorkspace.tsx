@@ -254,6 +254,7 @@ function LongDocumentReviewWorkspace() {
         </div>
         <div className="review-run-actions">
           <button id="review-document" className="btn btn-primary btn-sm" type="button" data-i18n="taskpane.review.scanIssues">Scan issues</button>
+          <button id="review-before-save" className="btn btn-sm" type="button" data-i18n="taskpane.review.checkBeforeSave">Check before save</button>
           <button id="generate-review" className="btn btn-sm" type="button" data-i18n="taskpane.review.generateChanges">Generate changes</button>
           <button id="cancel-review" className="btn btn-ghost btn-sm" type="button" disabled data-i18n="taskpane.review.cancelGeneration">Cancel</button>
         </div>

@@ -36,8 +36,8 @@ const expected = [
 for (const name of expected) {
   if (!names.includes(name)) throw new Error(`missing Office.js tool: ${name}`);
 }
-if (names.length !== 36) {
-  throw new Error(`expected 36 Office.js descriptors, got ${names.length}`);
+if (names.length !== 38) {
+  throw new Error(`expected 38 Office.js descriptors, got ${names.length}`);
 }
 if (registry.list().find((tool) => tool.name === "get_selection")?.description !==
     "Read text from the current Word selection.") {
@@ -86,6 +86,8 @@ const dispatchArguments: Record<string, AnyRecord> = {
   insert_table: { rows: 1, columns: 1, header_row: ["Header"] },
   table_insert_row: { table_index: 0, after_row: 0 },
   table_set_cell: { table_index: 0, row: 0, column: 0, text: "cell" },
+  edit_table_structure: { table_index: 1, action: "insert_row", row: 1 },
+  format_table: { table_index: 1, header_rows: 1, autofit: "window" },
   read_clause: { keyword: "clause" },
   insert_clause_after: { anchor: "anchor", text: "clause" },
   highlight_risk: { keyword: "risk" },

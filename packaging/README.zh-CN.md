@@ -219,7 +219,7 @@ pwsh ./packaging/unregister-bridge-autostart.ps1 -InstallRoot <install-root>
 Credential Manager/Keychain 的写入、精确读回和删除，并在 `finally` 清理。该工具必须显式传入
 `--allow-user-vault-test`，不应在含有真实同名测试键的共享账户中运行。
 
-签名、HTTPS 和宿主测试全部完成后，使用 `finalize-unified-release.ps1` 生成唯一允许标记 `releaseReady: true` 的终审描述文件。该命令必须在产物目标系统执行，会重新解包并校验所有 Windows PE 的 Authenticode 发布者，或校验 macOS codesign、Gatekeeper 和签名 Authority；同时要求目标版本生成后的 HTTPS 证据、安装/升级/证书/回滚/卸载生命周期证据、36/36 工具报告、1,000/5,000 段报告、修订报告，以及复杂合同、双客户端共同编辑、16 个独立任务窗格、设置 Office Dialog 和中英文/明暗主题/窄宽窗格补充报告：
+签名、HTTPS 和宿主测试全部完成后，使用 `finalize-unified-release.ps1` 生成唯一允许标记 `releaseReady: true` 的终审描述文件。该命令必须在产物目标系统执行，会重新解包并校验所有 Windows PE 的 Authenticode 发布者，或校验 macOS codesign、Gatekeeper 和签名 Authority；同时要求目标版本生成后的 HTTPS 证据、安装/升级/证书/回滚/卸载生命周期证据、38/38 工具报告、1,000/5,000 段报告、修订报告，以及复杂合同、双客户端共同编辑、16 个独立任务窗格、设置 Office Dialog 和中英文/明暗主题/窄宽窗格补充报告：
 
 ```powershell
 pwsh ./packaging/finalize-unified-release.ps1 `

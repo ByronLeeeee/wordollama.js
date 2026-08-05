@@ -65,6 +65,9 @@ function ComparePanel() {
           <button id="compare-run" className="btn btn-primary btn-sm" data-i18n="taskpane.utility.compare.run">
             Analyze revisions
           </button>
+          <button id="compare-native-word" className="btn btn-sm" data-i18n="taskpane.utility.compare.nativeWord">
+            Word native comparison
+          </button>
         </div>
         <p id="compare-summary" />
         <div className="compare-analysis-shell">
@@ -186,7 +189,7 @@ function DiagnosticsPanel() {
         warningKey="taskpane.utility.diagnostics.blankWarning"
         warning="Run only in an unsaved blank document that can be discarded."
         runKey="taskpane.utility.diagnostics.runGolden"
-        runLabel="Run the 36-tool golden suite"
+        runLabel="Run the 38-tool golden suite"
         open
       />
       <AcceptancePanel

@@ -138,7 +138,7 @@ pwsh ./tools/unified-smoke-test.ps1 `
   -SkipManifestValidation
 ```
 
-它覆盖 TypeScript、React bundle、i18n、36 个 Word 工具、四档宿主能力矩阵、
+它覆盖 TypeScript、React bundle、i18n、38 个 Word 工具、四档宿主能力矩阵、
 Agent、Provider、MCP、Skills、文档比较、加密恢复、OAuth PKCE、更新门禁和真实
 Bridge 重启持久化。
 

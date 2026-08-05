@@ -412,3 +412,10 @@ export interface DocumentCompareResponse {
   summary?: DocumentCompareSummary | null;
   algorithm?: string;
 }
+
+export interface NativeWordCompareResponse {
+  available: boolean;
+  fileName?: string;
+  documentBase64?: string;
+  reason?: string;
+}

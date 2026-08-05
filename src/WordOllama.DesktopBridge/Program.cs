@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Net;
+using System.Runtime.InteropServices;
 using WordOllama.DesktopBridge;
 using WordOllama.Contracts;
 using WordOllama.Core;
@@ -289,6 +290,7 @@ builder.Services.AddSingleton<IInternalToolExecutor, McpToolExecutor>();
 builder.Services.AddSingleton<McpManager>();
 builder.Services.AddSingleton<ResourceDiagnosticsService>();
 builder.Services.AddSingleton<IDocumentComparer, OpenXmlDocumentComparer>();
+builder.Services.AddSingleton<NativeWordCompareService>();
 builder.Services.AddSingleton<LegalArticleService>();
 builder.Services.AddSingleton<AutomaticMemoryService>();
 builder.Services.AddSingleton<SkillGenerationService>();
@@ -1452,6 +1454,54 @@ app.MapPost("/documents/compare", async (
     catch (InvalidDataException exception)
     {
         return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/documents/compare/native-word", async (
+    HttpRequest httpRequest,
+    NativeWordCompareRequest request,
+    BridgeSessionStore sessions,
+    NativeWordCompareService comparer,
+    CancellationToken cancellationToken) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers["Origin"].FirstOrDefault();
+    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
+
+    const int maxCombinedDocumentBytes = 20 * 1024 * 1024;
+    const int maxCombinedBase64Characters = 28 * 1024 * 1024;
+    if (string.IsNullOrWhiteSpace(request.OriginalBase64) ||
+        string.IsNullOrWhiteSpace(request.RevisedBase64))
+    {
+        return Results.BadRequest(new { error = "original and revised DOCX payloads are required" });
+    }
+    if ((long)request.OriginalBase64.Length + request.RevisedBase64.Length > maxCombinedBase64Characters)
+    {
+        return Results.BadRequest(new { error = "combined DOCX payload exceeds the 20 MB comparison request limit" });
+    }
+
+    try
+    {
+        var original = Convert.FromBase64String(request.OriginalBase64);
+        var revised = Convert.FromBase64String(request.RevisedBase64);
+        if ((long)original.Length + revised.Length > maxCombinedDocumentBytes)
+        {
+            return Results.BadRequest(new { error = "combined DOCX payload exceeds the 20 MB comparison request limit" });
+        }
+        var result = await comparer.CompareAsync(original, revised, cancellationToken);
+        return result.Available
+            ? Results.Ok(result)
+            : Results.Json(result, statusCode: StatusCodes.Status501NotImplemented);
+    }
+    catch (FormatException)
+    {
+        return Results.BadRequest(new { error = "document payload must be valid base64" });
+    }
+    catch (Exception exception) when (exception is COMException or InvalidOperationException)
+    {
+        return Results.Problem(
+            exception.Message,
+            statusCode: StatusCodes.Status422UnprocessableEntity);
     }
 });
 

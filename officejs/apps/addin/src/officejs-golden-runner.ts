@@ -65,6 +65,8 @@ export const GOLDEN_CASES: GoldenCase[] = [
   { name: "read_table", args: { table_index: 1 } },
   { name: "table_insert_row", args: { table_index: 1, after_row: 1 } },
   { name: "table_set_cell", args: { table_index: 1, row: 2, column: 1, text: "金样本" } },
+  { name: "edit_table_structure", args: { table_index: 1, action: "insert_column", column: 1, count: 1 } },
+  { name: "format_table", args: { table_index: 1, header_rows: 1, alignment: "Centered", autofit: "window" } },
   { name: "get_document_outline" },
   { name: "read_clause", args: { keyword: "服务范围" } },
   { name: "extract_definitions" },
