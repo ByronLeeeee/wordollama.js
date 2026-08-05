@@ -636,7 +636,12 @@ function Assert-MacInstallerDryRun {
         $postinstall -notlike '*setup-required.txt*' -or
         $postinstall -notlike '*localhost:37421/health*' -or
         -not $setup.Contains('Continue? [y/N]') -or
-        -not $setup.Contains('security add-trusted-cert -d -r trustAsRoot') -or
+        -not $setup.Contains('security add-trusted-cert -r trustAsRoot') -or
+        $setup.Contains('security add-trusted-cert -d') -or
+        -not $setup.Contains('security verify-cert -c') -or
+        -not $setup.Contains('security remove-trusted-cert') -or
+        -not $setup.Contains('bridge.crt') -or
+        -not $setup.Contains('setup.log') -or
         -not $setup.Contains('subjectAltName=critical') -or
         -not $setup.Contains('https-certificate-secret set') -or
         -not $setup.Contains('localhost:37421/index.html') -or
@@ -648,6 +653,7 @@ function Assert-MacInstallerDryRun {
         $uninstaller -notlike '*wps-registration uninstall*' -or
         $uninstaller -notlike '*WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD*' -or
         $uninstaller -notlike '*security delete-certificate -Z*' -or
+        $uninstaller -notlike '*security remove-trusted-cert*' -or
         $uninstaller -notlike '*pkgutil --forget com.wordollama.desktopbridge*' -or
         $uninstaller -notlike '*process_path*' -or
         $uninstaller -notlike '*rm -rf "$root"*' -or
@@ -1020,6 +1026,8 @@ if ($hostRuntime -eq "win-x64") {
         $macInstallerSource -notmatch 'com\.kingsoft\.wpsoffice\.mac' -or
         $macInstallerSource -notmatch 'wps-registration install' -or
         $macInstallerSource -notmatch 'wps-registration uninstall' -or
+        $macInstallerSource -match 'security add-trusted-cert -d' -or
+        $macInstallerSource -notmatch 'security verify-cert -c' -or
         $macInstallerSource -notmatch '-a "\$\(id -un\)"' -or
         $macInstallerSource -match 'WordOllama/WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD' -or
         $macInstallerSource -notmatch 'BuildUnsignedForTests' -or

@@ -288,11 +288,14 @@ fi
   -s "WordOllama.JS/WORDOLLAMA_HTTPS_CERTIFICATE_PASSWORD" \
   -a "$(id -un)" >/dev/null 2>&1 || true
 ownership="$root/certs/ownership.json"
+certificate_file="$root/certs/bridge.crt"
 if [ -f "$ownership" ]; then
   thumbprint=$(sed -n 's/.*"thumbprint":"\([0-9A-Fa-f]*\)".*/\1/p' "$ownership" | head -n 1)
   case "$thumbprint" in
     ''|*[!0-9A-Fa-f]*) ;;
-    *) /usr/bin/security delete-certificate -Z "$thumbprint" \
+    *) [ ! -f "$certificate_file" ] || /usr/bin/security remove-trusted-cert \
+         "$certificate_file" >/dev/null 2>&1 || true
+       /usr/bin/security delete-certificate -Z "$thumbprint" \
          "$HOME/Library/Keychains/login.keychain-db" >/dev/null 2>&1 || true ;;
   esac
 fi
@@ -377,20 +380,32 @@ case "$locale" in
     success='WordOllama.JS 本地服务已启动并通过健康检查。请重新启动 Word 或 WPS Writer。'
     cancelled='已取消安全设置；WordOllama.JS 本地服务尚未启动。'
     failed='本地服务未能通过健康检查。请查看 DesktopBridge/bridge.log。'
+    trust_failed='无法把 localhost 证书写入当前用户信任设置。'
+    verify_failed='证书已导入，但没有通过 localhost SSL 信任验证。'
+    log_hint='完整设置日志：'
     ;;
   *)
     confirm='WordOllama.JS will create and trust a current-user certificate limited to localhost, 127.0.0.1 and ::1. macOS may show an additional authorization prompt. Continue? [y/N] '
     success='The WordOllama.JS local service is running and healthy. Restart Word or WPS Writer.'
     cancelled='Setup was cancelled; the WordOllama.JS local service has not started.'
     failed='The local service did not pass its health check. Review DesktopBridge/bridge.log.'
+    trust_failed='The localhost certificate could not be added to the current-user trust settings.'
+    verify_failed='The certificate was imported but did not pass localhost SSL trust verification.'
+    log_hint='Complete setup log: '
     ;;
 esac
+setup_log="$root/setup.log"
+touch "$setup_log"
+chmod 600 "$setup_log"
+log_line() { printf '%s\n' "$1" | /usr/bin/tee -a "$setup_log"; }
+log_line "---- WordOllama.JS setup $(date -u +%Y-%m-%dT%H:%M:%SZ) ----"
 printf '%s' "$confirm"
 IFS= read -r answer
-case "$answer" in y|Y|yes|YES|是) ;; *) printf '%s\n' "$cancelled"; exit 0 ;; esac
+case "$answer" in y|Y|yes|YES|是) ;; *) log_line "$cancelled"; exit 0 ;; esac
 
 cert_root="$root/certs"
 pfx="$cert_root/bridge.pfx"
+crt="$cert_root/bridge.crt"
 ownership="$cert_root/ownership.json"
 keychain="$HOME/Library/Keychains/login.keychain-db"
 mkdir -p "$cert_root"
@@ -406,9 +421,10 @@ if [ -f "$pfx" ]; then
   if [ "$current_subject" != "$expected_subject" ]; then
     case "$old_fingerprint" in
       ''|*[!0-9A-Fa-f]*) ;;
-      *) security delete-certificate -Z "$old_fingerprint" "$keychain" >/dev/null 2>&1 || true ;;
+      *) [ ! -f "$crt" ] || security remove-trusted-cert "$crt" >/dev/null 2>&1 || true
+         security delete-certificate -Z "$old_fingerprint" "$keychain" >/dev/null 2>&1 || true ;;
     esac
-    rm -f "$pfx" "$ownership"
+    rm -f "$pfx" "$crt" "$ownership"
   fi
 fi
 if [ ! -f "$pfx" ]; then
@@ -441,18 +457,40 @@ WORDOLLAMA_OPENSSL_CONFIG
     -keyout "$work/bridge.key" -out "$work/bridge.crt"
   printf '%s\n' "$password" | openssl pkcs12 -export -out "$work/bridge.pfx" \
     -inkey "$work/bridge.key" -in "$work/bridge.crt" -passout stdin
-  security add-trusted-cert -d -r trustAsRoot -p ssl -k "$keychain" "$work/bridge.crt"
   fingerprint=$(openssl x509 -in "$work/bridge.crt" -sha1 -fingerprint -noout |
     sed 's/^[^=]*=//; s/://g')
   case "$fingerprint" in ''|*[!0-9A-Fa-f]*) exit 22 ;; esac
+  trust_error="$work/trust-error.log"
+  if ! security add-trusted-cert -r trustAsRoot -p ssl -k "$keychain" \
+      "$work/bridge.crt" 2>"$trust_error"; then
+    [ ! -s "$trust_error" ] || /usr/bin/tee -a "$setup_log" < "$trust_error" >&2
+    security remove-trusted-cert "$work/bridge.crt" >/dev/null 2>&1 || true
+    security delete-certificate -Z "$fingerprint" "$keychain" >/dev/null 2>&1 || true
+    log_line "$trust_failed" >&2
+    log_line "$log_hint$setup_log" >&2
+    exit 25
+  fi
+  verify_output="$work/trust-verify.log"
+  if ! security verify-cert -c "$work/bridge.crt" -p ssl -n localhost \
+      -k "$keychain" >"$verify_output" 2>&1; then
+    [ ! -s "$verify_output" ] || /usr/bin/tee -a "$setup_log" < "$verify_output" >&2
+    security remove-trusted-cert "$work/bridge.crt" >/dev/null 2>&1 || true
+    security delete-certificate -Z "$fingerprint" "$keychain" >/dev/null 2>&1 || true
+    log_line "$verify_failed" >&2
+    log_line "$log_hint$setup_log" >&2
+    exit 26
+  fi
   mv "$work/bridge.pfx" "$pfx"
+  mv "$work/bridge.crt" "$crt"
   chmod 600 "$pfx"
+  chmod 600 "$crt"
   printf '{"schemaVersion":1,"thumbprint":"%s","subject":"CN=李伯阳/Boyang Li","hosts":["localhost","127.0.0.1","::1"]}\n' \
     "$fingerprint" > "$ownership"
   chmod 600 "$ownership"
   if ! printf '%s\n' "$password" | "$executable" https-certificate-secret set >/dev/null; then
+    security remove-trusted-cert "$crt" >/dev/null 2>&1 || true
     security delete-certificate -Z "$fingerprint" "$keychain" >/dev/null 2>&1 || true
-    rm -f "$pfx" "$ownership"
+    rm -f "$pfx" "$crt" "$ownership"
     exit 23
   fi
   password=''
@@ -468,13 +506,14 @@ attempt=0
 while [ "$attempt" -lt 30 ]; do
   if curl --fail --silent --show-error --max-time 2 https://localhost:37421/health >/dev/null 2>&1 &&
      curl --fail --silent --show-error --max-time 2 https://localhost:37421/index.html >/dev/null 2>&1; then
-    printf '%s\n' "$success"
+    log_line "$success"
     exit 0
   fi
   attempt=$((attempt + 1))
   sleep 1
 done
-printf '%s\n' "$failed" >&2
+log_line "$failed" >&2
+log_line "$log_hint$setup_log" >&2
 exit 24
 '@
     Set-Content -LiteralPath $setupPath -Value $setup `
