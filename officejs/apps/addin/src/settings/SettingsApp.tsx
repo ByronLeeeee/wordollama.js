@@ -2205,11 +2205,30 @@ function AboutPage() {
       <PageHeading title={t("about.title")} />
       <Card title={t("app.title")}>
         <div className="settings-about-copy">
-          <p>{t("about.author")}</p>
+          <div className="settings-about-contact" aria-label={t("about.contactTitle")}>
+            <h3>{t("about.contactTitle")}</h3>
+            <dl>
+              <div>
+                <dt>{t("about.website")}</dt>
+                <dd><a href="https://wordollama.com" target="_blank" rel="noreferrer">WordOllama.com</a></dd>
+              </div>
+              <div>
+                <dt>{t("about.creator")}</dt>
+                <dd>{t("about.creatorValue")}</dd>
+              </div>
+              <div>
+                <dt>{t("about.wechat")}</dt>
+                <dd><code>legal-lby</code></dd>
+              </div>
+              <div>
+                <dt>{t("about.email")}</dt>
+                <dd><a href="mailto:liboyang@lslby.com">liboyang@lslby.com</a></dd>
+              </div>
+            </dl>
+          </div>
           <p>{t("about.privacy")}</p>
           <p>{t("about.disclaimer")}</p>
           <p>{t("about.free")}</p>
-          <p>{t("about.contact")}</p>
         </div>
       </Card>
     </div>

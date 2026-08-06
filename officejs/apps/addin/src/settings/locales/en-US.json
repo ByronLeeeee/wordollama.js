@@ -1439,10 +1439,14 @@
   },
   "about": {
     "title": "About WordOllama.JS",
-    "author": "Created by Boyang Li, Long An Law Firm (Guangzhou).",
+    "contactTitle": "Contact and support",
+    "website": "Website",
+    "creator": "Creator",
+    "creatorValue": "Boyang Li / 李伯阳",
+    "wechat": "WeChat",
+    "email": "Email",
     "privacy": "WordOllama.JS does not collect personal information. Requests are sent only to the local or online provider you configure.",
     "disclaimer": "AI-generated content may be inaccurate. Review it before use.",
-    "free": "WordOllama.JS is free software. Verify the source if you paid to obtain it.",
-    "contact": "WeChat: LegalLby"
+    "free": "WordOllama.JS is free software. Verify the source if you paid to obtain it."
   }
 }

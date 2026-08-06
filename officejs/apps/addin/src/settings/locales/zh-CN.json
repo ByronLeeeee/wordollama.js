@@ -1439,10 +1439,14 @@
   },
   "about": {
     "title": "关于 WordOllama.JS",
-    "author": "制作者：李伯阳，北京市隆安（广州）律师事务所。",
+    "contactTitle": "联系与支持",
+    "website": "软件官网",
+    "creator": "制作者",
+    "creatorValue": "李伯阳 / Boyang Li",
+    "wechat": "微信",
+    "email": "邮件",
     "privacy": "WordOllama.JS 不主动收集个人信息。请求仅发送到您配置的本地或在线模型提供商。",
     "disclaimer": "AI 生成内容可能存在错误，使用前请自行核验。",
-    "free": "WordOllama.JS 完全免费。如您付费获取，请核实来源。",
-    "contact": "反馈微信：LegalLby"
+    "free": "WordOllama.JS 完全免费。如您付费获取，请核实来源。"
   }
 }

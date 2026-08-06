@@ -174,10 +174,16 @@ export class OfficeJsWordAdapter {
     }
 
     const wordApi14 = ["read_comments", "add_comment"];
-    const wordApi13 = ["edit_table_structure", "format_table"];
+    const wordApi13 = [
+      "read_table",
+      "table_insert_row",
+      "table_set_cell",
+      "edit_table_structure",
+      "format_table",
+    ];
     const wordApi12 = ["insert_image"];
-    const desktop13 = ["page_setup"];
-    const desktop14 = ["update_toc", "revisions"];
+    const desktop13 = ["format_list", "page_setup"];
+    const desktop14 = ["read_bookmarks", "update_toc", "revisions"];
     if (wordApi14.includes(name)) {
       return requirements.isSetSupported("WordApi", "1.4");
     }
@@ -981,7 +987,10 @@ export class OfficeJsWordAdapter {
 
   async readComments(): Promise<Array<{ author: string; content: string; resolved: boolean }>> {
     return Word.run(async (context) => {
-      const comments = context.document.comments;
+      // Body.getComments() belongs to the cross-platform WordApi 1.4 set.
+      // Document.comments is a newer WordApiDesktop 1.4 property and would
+      // unnecessarily exclude older Mac builds that already support comments.
+      const comments = context.document.body.getComments();
       comments.load("items/authorName,items/content,items/resolved");
       await context.sync();
       return comments.items.slice(0, 50).map((comment) => ({
