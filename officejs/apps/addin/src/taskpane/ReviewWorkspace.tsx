@@ -248,10 +248,12 @@ function LongDocumentReviewWorkspace() {
         </div>
         <p id="review-scope-status" className="muted review-scope-status" data-i18n="taskpane.review.documentDefault" />
 
-        <div className="form-group task-instructions review-instructions">
-          <label htmlFor="review-instruction" data-i18n="taskpane.review.customRequirements">Custom requirements</label>
-          <textarea id="review-instruction" className="textarea textarea-bordered" rows={3} placeholder="Add review priorities or writing requirements…" data-i18n-placeholder="taskpane.review.customRequirementsPlaceholder" data-prompt-enhance />
-        </div>
+        <details className="collapse collapse-arrow task-options review-instructions" data-default-collapsed>
+          <summary className="collapse-title" data-i18n="taskpane.review.customRequirements">Custom requirements</summary>
+          <div className="collapse-content task-options-body">
+            <textarea id="review-instruction" className="textarea textarea-bordered" rows={3} aria-label="Custom requirements" data-i18n-aria-label="taskpane.review.customRequirements" placeholder="Add review priorities or writing requirements…" data-i18n-placeholder="taskpane.review.customRequirementsPlaceholder" data-prompt-enhance />
+          </div>
+        </details>
         <div className="review-run-actions">
           <button id="review-document" className="btn btn-primary btn-sm" type="button" data-i18n="taskpane.review.scanIssues">Scan issues</button>
           <button id="review-before-save" className="btn btn-sm" type="button" data-i18n="taskpane.review.checkBeforeSave">Check before save</button>

@@ -2,34 +2,6 @@ name: Office.js unified CI
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - ".github/workflows/officejs-unified-ci.yml"
-      - ".github/workflows/officejs-signed-candidate.yml"
-      - "officejs/**"
-      - "packaging/**"
-      - "src/WordOllama.Contracts/**"
-      - "src/WordOllama.Core/**"
-      - "src/WordOllama.DesktopBridge/**"
-      - "src/WordOllama.Mcp/**"
-      - "src/WordOllama.Platform/**"
-      - "src/WordOllama.WindowsInstaller/**"
-      - "tools/**"
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/officejs-unified-ci.yml"
-      - ".github/workflows/officejs-signed-candidate.yml"
-      - "officejs/**"
-      - "packaging/**"
-      - "src/WordOllama.Contracts/**"
-      - "src/WordOllama.Core/**"
-      - "src/WordOllama.DesktopBridge/**"
-      - "src/WordOllama.Mcp/**"
-      - "src/WordOllama.Platform/**"
-      - "src/WordOllama.WindowsInstaller/**"
-      - "tools/**"
 
 permissions:
   contents: read

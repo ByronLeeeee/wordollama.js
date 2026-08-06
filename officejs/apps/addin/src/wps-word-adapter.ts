@@ -7,11 +7,13 @@ import {
   type SearchResult,
   type TrackedRevisionResult,
   type WordSelection,
+  markdownNoteToPlainText,
   trackedRevisionIdentity,
 } from "./officejs-word-adapter.ts";
 import type { DocumentDiff } from "./contracts.ts";
 import type { ReviewAnchor } from "./review-anchor.ts";
 import { resolveReviewAnchorIndex, reviewDocumentFingerprint } from "./review-anchor.ts";
+import { buildTextRevisionHunks } from "./text-revision-diff.ts";
 import { resolveWpsApplication, type WpsApplication } from "./wps-host.ts";
 
 const WPS_SUPPORTED_TOOLS = new Set([
@@ -100,6 +102,63 @@ function setRangeText(range: any, text: string): void {
   range.Text = text;
 }
 
+function isSafeTextSelection(selection: any): boolean {
+  if (!selection) return false;
+  const selectionType = Number(selection.Type);
+  // wdSelectionNormal = 2. Unknown is allowed for older WPS builds that do
+  // not expose Selection.Type, but known block/table selections are not.
+  if (Number.isFinite(selectionType) && selectionType !== 2) return false;
+  if (Number(selection.Comments?.Count ?? 0) > 0) return false;
+  try {
+    // wdWithinTable = 12. Typing over a table selection can produce an
+    // unpredictable result in WPS, so table text is edited via Cell.Range.
+    if (typeof selection.Information === "function" && selection.Information(12)) return false;
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+function replaceCurrentSelectionByTyping(
+  application: WpsApplication,
+  text: string,
+  deleteExisting = true,
+): boolean {
+  const selection = application.Selection;
+  if (!isSafeTextSelection(selection) ||
+      typeof selection.Delete !== "function" || typeof selection.TypeText !== "function") {
+    return false;
+  }
+  if (deleteExisting) selection.Delete();
+  if (text) selection.TypeText(text);
+  return true;
+}
+
+function replaceRangeByTyping(
+  application: WpsApplication,
+  range: any,
+  text: string,
+  deleteExisting = true,
+): boolean {
+  if (!range || typeof range.Select !== "function") return false;
+  range.Select();
+  return replaceCurrentSelectionByTyping(application, text, deleteExisting);
+}
+
+function insertAtRange(application: WpsApplication, range: any, text: string): boolean {
+  if (!range || !text) return Boolean(range);
+  // WPS can ignore Selection.TypeText for some collapsed/native selection
+  // states. Range insertion is the documented text insertion path and is
+  // recorded as an insertion revision while TrackRevisions is enabled.
+  if (typeof range.InsertBefore === "function") {
+    range.InsertBefore(text);
+    return true;
+  }
+  if (typeof range.Select !== "function") return false;
+  range.Select();
+  return replaceCurrentSelectionByTyping(application, text, false);
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/gu, "&amp;")
@@ -144,16 +203,82 @@ function styleName(value: any): string {
   return String(value?.NameLocal ?? value?.Name ?? "");
 }
 
-function cssColorToWps(value: string): string | number {
-  const match = /^#([0-9a-f]{6})$/iu.exec(value.trim());
-  if (!match) return value;
-  const red = Number.parseInt(match[1].slice(0, 2), 16);
-  const green = Number.parseInt(match[1].slice(2, 4), 16);
-  const blue = Number.parseInt(match[1].slice(4, 6), 16);
+const CSS_COLOR_NAMES: Record<string, string> = {
+  aqua: "00ffff", black: "000000", blue: "0000ff", fuchsia: "ff00ff",
+  gray: "808080", green: "008000", grey: "808080", lime: "00ff00",
+  maroon: "800000", navy: "000080", olive: "808000", orange: "ffa500",
+  purple: "800080", red: "ff0000", silver: "c0c0c0", teal: "008080",
+  white: "ffffff", yellow: "ffff00",
+};
+
+function cssColorToWps(value: string): number {
+  const normalized = value.trim().toLocaleLowerCase();
+  if (normalized === "automatic" || normalized === "auto") return -16777216;
+  const named = CSS_COLOR_NAMES[normalized];
+  const shortHex = /^#([0-9a-f]{3})$/iu.exec(normalized)?.[1];
+  const fullHex = /^#([0-9a-f]{6})$/iu.exec(normalized)?.[1]
+    ?? (shortHex ? shortHex.split("").map((part) => `${part}${part}`).join("") : named);
+  const rgb = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/iu.exec(normalized);
+  if (!fullHex && !rgb) {
+    throw new Error("color must be #RGB, #RRGGBB, rgb(r,g,b), or a standard color name");
+  }
+  const red = rgb ? Number(rgb[1]) : Number.parseInt(fullHex!.slice(0, 2), 16);
+  const green = rgb ? Number(rgb[2]) : Number.parseInt(fullHex!.slice(2, 4), 16);
+  const blue = rgb ? Number(rgb[3]) : Number.parseInt(fullHex!.slice(4, 6), 16);
+  if ([red, green, blue].some((part) => part < 0 || part > 255)) {
+    throw new Error("rgb color components must be between 0 and 255");
+  }
   return red | (green << 8) | (blue << 16);
 }
 
+function applyNamedStyleToHtmlRoot(html: string, style: string): string {
+  const safeStyle = style.trim().replace(/["'<>]/gu, "");
+  if (!safeStyle) return html;
+  const root = /^(\s*<[a-z][a-z0-9:-]*\b)([^>]*)(>)/iu.exec(html);
+  if (!root) return html;
+  let attributes = root[2];
+  if (/\sstyle\s*=/iu.test(attributes)) {
+    attributes = attributes.replace(
+      /(\sstyle\s*=\s*["'])/iu,
+      `$1mso-style-name: '${safeStyle}'; `,
+    );
+  } else {
+    attributes += ` style="mso-style-name: '${safeStyle}'"`;
+  }
+  return `${root[1]}${attributes}${root[3]}${html.slice(root[0].length)}`;
+}
+
+function insertTextAtHtmlRoot(html: string, text: string): string {
+  const openingTag = /^\s*<[a-z][a-z0-9:-]*\b[^>]*>/iu.exec(html);
+  if (!openingTag) return `${escapeHtml(text)}${html}`;
+  return `${html.slice(0, openingTag[0].length)}${escapeHtml(text)}${html.slice(openingTag[0].length)}`;
+}
+
+function findTextRange(document: any, text: string): any | null {
+  const range = document?.Content?.Duplicate;
+  const find = range?.Find;
+  if (!range || typeof find?.Execute !== "function") return null;
+  try { find.ClearFormatting?.(); } catch { /* optional WPS API */ }
+  return find.Execute(text) ? range : null;
+}
+
+function borderWidthToWps(points: number): number {
+  if (!Number.isFinite(points) || points <= 0) throw new Error("border_width must be greater than 0");
+  const supported = [
+    { points: 0.25, value: 2 }, { points: 0.5, value: 4 },
+    { points: 0.75, value: 6 }, { points: 1, value: 8 },
+    { points: 1.5, value: 12 }, { points: 2.25, value: 18 },
+    { points: 3, value: 24 }, { points: 4.5, value: 36 },
+    { points: 6, value: 48 },
+  ];
+  return supported.reduce((nearest, candidate) =>
+    Math.abs(candidate.points - points) < Math.abs(nearest.points - points) ? candidate : nearest).value;
+}
+
 export class WpsWordAdapter extends OfficeJsWordAdapter {
+  private activeUndoSnapshot: { token: string; maximumCharacters: number; documentName: string } | null = null;
+  private completedUndoSnapshots = new Map<string, { documentName: string; afterXml: string }>();
+
   constructor(askHumanHandler?: AskHumanHandler) {
     super(askHumanHandler);
   }
@@ -163,7 +288,133 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
   }
 
   override supportsTool(name: string): boolean {
-    return WPS_SUPPORTED_TOOLS.has(name);
+    if (!WPS_SUPPORTED_TOOLS.has(name)) return false;
+    const application = resolveWpsApplication();
+    const document = application?.ActiveDocument;
+    if (!application || !document) return false;
+    const selection = application.Selection;
+    switch (name) {
+      case "validate_citation":
+      case "ask_human":
+        return true;
+      case "get_selection":
+        return Boolean(selection);
+      case "search_text":
+      case "get_doc_overview":
+      case "read_paragraphs":
+      case "read_large_chunk":
+      case "build_semantic_map":
+      case "read_clause":
+      case "extract_definitions":
+      case "check_cross_references":
+        return Boolean(document.Content || document.Paragraphs);
+      case "insert_text_at_end":
+        return typeof document.Content?.InsertAfter === "function";
+      case "read_comments":
+        return typeof document.Comments?.Item === "function";
+      case "read_bookmarks":
+        return typeof document.Bookmarks?.Item === "function";
+      case "apply_style":
+      case "replace_paragraph":
+      case "format_paragraph":
+      case "get_document_outline":
+      case "insert_clause_after":
+      case "apply_legal_format":
+        return typeof document.Paragraphs?.Item === "function";
+      case "insert_at_cursor":
+        return Boolean(selection && (typeof selection.TypeText === "function" || "Text" in selection));
+      case "add_comment":
+        return typeof document.Comments?.Add === "function";
+      case "find_replace":
+      case "replace_exact_text":
+        return Boolean(document.Content || document.Paragraphs);
+      case "format_text":
+        return Boolean(selection?.Font);
+      case "insert_page_break":
+        return typeof selection?.InsertBreak === "function";
+      case "read_table":
+      case "table_insert_row":
+      case "table_set_cell":
+      case "edit_table_structure":
+      case "format_table":
+        return typeof document.Tables?.Item === "function";
+      case "insert_table":
+        return typeof document.Tables?.Add === "function";
+      case "highlight_risk":
+        return typeof document.Range === "function" && Boolean(document.Content);
+      case "format_list":
+        return Boolean(selection?.Range?.ListFormat);
+      case "page_setup":
+        return Boolean(document.PageSetup);
+      case "header_footer":
+        return typeof document.Sections?.Item === "function";
+      case "update_toc":
+        return Boolean(document.TablesOfContents &&
+          (typeof document.TablesOfContents.Item === "function" ||
+           typeof document.TablesOfContents.Add === "function"));
+      case "insert_image":
+        return typeof document.InlineShapes?.AddPicture === "function" &&
+          typeof application.FileSystem?.writeAsBinaryString === "function" &&
+          Boolean(application.Env?.GetTempPath || application.FileSystem?.tmpdir);
+      case "revisions":
+        return "TrackRevisions" in document && typeof document.Revisions?.Item === "function";
+      default:
+        return false;
+    }
+  }
+
+  override async captureDocumentSnapshot(maximumCharacters = 8_000_000): Promise<string | null> {
+    const application = this.application();
+    const document = application.ActiveDocument;
+    const undoRecord = (application as any).UndoRecord;
+    const xml = document?.WordOpenXML;
+    if (!document || typeof xml !== "string" || xml.length > maximumCharacters ||
+        typeof undoRecord?.StartCustomRecord !== "function" ||
+        typeof undoRecord?.EndCustomRecord !== "function" ||
+        typeof document.Undo !== "function" || undoRecord.IsRecordingCustomRecord ||
+        Number(undoRecord.CustomRecordLevel ?? 0) > 0) {
+      return null;
+    }
+    this.completedUndoSnapshots.clear();
+    const token = `wps-undo:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+    undoRecord.StartCustomRecord("WordOllama.JS Agent");
+    this.activeUndoSnapshot = {
+      token,
+      maximumCharacters,
+      documentName: String(document.FullName ?? ""),
+    };
+    return token;
+  }
+
+  override async finalizeDocumentSnapshot(snapshot: string | null): Promise<string | null> {
+    const active = this.activeUndoSnapshot;
+    if (!snapshot || !active || active.token !== snapshot) return snapshot;
+    const application = this.application();
+    const document = application.ActiveDocument;
+    try {
+      (application as any).UndoRecord.EndCustomRecord();
+    } finally {
+      this.activeUndoSnapshot = null;
+    }
+    const afterXml = document?.WordOpenXML;
+    if (typeof afterXml !== "string" || afterXml.length > active.maximumCharacters) return null;
+    this.completedUndoSnapshots.set(snapshot, {
+      documentName: active.documentName,
+      afterXml,
+    });
+    return snapshot;
+  }
+
+  override async restoreDocumentSnapshot(snapshot: string): Promise<void> {
+    const completed = this.completedUndoSnapshots.get(snapshot);
+    const document = this.application().ActiveDocument;
+    if (!completed || !document || String(document.FullName ?? "") !== completed.documentName ||
+        document.WordOpenXML !== completed.afterXml || typeof document.Undo !== "function") {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.snapshotUnavailable"));
+    }
+    const undone = await Promise.resolve(document.Undo(1));
+    if (undone === false) throw new Error(i18n.t("taskpane.wordAdapter.errors.snapshotUnavailable"));
+    this.completedUndoSnapshots.delete(snapshot);
   }
 
   override async beginTrackedChanges(): Promise<string | null> {
@@ -272,16 +523,78 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
   }
 
   override async replaceSelection(text: string): Promise<void> {
-    const selection = this.application().Selection;
+    const application = this.application();
+    const selection = application.Selection;
     if (!selection) unsupported("replace selection");
-    selection.Text = text;
+    if (!replaceCurrentSelectionByTyping(application, text)) {
+      if (application.ActiveDocument?.TrackRevisions && !isSafeTextSelection(selection)) {
+        throw new Error(i18n.t("taskpane.wordAdapter.errors.safeRevisionUnsupported"));
+      }
+      selection.Text = text;
+    }
   }
 
   override async applyPreciseRevision(original: string, revised: string): Promise<boolean> {
-    const selection = this.application().Selection;
+    const application = this.application();
+    const selection = application.Selection;
     if (!selection || cleanText(selection.Text) !== cleanText(original)) return false;
-    selection.Text = revised;
-    return true;
+    if (!isSafeTextSelection(selection)) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.safeRevisionUnsupported"));
+    }
+    const hunks = buildTextRevisionHunks(original, revised);
+    if (!hunks.length) return true;
+    const previousTrackingMode = await this.beginTrackedChanges();
+    if (previousTrackingMode === null) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.safeRevisionUnsupported"));
+    }
+    try {
+      const selectionStart = Number(selection.Range?.Start);
+      const document = application.ActiveDocument;
+      if (!Number.isFinite(selectionStart) || typeof document?.Range !== "function") {
+        await this.replaceSelection(revised);
+        return false;
+      }
+      const targets = hunks.map((hunk) => {
+        const start = selectionStart + hunk.originalStart;
+        const range = document.Range(start, start + hunk.originalText.length);
+        return { hunk, start, valid: range && cleanText(range.Text) === cleanText(hunk.originalText) };
+      });
+      const canApplyPrecisely = targets.every(({ valid }) => valid);
+      if (!canApplyPrecisely ||
+          typeof selection.Delete !== "function" ||
+          typeof selection.TypeText !== "function") {
+        throw new Error(i18n.t("taskpane.wordAdapter.errors.safeRevisionUnsupported"));
+      }
+      for (const { hunk, start } of [...targets].reverse()) {
+        // WPS can drop TypeText at a collapsed selection, leaving only deletion
+        // revisions. Insert the revised text through a native Range first, then
+        // delete the now-shifted original text as a separate tracked change.
+        if (hunk.revisedText) {
+          const insertionPoint = document.Range(start, start);
+          if (!insertAtRange(application, insertionPoint, hunk.revisedText)) {
+            throw new Error(i18n.t("taskpane.wordAdapter.errors.safeRevisionUnsupported"));
+          }
+          const insertedRange = document.Range(start, start + hunk.revisedText.length);
+          if (cleanText(insertedRange?.Text) !== cleanText(hunk.revisedText)) {
+            throw new Error(i18n.t("taskpane.wordAdapter.errors.safeRevisionUnsupported"));
+          }
+        }
+        if (hunk.originalText) {
+          const deletionStart = start + hunk.revisedText.length;
+          const deletionRange = document.Range(
+            deletionStart,
+            deletionStart + hunk.originalText.length,
+          );
+          if (cleanText(deletionRange?.Text) !== cleanText(hunk.originalText) ||
+              !replaceRangeByTyping(application, deletionRange, "", true)) {
+            throw new Error(i18n.t("taskpane.wordAdapter.errors.safeRevisionUnsupported"));
+          }
+        }
+      }
+      return true;
+    } finally {
+      await this.restoreTrackedChanges(previousTrackingMode);
+    }
   }
 
   override async searchText(keyword: string): Promise<SearchResult> {
@@ -352,15 +665,20 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
   }
 
   override async replaceParagraph(paragraphIndex: number, text: string): Promise<void> {
-    const paragraph = this.application().ActiveDocument?.Paragraphs?.Item?.(paragraphIndex);
+    const application = this.application();
+    const paragraph = application.ActiveDocument?.Paragraphs?.Item?.(paragraphIndex);
     if (!paragraph?.Range) unsupported("replace paragraph");
+    if (application.ActiveDocument?.TrackRevisions) {
+      if (replaceRangeByTyping(application, paragraph.Range, `${text}\r`)) return;
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.safeRevisionUnsupported"));
+    }
     paragraph.Range.Text = `${text}\r`;
   }
 
   override async insertAfterParagraph(paragraphIndex: number, text: string): Promise<void> {
     const range = this.application().ActiveDocument?.Paragraphs?.Item?.(paragraphIndex)?.Range;
     if (typeof range?.InsertAfter !== "function") unsupported("insert after paragraph");
-    range.InsertAfter(text);
+    range.InsertAfter(`${text}\r`);
   }
 
   override async insertAfterSelection(text: string): Promise<void> {
@@ -585,21 +903,49 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     options: { row?: number; column?: number; endRow?: number; endColumn?: number; count?: number } = {},
   ): Promise<void> {
     const table = requireCollectionItem(this.application().ActiveDocument?.Tables, tableIndex, "table");
-    const row = Math.max(1, options.row ?? 1);
-    const column = Math.max(1, options.column ?? 1);
-    const count = Math.max(1, options.count ?? 1);
+    const row = Math.max(1, Math.trunc(options.row ?? 1));
+    const column = Math.max(1, Math.trunc(options.column ?? 1));
+    const count = Math.max(1, Math.trunc(options.count ?? 1));
     switch (action.toLocaleLowerCase()) {
       case "insert_row":
-        for (let index = 0; index < count; index += 1) table.Rows.Add?.(table.Rows.Item?.(row + 1));
+        if (row > Number(table.Rows?.Count ?? 0) || typeof table.Rows?.Add !== "function") {
+          throw new Error(`table row ${row} is out of range`);
+        }
+        for (let index = 0; index < count; index += 1) {
+          const before = row < Number(table.Rows.Count) ? table.Rows.Item?.(row + 1) : undefined;
+          if (before) table.Rows.Add(before);
+          else table.Rows.Add();
+        }
         break;
       case "delete_row":
-        for (let index = 0; index < count; index += 1) table.Rows.Item?.(row)?.Delete?.();
+        if (row + count - 1 > Number(table.Rows?.Count ?? 0) || typeof table.Rows?.Item !== "function") {
+          throw new Error(`table rows ${row}-${row + count - 1} are out of range`);
+        }
+        for (let index = 0; index < count; index += 1) {
+          const target = table.Rows.Item(row);
+          if (typeof target?.Delete !== "function") unsupported("delete table row");
+          target.Delete();
+        }
         break;
       case "insert_column":
-        for (let index = 0; index < count; index += 1) table.Columns.Add?.(table.Columns.Item?.(column + 1));
+        if (column > Number(table.Columns?.Count ?? 0) || typeof table.Columns?.Add !== "function") {
+          throw new Error(`table column ${column} is out of range`);
+        }
+        for (let index = 0; index < count; index += 1) {
+          const before = column < Number(table.Columns.Count) ? table.Columns.Item?.(column + 1) : undefined;
+          if (before) table.Columns.Add(before);
+          else table.Columns.Add();
+        }
         break;
       case "delete_column":
-        for (let index = 0; index < count; index += 1) table.Columns.Item?.(column)?.Delete?.();
+        if (column + count - 1 > Number(table.Columns?.Count ?? 0) || typeof table.Columns?.Item !== "function") {
+          throw new Error(`table columns ${column}-${column + count - 1} are out of range`);
+        }
+        for (let index = 0; index < count; index += 1) {
+          const target = table.Columns.Item(column);
+          if (typeof target?.Delete !== "function") unsupported("delete table column");
+          target.Delete();
+        }
         break;
       case "merge_cells": {
         const start = table.Cell?.(row, column);
@@ -654,11 +1000,21 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
       const value = vertical[options.verticalAlignment.toLocaleLowerCase()];
       if (value !== undefined) table.Range.Cells.VerticalAlignment = value;
     }
-    if (options.shadingColor && table.Shading) table.Shading.BackgroundPatternColor = options.shadingColor;
+    if (options.shadingColor && table.Shading) {
+      table.Shading.BackgroundPatternColor = cssColorToWps(options.shadingColor);
+    }
     if (table.Borders) {
       table.Borders.Enable = 1;
-      if (options.borderColor) table.Borders.Color = options.borderColor;
-      if (typeof options.borderWidth === "number") table.Borders.OutsideLineWidth = options.borderWidth;
+      if (options.borderColor) {
+        const color = cssColorToWps(options.borderColor);
+        table.Borders.OutsideColor = color;
+        table.Borders.InsideColor = color;
+      }
+      if (typeof options.borderWidth === "number") {
+        const width = borderWidthToWps(options.borderWidth);
+        table.Borders.OutsideLineWidth = width;
+        table.Borders.InsideLineWidth = width;
+      }
     }
     const autofit: Record<string, number> = { fixed: 0, content: 1, window: 2 };
     const behavior = options.autofit ? autofit[options.autofit.toLocaleLowerCase()] : undefined;
@@ -872,12 +1228,12 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
         true,
         Math.max(1, Math.min(8, options.upperHeadingLevel ?? 1)),
         Math.max(2, Math.min(9, options.lowerHeadingLevel ?? 3)),
+        false,
         undefined,
+        options.rightAlignPageNumbers ?? true,
+        options.includePageNumbers ?? true,
         undefined,
         options.useHyperlinks ?? true,
-        true,
-        options.includePageNumbers ?? true,
-        options.rightAlignPageNumbers ?? true,
       );
     } else if (normalized === "update") {
       for (let index = 1; index <= Number(tables.Count ?? 0); index += 1) {
@@ -937,29 +1293,96 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
 
   override async insertStyledHtmlBlocksAtSelection(
     blocks: Array<{ kind: string; html: string; notes?: Array<{ marker: string; text: string }> }>,
-    _styleMappings: Record<string, string>,
-    _notePlacement: "footnote" | "endnote" = "footnote",
+    styleMappings: Record<string, string>,
+    notePlacement: "footnote" | "endnote" = "footnote",
   ): Promise<void> {
     if (!blocks.length) throw new Error("Markdown blocks must not be empty");
-    const html = blocks.map((block) => {
-      const notes = (block.notes ?? []).map((note) =>
-        `<p><small>${escapeHtml(note.marker)} ${escapeHtml(note.text)}</small></p>`).join("");
-      return `${block.html}${notes}`;
+    const application = this.application();
+    const document = application.ActiveDocument;
+    const notes = blocks.flatMap((block) => block.notes ?? []);
+    const styledBlocks = blocks.flatMap((block, index) => {
+      const style = block.kind === "table" ? "" : styleMappings[block.kind]?.trim() ?? "";
+      return style ? [{ index, style, marker: `[[WORDOLLAMA_STYLE_${Date.now()}_${index}]]` }] : [];
+    });
+    const noteCollection = notePlacement === "endnote" ? document?.Endnotes : document?.Footnotes;
+    const canFindInsertedText = Boolean(document?.Content?.Duplicate?.Find &&
+      typeof document.Content.Duplicate.Find.Execute === "function");
+    if (notes.length && (typeof noteCollection?.Add !== "function" || !canFindInsertedText)) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.markdownNotesUnsupported"));
+    }
+    if (styledBlocks.length && !canFindInsertedText) unsupported("style-mapped HTML insertion");
+    const html = blocks.map((block, index) => {
+      const styled = styledBlocks.find((item) => item.index === index);
+      const imported = applyNamedStyleToHtmlRoot(block.html, styled?.style ?? "");
+      return styled ? insertTextAtHtmlRoot(imported, styled.marker) : imported;
     }).join("\n");
     await this.insertHtmlAtSelection(html);
+    for (const styled of styledBlocks) {
+      const markerRange = findTextRange(document, styled.marker);
+      if (!markerRange) {
+        throw new Error(i18n.t("taskpane.wordAdapter.errors.markdownNoteAnchorLost"));
+      }
+      const paragraph = markerRange.Paragraphs?.Item?.(1);
+      const styleTarget = paragraph?.Range ?? paragraph;
+      if (!styleTarget) unsupported("apply imported paragraph style");
+      styleTarget.Style = styled.style;
+      markerRange.Text = "";
+    }
+    for (const note of notes) {
+      const reference = findTextRange(document, note.marker);
+      if (!reference) {
+        throw new Error(i18n.t("taskpane.wordAdapter.errors.markdownNoteAnchorLost"));
+      }
+      reference.Text = "";
+      reference.Collapse?.(1);
+      noteCollection.Add(reference, undefined, markdownNoteToPlainText(note.text));
+    }
   }
 
   override async applyCompareChangesBatch(
     changes: DocumentDiff[],
   ): Promise<Array<{ paragraphIndex: number; kind: string }>> {
     if (!changes.length) return [];
-    if (changes.some((change) => change.blockType === "tableCell" ||
-        change.insertAfterOriginalBlockType === "tableCell")) {
+    if (changes.some((change) =>
+      (change.blockType === "tableCell" && change.kind !== "modified") ||
+      change.insertAfterOriginalBlockType === "tableCell")) {
       unsupported("apply table comparison changes");
     }
     const application = this.application();
     const paragraphs = paragraphTexts(application);
     const normalize = (value: string) => value.replace(/[\r\u0007]+$/gu, "").replace(/\s+/gu, " ").trim();
+    const resolveTableCell = (change: DocumentDiff): { range: any; table: number; row: number; column: number } => {
+      const expected = normalize(change.original ?? "");
+      const location = String(change.originalLocation ?? change.location ?? "");
+      const coordinates = /table:(\d+)\/row:(\d+)\/cell:(\d+)/iu.exec(location);
+      if (coordinates) {
+        const tableIndex = Number(coordinates[1]);
+        const row = Number(coordinates[2]);
+        const column = Number(coordinates[3]);
+        const range = application.ActiveDocument?.Tables?.Item?.(tableIndex)?.Cell?.(row, column)?.Range;
+        if (range && normalize(range.Text) === expected) return { range, table: tableIndex, row, column };
+      }
+      const matches: Array<{ range: any; table: number; row: number; column: number }> = [];
+      const tables = application.ActiveDocument?.Tables;
+      for (let tableIndex = 1; tableIndex <= Number(tables?.Count ?? 0); tableIndex += 1) {
+        const table = tables.Item(tableIndex);
+        for (let row = 1; row <= Number(table?.Rows?.Count ?? 0); row += 1) {
+          for (let column = 1; column <= Number(table?.Columns?.Count ?? 0); column += 1) {
+            const range = table.Cell?.(row, column)?.Range;
+            if (range && normalize(range.Text) === expected) matches.push({ range, table: tableIndex, row, column });
+          }
+        }
+      }
+      if (matches.length === 1) return matches[0];
+      if (matches.length > 1) {
+        throw new Error(i18n.t("taskpane.wordAdapter.errors.compareOriginalAmbiguous", {
+          text: String(change.original ?? "").slice(0, 40),
+        }));
+      }
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.compareOriginalNotFound", {
+        text: String(change.original ?? "").slice(0, 40),
+      }));
+    };
     const resolveIndex = (expectedIndex: number, expectedText: string): number => {
       const expected = normalize(expectedText);
       if (expectedIndex > 0 && normalize(paragraphs[expectedIndex - 1] ?? "") === expected) return expectedIndex;
@@ -973,7 +1396,15 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
       throw new Error(i18n.t("taskpane.wordAdapter.errors.compareOriginalNotFound", { text: expectedText.slice(0, 40) }));
     };
     const applied: Array<{ paragraphIndex: number; kind: string }> = [];
-    for (const change of [...changes].sort((left, right) =>
+    for (const change of changes.filter((item) => item.blockType === "tableCell")) {
+      const cell = resolveTableCell(change);
+      setRangeText(cell.range, change.revised ?? "");
+      if (change.revisedStyle && change.revisedStyle !== change.originalStyle) {
+        cell.range.Style = change.revisedStyle;
+      }
+      applied.push({ paragraphIndex: change.revisedParagraphIndex ?? change.paragraphIndex, kind: change.kind });
+    }
+    for (const change of changes.filter((item) => item.blockType !== "tableCell").sort((left, right) =>
       (right.originalParagraphIndex ?? right.paragraphIndex) -
       (left.originalParagraphIndex ?? left.paragraphIndex))) {
       if (change.kind === "added") {
@@ -986,7 +1417,7 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
           const resolved = resolveIndex(anchor, change.insertAfterOriginalText ?? "");
           const range = application.ActiveDocument?.Paragraphs?.Item?.(resolved)?.Range;
           if (!range || typeof range.InsertAfter !== "function") unsupported("insert comparison paragraph");
-          range.InsertAfter(`\r${change.revised ?? ""}`);
+          range.InsertAfter(`${change.revised ?? ""}\r`);
         }
         applied.push({ paragraphIndex: change.revisedParagraphIndex ?? change.paragraphIndex, kind: change.kind });
         continue;
@@ -1072,7 +1503,7 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
       if (action === "accept") {
         paragraph.Range.Text = `${entry.item.suggestedText}\r`;
       } else if (action === "insert") {
-        paragraph.Range.InsertAfter(`\r${entry.item.suggestedText}`);
+        paragraph.Range.InsertAfter(`${entry.item.suggestedText}\r`);
       } else {
         application.ActiveDocument.Comments.Add(
           paragraph.Range,

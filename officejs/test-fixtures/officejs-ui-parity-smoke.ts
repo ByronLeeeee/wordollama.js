@@ -101,6 +101,21 @@ assert(
   "translation language selection must use the WPS-compatible searchable listbox instead of a native datalist",
 );
 
+assert(
+  (taskpaneMarkup.match(/data-default-collapsed/g) ?? []).length === 4 &&
+    contentWorkflows.includes("workflow-prompt-panel") &&
+    translationWorkspace.includes("translation-instructions-body") &&
+    mediaWorkflows.includes("image-instructions") &&
+    reviewWorkspace.includes("review-instructions"),
+  "secondary prompt and instruction sections must use consistent default-collapsed disclosure",
+);
+assert(
+  main.includes("activeWorkspace.scrollTop = 0") &&
+    main.includes("details.open = false") &&
+    /\.workflow-workspace-header\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?top:\s*0;/u.test(css),
+  "opening a sidebar workspace must restore and retain its visible title header",
+);
+
 for (const promptFieldId of [
   "agent-goal",
   "agent-requirement",
@@ -687,7 +702,7 @@ for (const interactionContract of [
   "allowMcpTools:",
   "openTextWorkflow(",
   "generateTextWorkflow(",
-  "assertTextWorkflowSelectionUnchanged(",
+  "currentTextWorkflowSelection(",
   "applyAutomaticTextWorkflowResult(",
   "generateStructuredTable(",
   "word.insertStructuredTable(",

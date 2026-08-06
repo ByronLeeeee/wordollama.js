@@ -22,6 +22,14 @@ const taskpaneStyles = readFileSync(
   new URL("../apps/addin/src/styles.css", import.meta.url),
   "utf8",
 );
+const settingsStyles = readFileSync(
+  new URL("../apps/addin/src/settings/settings.css", import.meta.url),
+  "utf8",
+);
+const settingsMain = readFileSync(
+  new URL("../apps/addin/src/settings/main.tsx", import.meta.url),
+  "utf8",
+);
 const viteConfig = readFileSync(
   new URL("../apps/addin/vite.config.ts", import.meta.url),
   "utf8",
@@ -36,10 +44,13 @@ const desktopBridge = readFileSync(
 );
 assert.match(wpsEntry, /src="\.\/main\.js"/u);
 assert.match(wpsMain, /\/wps\.html\?surface=/u);
+assert.match(wpsMain, /wpsNavigation/u);
 assert.match(wpsMain, /application\.ShowDialog/u);
 assert.match(wpsMain, /application\.GetTaskPane\(wordOllamaTaskPaneId\)/u);
 assert.doesNotMatch(wpsMain, /var wordOllamaTaskPane =/u);
 assert.match(wpsMain, /settings\.html\?wpsDialog=1/u);
+assert.match(wpsMain, /settings\.html\?wpsDialog=1&wpsNavigation=/u);
+assert.match(wpsMain, /\r?\n\s*0,\r?\n\s*false,\r?\n\s*true,\r?\n\s*true/u, "WPS dialog loading must not use a finite timeout");
 assert.doesNotMatch(wpsMain, /settings\.html\?wpsTaskpane=1/u);
 assert.match(wpsMain, /return "assets\/ribbon\/wps\/"/u);
 assert.doesNotMatch(wpsRibbon, /(?:JS调试器|debugger|devtools)/iu);
@@ -62,6 +73,12 @@ assert.match(taskpaneMain, /dataset\.host = "wps"/u);
 assert.match(taskpaneStyles, /:root\[data-host="wps"\] \.agent-shell[\s\S]*padding-top: 0/u);
 assert.match(taskpaneStyles, /DaisyUI 5[\s\S]*:root\[data-host="wps"\] \.btn-primary/u);
 assert.match(taskpaneStyles, /:root\[data-host="wps"\] \.input[\s\S]*border: 1px solid var\(--border-strong\)/u);
+assert.match(settingsStyles, /\.btn-primary\s*\{[\s\S]*background: var\(--color-primary\)/u);
+assert.match(settingsStyles, /--settings-active-model-background:/u);
+assert.match(settingsStyles, /\.settings-saved-model-row\.active\s*\{[\s\S]*background: var\(--settings-active-model-background\)/u);
+assert.match(settingsStyles, /\.settings-field-stack\s*\{[\s\S]*display: grid;[\s\S]*gap: 10px/u);
+assert.match(settingsStyles, /\.settings-card-body\s*\{[\s\S]*display: grid;[\s\S]*gap: 16px/u);
+assert.match(settingsMain, /dataset\.host = "wps"/u);
 assert.match(viteConfig, /target:\s*"chrome104"/u);
 assert.match(viteConfig, /cssTarget:\s*"chrome104"/u);
 for (const action of wpsRibbon.matchAll(/onAction="([^"]+)"/gu)) {
@@ -149,7 +166,10 @@ const paragraphs = {
       Range: {
         get Text() { return `${paragraphValues[index - 1]}\r`; },
         set Text(value: string) { paragraphValues[index - 1] = value.replace(/\r$/u, ""); },
-        InsertAfter(value: string) { paragraphValues[index - 1] += value; },
+        InsertAfter(value: string) {
+          if (value.endsWith("\r")) paragraphValues.splice(index, 0, value.slice(0, -1));
+          else paragraphValues[index - 1] += value;
+        },
         Select() { values.set("selected", String(index)); },
       },
     };
@@ -204,7 +224,7 @@ assert.equal(isWpsHost(), true, "WPS must be detected before ActiveDocument is r
 window.wps = activeWpsApplication;
 const word = new WpsWordAdapter();
 assert.equal(word.supportsTool("get_selection"), true);
-assert.equal(word.supportsTool("revisions"), true);
+assert.equal(word.supportsTool("revisions"), false, "tools must follow the active WPS document capabilities");
 assert.deepEqual(await word.getSelection(), {
   text: "用户选区",
   documentUrl: "C:\\docs\\sample.docx",
@@ -217,7 +237,7 @@ assert.equal((await word.searchText("关键字")).locations[0]?.paragraph, 2);
 await word.replaceParagraph(1, "已替换");
 assert.equal(paragraphValues[0], "已替换");
 await word.insertAfterParagraph(2, "（补充）");
-assert.equal(paragraphValues[1], "第二段包含关键字（补充）");
+assert.deepEqual(paragraphValues.slice(1, 4), ["第二段包含关键字", "（补充）", "第三段"]);
 await word.insertAtCursor("光标文本");
 assert.equal(values.get("typed"), "光标文本");
 await word.addComment("批注意见");

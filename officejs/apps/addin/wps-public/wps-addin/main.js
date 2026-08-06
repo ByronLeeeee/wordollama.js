@@ -72,7 +72,8 @@ function ResetWordOllamaTaskPane() {
 
 function WordOllamaWorkflowUrl(surface, workflow) {
   return WordOllamaOrigin() + "/wps.html?surface=" +
-    encodeURIComponent(surface) + "&workflow=" + encodeURIComponent(workflow);
+    encodeURIComponent(surface) + "&workflow=" + encodeURIComponent(workflow) +
+    "&wpsNavigation=" + Date.now().toString(36);
 }
 
 function OpenWordOllamaSettingsDialog() {
@@ -80,7 +81,7 @@ function OpenWordOllamaSettingsDialog() {
   if (!application || typeof application.ShowDialog !== "function") return false;
   try {
     return application.ShowDialog(
-      WordOllamaOrigin() + "/settings.html?wpsDialog=1",
+      WordOllamaOrigin() + "/settings.html?wpsDialog=1&wpsNavigation=" + Date.now().toString(36),
       "WordOllama.JS 设置",
       1080,
       760,
@@ -88,7 +89,7 @@ function OpenWordOllamaSettingsDialog() {
       true,
       2,
       "",
-      15000,
+      0,
       false,
       true,
       true
@@ -119,6 +120,7 @@ function GetWordOllamaTaskPane() {
 }
 
 function OpenWordOllamaWorkflow(surface, workflow, title) {
+  var routeKey = surface + ":" + workflow;
   var url = WordOllamaWorkflowUrl(surface, workflow);
   var application = WordOllamaApplication();
   if (!application || typeof application.CreateTaskPane !== "function") return false;
@@ -128,10 +130,10 @@ function OpenWordOllamaWorkflow(surface, workflow, title) {
       taskPane = application.CreateTaskPane(url, "WordOllama.JS · " + title);
       if (!taskPane) return false;
       wordOllamaTaskPaneId = taskPane.ID;
-      wordOllamaTaskPaneUrl = url;
-    } else if (wordOllamaTaskPaneUrl !== url && typeof taskPane.Navigate === "function") {
+      wordOllamaTaskPaneUrl = routeKey;
+    } else if (wordOllamaTaskPaneUrl !== routeKey && typeof taskPane.Navigate === "function") {
       taskPane.Navigate(url);
-      wordOllamaTaskPaneUrl = url;
+      wordOllamaTaskPaneUrl = routeKey;
     }
     taskPane.Visible = true;
     return true;

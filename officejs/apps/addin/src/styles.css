@@ -802,22 +802,14 @@ button.translation-swap-button:hover {
   font-size: 10px;
   line-height: 1.4;
 }
-.translation-instructions {
-  margin: 8px 0;
-}
-.translation-instructions-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
+.translation-instructions { margin: 8px 0; }
 
 /* Do not flash the default Agent workspace while a Ribbon deep link is resolving. */
 :root[data-route-pending="true"] .agent-shell {
   visibility: hidden;
 }
-.translation-instructions > :is(input, select) { width: 100%; height: 36px; }
-.translation-instructions > input { margin-top: 6px; }
+.translation-instructions-body > :is(input, select) { width: 100%; height: 36px; }
+.translation-instructions-body > input { margin-top: 0; }
 .translation-save-prompt { width: fit-content; }
 .translation-primary-actions,
 .translation-result-actions {
@@ -967,10 +959,13 @@ button.translation-swap-button:hover {
   line-height: 1.6;
 }
 
-.workflow-prompt-panel > .select {
+.workflow-prompt-panel .select {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 0;
 }
+
+.workflow-prompt-body { gap: 8px; }
+.workflow-prompt-manage-row { display: flex; min-height: 24px; justify-content: flex-end; }
 
 .workflow-save-prompt {
   width: fit-content;
@@ -1253,7 +1248,17 @@ button.translation-swap-button:hover {
   bottom: 8px;
   z-index: 2;
 }
-.workflow-workspace-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
+.workflow-workspace-header {
+  position: sticky;
+  z-index: 12;
+  top: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 6px 0 8px;
+  background: var(--canvas);
+}
 .workflow-workspace-header h2 { margin: 1px 0 0; font-size: 16px; }
 .workflow-workspace-header p { margin: 3px 0 0; color: #64748b; font-size: 11px; }
 .text-workflow-workspace > label { display: block; margin: 12px 0 5px; color: #475569; font-size: 11px; font-weight: 600; }

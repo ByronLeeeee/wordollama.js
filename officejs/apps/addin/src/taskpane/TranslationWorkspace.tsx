@@ -65,11 +65,12 @@ export function TranslationWorkspace() {
         </label>
       </div>
 
-      <section className="translation-instructions">
-        <div className="translation-instructions-heading">
-          <span data-i18n="taskpane.translation.instructions">Terminology or style (optional)</span>
+      <details className="collapse collapse-arrow task-options translation-instructions" data-default-collapsed>
+        <summary className="collapse-title" data-i18n="taskpane.translation.instructions">Terminology or style (optional)</summary>
+        <div className="collapse-content task-options-body translation-instructions-body">
+          <div className="workflow-prompt-manage-row">
           <button id="translation-manage-prompts" className="btn btn-ghost btn-xs" type="button" data-i18n="taskpane.text.managePrompts">Manage</button>
-        </div>
+          </div>
         <select id="translation-prompt-select" className="select select-bordered select-sm" aria-label="Translation prompt" data-i18n-aria-label="taskpane.translation.promptPreset" />
         <input
           id="translation-instructions"
@@ -79,7 +80,8 @@ export function TranslationWorkspace() {
           data-i18n-placeholder="taskpane.translation.instructionsPlaceholder"
           data-prompt-enhance
         />
-      </section>
+        </div>
+      </details>
 
       <section className="card card-border translation-panel">
         <div className="translation-panel-heading">

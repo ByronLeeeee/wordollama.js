@@ -51,10 +51,6 @@ function element<T extends Element>(selector: string): T {
   return value;
 }
 
-function normalizeSelection(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
 function readRecentLanguages(): TranslationLanguageCode[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(RECENT_LANGUAGES_KEY) ?? "[]");
@@ -255,8 +251,8 @@ export function initializeTranslationWorkspace(
     const hasLanguages = Boolean(getSourceLanguage() && getTargetLanguage());
     const hasResult = Boolean(result.value.trim()) && abortController === null;
     runButton.disabled = !hasSource || !hasLanguages || abortController !== null;
-    replaceButton.disabled = !hasResult || !linkedSelection;
-    preciseButton.disabled = !hasResult || !linkedSelection;
+    replaceButton.disabled = !hasResult;
+    preciseButton.disabled = !hasResult;
     insertButton.disabled = !hasResult;
     retryButton.disabled = !hasSource || !hasLanguages || abortController !== null || !result.value.trim();
     copyButton.disabled = !hasResult;
@@ -358,14 +354,10 @@ export function initializeTranslationWorkspace(
     }
   };
 
-  const assertSelectionUnchanged = async () => {
-    if (!linkedSelection) {
-      throw new Error(i18n.t("taskpane.translation.errors.selectionRequired"));
-    }
+  const currentSelection = async () => {
     const current = await dependencies.word.getSelection();
-    if (normalizeSelection(current.text) !== normalizeSelection(linkedSelection)) {
-      throw new Error(i18n.t("taskpane.errors.selectionChanged"));
-    }
+    if (!current.text.trim()) throw new Error(i18n.t("taskpane.translation.errors.selectionRequired"));
+    return current.text;
   };
 
   renderLanguageOptions();
@@ -441,9 +433,9 @@ export function initializeTranslationWorkspace(
   });
 
   const applyPreciseTranslation = async () => {
-    await assertSelectionUnchanged();
-    const precise = await dependencies.word.applyPreciseRevision(linkedSelection, result.value);
-    setLinkedSelection(result.value);
+    const selectedText = await currentSelection();
+    const precise = await dependencies.word.applyPreciseRevision(selectedText, result.value);
+    setLinkedSelection("");
     actionStatus.textContent = i18n.t(precise
       ? "taskpane.status.preciseRevisionApplied"
       : "taskpane.status.trackedReplaceApplied");
@@ -503,18 +495,18 @@ export function initializeTranslationWorkspace(
   });
   replaceButton.addEventListener("click", async () => {
     try {
-      await assertSelectionUnchanged();
+      await currentSelection();
       await dependencies.word.replaceSelection(result.value);
       actionStatus.textContent = i18n.t("taskpane.translation.replaced");
-      setLinkedSelection(result.value);
+      setLinkedSelection("");
     } catch (error) {
       dependencies.showError(error);
     }
   });
   insertButton.addEventListener("click", async () => {
     try {
-      if (linkedSelection) {
-        await assertSelectionUnchanged();
+      const selectedText = await dependencies.word.getSelection();
+      if (selectedText.text.trim()) {
         await dependencies.word.insertAfterSelection(`\n${result.value}`);
       } else {
         await dependencies.word.insertAtCursor(result.value);

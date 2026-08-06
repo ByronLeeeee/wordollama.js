@@ -177,19 +177,21 @@ function ImageWorkflow() {
         />
       </div>
       <p id="image-file-status" className="muted" />
-      <div className="form-group task-instructions">
-        <label htmlFor="image-prompt" data-i18n="taskpane.image.requirements">
-          Analysis requirements
-        </label>
+      <details className="collapse collapse-arrow task-options image-instructions" data-default-collapsed>
+        <summary className="collapse-title" data-i18n="taskpane.image.requirements">Analysis requirements</summary>
+        <div className="collapse-content task-options-body">
         <textarea
           id="image-prompt"
           className="textarea"
           rows={3}
+          aria-label="Analysis requirements"
+          data-i18n-aria-label="taskpane.image.requirements"
           placeholder="For example: Extract the table and explain anomalous data…"
           data-i18n-placeholder="taskpane.image.requirementsPlaceholder"
           data-prompt-enhance
         />
-      </div>
+        </div>
+      </details>
       <div className="task-primary-actions">
         <button
           id="image-analyze"

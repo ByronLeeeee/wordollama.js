@@ -1359,7 +1359,7 @@ function SkillsPage() {
           </div>
         )}
       >
-        <div className="settings-field-stack mb-4">
+        <div className="settings-field-stack">
           <textarea
             className="textarea textarea-bordered w-full"
             rows={3}
@@ -1398,7 +1398,7 @@ function SkillsPage() {
             }
           })()}><Upload size={14} />{t("skills.importZip")}</button>
         </div>
-        <div className={`mt-4 ${skills.length ? "settings-list" : "settings-list-empty"}`}>
+        <div className={skills.length ? "settings-list" : "settings-list-empty"}>
           {skills.length ? skills.map((skill) => (
             <div className="settings-list-button settings-skill-row" key={skill.name} title={skill.description}>
               <div className="min-w-0">

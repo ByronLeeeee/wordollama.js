@@ -146,6 +146,20 @@ const revisionHunks = buildTextRevisionHunks("合同应当立即履行。违约�
 assert(revisionHunks.length === 2, "precise revisions preserve separate edits");
 assert(revisionHunks[0].originalText.includes("立即") && revisionHunks[1].revisedText.includes("五"),
   "precise revision hunks retain the changed text");
+const applyRevisionHunks = (original: string, revised: string): string => {
+  let value = original;
+  for (const hunk of [...buildTextRevisionHunks(original, revised)].reverse()) {
+    value = `${value.slice(0, hunk.originalStart)}${hunk.revisedText}${value.slice(hunk.originalStart + hunk.originalText.length)}`;
+  }
+  return value;
+};
+assert(
+  applyRevisionHunks(
+    "If you already have your text and content. WPS AI can also help you improve it. Whether you need it shorter, I've got you covered.",
+    "If you already have your text and content ready, WPS AI can step in to help. Whether you need more detail or a new format, I've got you covered.",
+  ) === "If you already have your text and content ready, WPS AI can step in to help. Whether you need more detail or a new format, I've got you covered.",
+  "applying every precise revision hunk reconstructs the displayed result exactly",
+);
 
 let promptStorage = "";
 const storage = {

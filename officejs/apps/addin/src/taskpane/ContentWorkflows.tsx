@@ -47,13 +47,14 @@ function TextWorkflow() {
           data-i18n-placeholder="taskpane.text.sourcePlaceholder"
         />
       </article>
-      <article className="card card-border task-panel workflow-prompt-panel">
-        <div className="task-panel-heading">
-          <h3 data-i18n="taskpane.text.promptPreset">Prompt</h3>
+      <details className="collapse collapse-arrow task-options workflow-prompt-panel" data-default-collapsed>
+        <summary className="collapse-title" data-i18n="taskpane.text.promptPreset">Prompt</summary>
+        <div className="collapse-content task-options-body workflow-prompt-body">
+          <div className="workflow-prompt-manage-row">
           <button id="workflow-manage-prompts" className="btn btn-ghost btn-xs" type="button" data-i18n="taskpane.text.managePrompts">
             Manage
           </button>
-        </div>
+          </div>
         <label className="sr-only" htmlFor="workflow-prompt-select" data-i18n="taskpane.text.promptPreset">Prompt</label>
         <select id="workflow-prompt-select" className="select select-bordered select-sm" />
         <div className="form-group task-instructions">
@@ -78,7 +79,8 @@ function TextWorkflow() {
             <input id="workflow-auto-apply" className="toggle toggle-primary toggle-sm" type="checkbox" />
           </label>
         </div>
-      </article>
+        </div>
+      </details>
       <div className="task-primary-actions">
         <button id="workflow-generate" className="btn btn-primary btn-sm" type="button" data-i18n="taskpane.common.generate">
           Generate

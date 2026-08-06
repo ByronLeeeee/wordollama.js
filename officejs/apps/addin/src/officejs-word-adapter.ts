@@ -80,7 +80,7 @@ export function resolveBuiltInStyleName(styleName: string): Word.BuiltInStyleNam
   return BUILT_IN_STYLE_ALIASES[normalized];
 }
 
-function markdownNoteToPlainText(value: string): string {
+export function markdownNoteToPlainText(value: string): string {
   return value
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|mailto:[^)\s]+)\)/giu, "$1 ($2)")
     .replace(/`([^`\n]+)`/gu, "$1")
@@ -134,6 +134,10 @@ export class OfficeJsWordAdapter {
       context.document.body.insertOoxml(ooxml, Word.InsertLocation.replace);
       await context.sync();
     });
+  }
+
+  async finalizeDocumentSnapshot(snapshot: string | null): Promise<string | null> {
+    return snapshot;
   }
 
   async createReviewBookmarks(
