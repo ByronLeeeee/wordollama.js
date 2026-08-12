@@ -117,7 +117,7 @@ public sealed partial class AutomaticMemoryService : BackgroundService
     public static IReadOnlyList<string> ExtractExplicitPreferenceCandidates(string value)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > 20_000) return [];
-        return value.Split(['\r', '\n', '。', '！', '？', '.', '!', '?'], StringSplitOptions.RemoveEmptyEntries)
+        return value.Split(new[] { '\r', '\n', '。', '！', '？', '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(part => part.Trim())
             .Where(part => part.Length is >= 4 and <= 500)
             .Where(part => PreferencePattern().IsMatch(part) && !SecretPattern().IsMatch(part))

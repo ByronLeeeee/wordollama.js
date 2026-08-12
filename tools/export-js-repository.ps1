@@ -26,49 +26,17 @@ if (Test-Path -LiteralPath $destination) {
     New-Item -ItemType Directory -Path $destination | Out-Null
 }
 
-$trackedPaths = @(
-    ".github/workflows/officejs-unified-ci.yml",
-    ".github/workflows/officejs-signed-candidate.yml",
-    "LICENSE",
-    "docs/OFFICE_JS_MIGRATION_PLAN.zh-CN.md",
-    "docs/OFFICE_JS_UI_PARITY_MATRIX.zh-CN.md",
-    "docs/OFFICE_JS_UNIFIED_DESKTOP_PLAN.zh-CN.md",
-    "docs/SECURITY.md",
-    "docs/THIRD-PARTY-NOTICES.md",
-    "docs/evidence",
-    "officejs",
-    "packaging",
-    "src",
-    "tools/bridge-live-api-smoke-test.ps1",
-    "tools/bridge-package-smoke-test.ps1",
-    "tools/create-compare-host-fixtures.ps1",
-    "tools/export-js-repository.ps1",
-    "tools/legal-api-smoke-test.ps1",
-    "tools/office-addin-install-smoke-test.ps1",
-    "tools/offline-nuget.config",
-    "tools/platform-secret-store-smoke",
-    "tools/record-word-host-supplemental.ps1",
-    "tools/unified-bridge-settings-smoke",
-    "tools/unified-core-smoke",
-    "tools/unified-smoke-test.ps1",
-    "tools/update-index-smoke-test.ps1",
-    "tools/word-host-supplemental-smoke-test.ps1",
-    "tools/js-repository-templates"
-)
 $temporaryArchive = Join-Path ([IO.Path]::GetTempPath()) (
     "wordollama-js-export-" + [Guid]::NewGuid().ToString("N") + ".zip")
 try {
-    & git -C $source archive --format=zip --output=$temporaryArchive HEAD -- $trackedPaths
+    # The repository is now JS-only. Export the complete committed tree so new
+    # legal, governance, platform, and build files cannot be silently omitted by
+    # an obsolete allowlist.
+    & git -C $source archive --format=zip --output=$temporaryArchive HEAD
     if ($LASTEXITCODE -ne 0) {
         throw "git archive failed with exit code $LASTEXITCODE."
     }
     Expand-Archive -LiteralPath $temporaryArchive -DestinationPath $destination
-
-    $templates = Join-Path $destination "tools/js-repository-templates"
-    foreach ($template in @("README.md", "CONTRIBUTING.md", "SECURITY.md", ".gitignore")) {
-        Copy-Item -LiteralPath (Join-Path $templates $template) `
-            -Destination (Join-Path $destination $template) -Force
-    }
 } finally {
     if (Test-Path -LiteralPath $temporaryArchive) {
         Remove-Item -LiteralPath $temporaryArchive -Force

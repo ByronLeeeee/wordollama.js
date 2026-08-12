@@ -11,14 +11,14 @@ React 前端与本地 API。Bridge 以当前用户身份登录自启；用户安
 pwsh ./packaging/publish-bridge.ps1 -Runtime win-x64 `
   -AddinOrigin https://localhost:37421 `
   -AddinStaticRoot ./artifacts/addin/0.1.0 `
-  -UpdateIndexUrl https://downloads.wordollama.com/update-index-0.1.0.json `
+  -UpdateIndexUrl https://downloads.wordollama.com/js/index.json `
   -ExpectedUpdatePublisherSubject "CN=Your Exact Publisher Subject"
 
 # 在 macOS 发布机执行
 pwsh ./packaging/publish-bridge.ps1 -Runtime osx-arm64 `
   -AddinOrigin https://localhost:37421 `
   -AddinStaticRoot ./artifacts/addin/0.1.0 `
-  -UpdateIndexUrl https://downloads.wordollama.com/update-index-0.1.0.json `
+  -UpdateIndexUrl https://downloads.wordollama.com/js/index.json `
   -ExpectedUpdatePublisherSubject "Developer ID Installer: Example (TEAMID)"
 ```
 
@@ -36,7 +36,7 @@ pwsh ./packaging/package-unified-release.ps1 -Runtime win-x64 `
   -Version 0.1.0 -ManifestVersion 1.2.0.0 `
   -BaseUrl https://localhost:37421 `
   -BridgeUrl https://localhost:37421 `
-  -UpdateIndexUrl https://downloads.wordollama.com/update-index-0.1.0.json `
+  -UpdateIndexUrl https://downloads.wordollama.com/js/index.json `
   -ExpectedUpdatePublisherSubject "CN=Your Exact Publisher Subject"
 ```
 
@@ -317,8 +317,8 @@ schema，但不再建议手工填写；不能通过修改 unsigned descriptor �
 pwsh ./packaging/create-update-index.ps1 `
   -ArtifactRoot ./artifacts/unified `
   -Version 1.2.3 `
-  -DownloadBaseUrl https://updates.example.com/wordollama `
-  -IndexUrl https://updates.example.com/wordollama/stable/index.json `
+  -DownloadBaseUrl https://downloads.wordollama.com/js `
+  -IndexUrl https://downloads.wordollama.com/js/index.json `
   -VerifiedReleaseDescriptorPaths @(
     "./artifacts/unified/unified-release-1.2.3-win-x64.json"
     "./artifacts/unified/unified-release-1.2.3-osx-arm64.json"

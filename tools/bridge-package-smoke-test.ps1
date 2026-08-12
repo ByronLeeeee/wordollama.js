@@ -33,6 +33,8 @@ New-Item -ItemType Directory -Force -Path `
 New-Item -ItemType Directory -Force -Path `
     (Join-Path $smokeAddinStaticRoot "wps-addin") | Out-Null
 New-Item -ItemType Directory -Force -Path `
+    (Join-Path $smokeAddinStaticRoot "legal") | Out-Null
+New-Item -ItemType Directory -Force -Path `
     (Join-Path $smokeAddinStaticRoot "wps-addin/assets/ribbon") | Out-Null
 New-Item -ItemType Directory -Force -Path `
     (Join-Path $smokeAddinStaticRoot "wps-addin/assets/ribbon/wps") | Out-Null
@@ -64,6 +66,17 @@ Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "wps-addin/assets/ribb
     -Value '<svg xmlns="http://www.w3.org/2000/svg" />' -Encoding utf8NoBOM
 Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "assets/app.js") `
     -Value "globalThis.wordOllamaDesktopHost = true;" -Encoding utf8NoBOM
+foreach ($legalFile in @(
+    "LICENSE.txt",
+    "NOTICE.txt",
+    "SOURCE.md",
+    "PRIVACY.md",
+    "THIRD-PARTY-NOTICES.md",
+    "THIRD-PARTY-LICENSES.txt"
+)) {
+    Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "legal/$legalFile") `
+        -Value "WordOllama.JS package smoke legal fixture: $legalFile" -Encoding utf8NoBOM
+}
 Set-Content -LiteralPath (Join-Path $smokeAddinStaticRoot "manifest.xml") `
     -Value @'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -133,7 +146,15 @@ function Assert-PublishDirectory {
         -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps-addin/ribbon.xml") -PathType Leaf) -or
         -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps-addin/assets/ribbon/agent.svg") -PathType Leaf) -or
         -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/wps-addin/assets/ribbon/wps/agent.svg") -PathType Leaf) -or
-        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/assets/ribbon/agent.svg") -PathType Leaf)) {
+        -not (Test-Path -LiteralPath (Join-Path $directory "wwwroot/assets/ribbon/agent.svg") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "legal/LICENSE.txt") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "legal/NOTICE.txt") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "legal/SOURCE.md") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "legal/PRIVACY.md") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "legal/THIRD-PARTY-NOTICES.md") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "legal/frontend-THIRD-PARTY-LICENSES.txt") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "legal/dotnet/LICENSE.txt") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $directory "legal/dotnet/ThirdPartyNotices.txt") -PathType Leaf)) {
         throw "Bridge package smoke: locally hosted Add-in payload is missing for $Runtime."
     }
 
@@ -162,7 +183,15 @@ function Assert-PublishDirectory {
                 $entryNames -notcontains "wwwroot/wps-addin/ribbon.xml" -or
                 $entryNames -notcontains "wwwroot/wps-addin/assets/ribbon/agent.svg" -or
                 $entryNames -notcontains "wwwroot/wps-addin/assets/ribbon/wps/agent.svg" -or
-                $entryNames -notcontains "wwwroot/assets/ribbon/agent.svg") {
+                $entryNames -notcontains "wwwroot/assets/ribbon/agent.svg" -or
+                $entryNames -notcontains "legal/LICENSE.txt" -or
+                $entryNames -notcontains "legal/NOTICE.txt" -or
+                $entryNames -notcontains "legal/SOURCE.md" -or
+                $entryNames -notcontains "legal/PRIVACY.md" -or
+                $entryNames -notcontains "legal/THIRD-PARTY-NOTICES.md" -or
+                $entryNames -notcontains "legal/frontend-THIRD-PARTY-LICENSES.txt" -or
+                $entryNames -notcontains "legal/dotnet/LICENSE.txt" -or
+                $entryNames -notcontains "legal/dotnet/ThirdPartyNotices.txt") {
                 throw "Bridge package smoke: required entries must be at the archive root for $Runtime."
             }
         }
@@ -188,6 +217,9 @@ function Assert-PackagedBridgeFailsClosed {
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    $startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development"
+    $startInfo.Environment["WORDOLLAMA_TEST_INSTANCE_ID"] =
+        "package-fail-closed-$Runtime-$PID"
     $startInfo.Environment["Bridge__HttpsCertificate__Path"] = $missingCertificate
 
     $process = [System.Diagnostics.Process]::Start($startInfo)

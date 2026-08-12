@@ -536,7 +536,7 @@ public sealed partial class McpSettingsStore
         }
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (node is not JsonValue value || !value.TryGetValue<string>(out var text)) return result;
-        foreach (var line in text.Split(["\r\n", "\n"], StringSplitOptions.None))
+        foreach (var line in text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
         {
             var trimmed = line.Trim();
             if (trimmed.Length == 0 || trimmed.StartsWith('#')) continue;

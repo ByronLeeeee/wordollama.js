@@ -36,6 +36,18 @@ if (string.IsNullOrWhiteSpace(userScope))
 {
     userScope = Environment.UserName;
 }
+var testInstanceId = Environment.GetEnvironmentVariable("WORDOLLAMA_TEST_INSTANCE_ID");
+if (string.Equals(
+        Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"),
+        "Development",
+        StringComparison.OrdinalIgnoreCase) &&
+    !string.IsNullOrWhiteSpace(testInstanceId))
+{
+    // Local integration tests may run while the installed Bridge owns the
+    // production per-user mutex. Hash the test-only discriminator into the
+    // mutex name without weakening the single-instance production boundary.
+    userScope = $"{userScope}\n{testInstanceId[..Math.Min(testInstanceId.Length, 256)]}";
+}
 var instanceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(userScope)))[..16];
 using var instanceMutex = new Mutex(
     initiallyOwned: true,

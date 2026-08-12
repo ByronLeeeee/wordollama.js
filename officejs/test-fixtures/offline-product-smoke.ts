@@ -29,6 +29,9 @@ assert(
     packaging.includes("$env:WORDOLLAMA_BRIDGE_URL = $productionBridgeUrl") &&
     !packaging.includes('Copy-Item -LiteralPath (Join-Path $addinRoot "commands.html")') &&
     packaging.includes("Production commands.html still references source code") &&
+    packaging.includes('Destination = "LICENSE.txt"') &&
+    packaging.includes("collect-runtime-notices.mjs") &&
+    packaging.includes("THIRD-PARTY-LICENSES.txt") &&
     packaging.includes("$env:WORDOLLAMA_ADDIN_VERSION = $ManifestVersion") &&
     packaging.includes('commands.html?v=$ManifestVersion') &&
     packaging.includes("Production Commands.Url was not cache-busted"),

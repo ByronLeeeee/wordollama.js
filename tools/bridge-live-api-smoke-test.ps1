@@ -174,6 +174,7 @@ function Start-IsolatedBridge {
     )
     $environment = @{
         "ASPNETCORE_ENVIRONMENT" = "Development"
+        "WORDOLLAMA_TEST_INSTANCE_ID" = "live-api-smoke-$Port-$PID"
         "Bridge__Urls" = "http://127.0.0.1:$Port"
         "Bridge__AllowedOrigins__0" = $origin
         "Bridge__ProviderSettingsPath" = (Join-Path $smokeRoot "provider-settings.json")

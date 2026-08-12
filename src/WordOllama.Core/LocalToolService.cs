@@ -790,7 +790,7 @@ public sealed class LocalToolService : IInternalToolExecutor
 
             var current = root;
             var remainder = fullPath[root.Length..]
-                .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
                     StringSplitOptions.RemoveEmptyEntries);
             foreach (var component in remainder)
             {

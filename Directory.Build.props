@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <Authors>Boyang Li</Authors>
+    <Company>WordOllama</Company>
+    <Product>WordOllama.JS</Product>
+    <Copyright>Copyright © 2026 Boyang Li</Copyright>
+    <RepositoryUrl>https://github.com/ByronLeeeee/wordollama.js</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+</Project>

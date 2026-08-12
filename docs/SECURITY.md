@@ -6,7 +6,7 @@ WordOllama can send document text to configured AI providers and can optionally 
 
 ## Reporting a vulnerability
 
-Please do not publish credentials, private documents, exploit details, or a working malicious MCP configuration in a public issue. Contact the project maintainer privately through the contact channel listed on the project website, and include:
+Please do not publish credentials, private documents, exploit details, or a working malicious MCP configuration in a public issue. Contact the project maintainer privately at `liboyang@lslby.com`, and include:
 
 - affected version or commit;
 - host application, operating system, Word version, and .NET environment;

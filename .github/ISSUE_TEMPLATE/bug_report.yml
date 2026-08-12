@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a reproducible non-sensitive problem
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include API keys, private documents, tokens, or unredacted logs.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: Package name/version or git commit
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [Windows x64, macOS Apple Silicon, Linux x64, Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      options: [Microsoft Word, WPS Writer, Browser/development, Desktop Bridge only]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use a blank or redacted document where possible.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and redacted diagnostics
+    validations:
+      required: true

@@ -1445,8 +1445,16 @@
     "creatorValue": "李伯阳 / Boyang Li",
     "wechat": "微信",
     "email": "邮件",
-    "privacy": "WordOllama.JS 不主动收集个人信息。请求仅发送到您配置的本地或在线模型提供商。",
+    "legalTitle": "版权与开源许可",
+    "copyright": "版权",
+    "copyrightValue": "Copyright © 2026 李伯阳 / Boyang Li",
+    "license": "许可证",
+    "source": "对应源代码",
+    "privacyPolicy": "隐私说明",
+    "viewPrivacyPolicy": "查看 PRIVACY.md",
+    "privacy": "项目制作者不运营遥测或主动收集个人信息。任务数据仅发送到您配置的模型或外部工具。",
     "disclaimer": "AI 生成内容可能存在错误，使用前请自行核验。",
+    "noWarranty": "本软件依据 GPL-3.0-only 授权，允许依照许可证再分发和修改，但不提供任何担保。",
     "free": "WordOllama.JS 完全免费。如您付费获取，请核实来源。"
   }
 }

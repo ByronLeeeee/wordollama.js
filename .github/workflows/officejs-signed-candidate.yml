@@ -14,6 +14,7 @@ on:
       update_index_url:
         description: Production HTTPS update-index URL
         required: true
+        default: https://downloads.wordollama.com/js/index.json
         type: string
 
 permissions:

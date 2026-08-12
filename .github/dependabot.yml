@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /officejs/apps/addin
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      frontend-runtime:
+        dependency-type: production
+      office-addin-tooling:
+        patterns:
+          - "office-addin-*"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3

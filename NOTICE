@@ -1,0 +1,14 @@
+WordOllama.JS
+Copyright (C) 2026 李伯阳 / Boyang Li
+
+WordOllama.JS is free software licensed under the GNU General Public License
+version 3 only (GPL-3.0-only). You may redistribute and modify it under that
+license. This program is distributed WITHOUT ANY WARRANTY; without even the
+implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+The complete license is in LICENSE. Corresponding source code and build
+instructions are identified in SOURCE.md.
+
+Third-party components remain subject to their own licenses. See
+docs/THIRD-PARTY-NOTICES.md and the additional notice files shipped in binary
+packages.

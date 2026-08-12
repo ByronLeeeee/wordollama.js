@@ -1,52 +1,99 @@
-# WordOllama.JS
+<p align="center">
+  <img src="officejs/apps/addin/assets/icon-80.svg" width="96" height="96" alt="WordOllama.JS logo">
+</p>
 
-WordOllama.JS 是 WordOllama 的 Windows/macOS Word 版与跨平台 WPS 版。项目使用 React 19、
-TypeScript、Vite 和 Office.js 实现 Microsoft Word 界面，并通过独立的
-WPS Writer 适配器复用同一套任务窗格和 Agent；跨平台 .NET 8 Desktop Bridge
-承载 Provider、MCP、Skills、本地工具和安全存储。
+<h1 align="center">WordOllama.JS</h1>
 
-桌面发行采用本地自托管架构：Desktop Bridge 同时提供 React 前端和本地 API，
-安装器负责注册加载项与当前用户登录自启。Windows/macOS 使用
-`https://localhost:37421`；Linux WPS 使用只绑定 `127.0.0.1` 的同源 HTTP。
-最终用户不需要运行 Vite、打开终端或手动启动 Bridge。
+<p align="center">
+  A local-first AI workspace for Microsoft Word and WPS Writer.<br>
+  One React interface, one cross-platform Desktop Bridge, and your choice of models.
+</p>
 
-旧 COM/VSTO 版保留在公开仓库
-[`wordollama-community`](https://github.com/ByronLeeeee/wordollama-community)。
-本仓库只包含 JS 统一版，默认且唯一开发分支为 `main`。
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-## 目录
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-2563eb" alt="GPL-3.0-only"></a>
+  <img src="https://img.shields.io/badge/Microsoft_Word-Office.js-185ABD" alt="Microsoft Word with Office.js">
+  <img src="https://img.shields.io/badge/WPS_Writer-JS_Add--in-D33C32" alt="WPS Writer JS add-in">
+  <img src="https://img.shields.io/badge/React-19-149ECA" alt="React 19">
+  <img src="https://img.shields.io/badge/.NET-8-512BD4" alt=".NET 8">
+</p>
 
-- `officejs/`：React 任务窗格、设置、Office.js 文档适配器和 manifest。
-- `src/`：.NET 8 Core、Desktop Bridge、MCP、平台适配器和 Windows 安装器。
-- `packaging/`：Add-in、Bridge、Windows EXE、macOS PKG、签名和更新脚本。
-- `tools/`：统一回归、打包回归、平台密钥库和真实 Word 验收工具。
-- `docs/`：迁移方案、UI 对照矩阵、安全说明和验收证据。
-- `TODO.md`：尚未完成的工作及换设备后的接续顺序。
+<p align="center">
+  <a href="https://wordollama.com">Website</a> ·
+  <a href="docs/USER_GUIDE.en-US.md">User guide</a> ·
+  <a href="https://github.com/ByronLeeeee/wordollama.js/issues">Issues</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
-最终用户请从[中文用户指南](docs/USER_GUIDE.zh-CN.md)或
-[English user guide](docs/USER_GUIDE.en-US.md)开始。
+---
 
-## 环境要求
+WordOllama.JS brings writing, review, translation, document automation, and
+agentic workflows into Word and WPS. It supports local models such as Ollama and
+llama.cpp as well as OpenAI-compatible endpoints, Claude, Gemini, and other
+configured providers.
 
-- Node.js 24 或更新版本。
-- .NET SDK 8。
-- PowerShell 7（命令名为 `pwsh`）。
-- Microsoft 365 Word（Windows/macOS）；也可使用 WPS Writer（Windows、
-  Apple Silicon macOS 或 Linux x64 测试支持）。
-- Windows 需要 WebView2；macOS 使用系统提供的 Office WebView。
-- Linux WPS 安装包要求 x86_64、systemd 用户服务和 `curl`；保存云端 API Key
-  需要 `libsecret-tools`，Agent 代码沙箱需要 `bubblewrap`。
-- 使用 Ollama 时需另外安装并启动 Ollama。
+The desktop edition is self-hosted on the user's machine. A .NET 8 Desktop
+Bridge serves the React interface and local API, while handling providers, MCP,
+Skills, local tools, secure storage, and update verification. End users do not
+need Vite or a terminal after installing a packaged build.
 
-Windows 正式候选使用用户明确确认后安装到当前用户信任库的固定自签名证书；
-该方案不会获得 SmartScreen 公共信誉：
+> Looking for the legacy COM/VSTO edition? See
+> [`wordollama-community`](https://github.com/ByronLeeeee/wordollama-community).
 
-- Windows：Windows SDK `signtool.exe`；打包流程导出与签名者一致的
-  `.publisher.cer`，用户核对指纹后显式信任，安装器不会静默写入发布者信任。
-- macOS 和 Linux：当前 Action 只生成 unsigned 包。若未来需要 macOS 无警告公共
-  分发，仍需 Developer ID Application、Developer ID Installer 和 Apple 公证凭据。
+## Highlights
 
-## 首次准备
+| Area | What it provides |
+| --- | --- |
+| Writing and editing | Draft, polish, expand, shorten, continue, summarize, proofread, and rewrite with reusable prompt variants |
+| Translation | Free translation with terminology and style controls |
+| Document intelligence | Image understanding, smart tables, Markdown, HTML, document comparison, structured review, and revision workflows |
+| Legal workflows | Risk analysis, fairness review, contract comparison, legal search, moot court, and document review |
+| Agent | Plans, permission gates, checkpoints, long-task recovery, document tools, source cards, and user feedback |
+| Skills and MCP | Built-in Skill creator, `/make-skill`, custom Skills, MCP servers, and source-aware external retrieval |
+| Model flexibility | Ollama, llama.cpp/LM Studio/vLLM through OpenAI-compatible APIs, OpenAI, Claude, Gemini, and custom endpoints |
+| Local-first security | Loopback-only Bridge, origin-bound sessions, OS credential vaults, default-deny tools, sandboxing, and signed-update gates |
+
+All prompt-entry workflows include prompt optimization so the model can refine a
+rough instruction before performing the task.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A["Microsoft Word / WPS Writer"] --> B["React + TypeScript add-in"]
+    B --> C["Local .NET 8 Desktop Bridge"]
+    C --> D["Model providers"]
+    C --> E["Agent · Skills · MCP"]
+    C --> F["Secure storage · local tools · updates"]
+```
+
+Windows and macOS use `https://localhost:37421`. Linux WPS uses same-origin HTTP
+bound only to `127.0.0.1` to avoid embedded-browser certificate incompatibility.
+
+## Platform support
+
+| Host | Platform | Status |
+| --- | --- | --- |
+| Microsoft 365 Word | Windows x64 | Supported |
+| Microsoft 365 Word | Apple Silicon macOS | Supported |
+| WPS Writer | Windows x64 | Supported |
+| WPS Writer | Apple Silicon macOS | Preview |
+| WPS Writer | Linux x64 | Preview |
+| Word on the web / Intel Mac | — | Not supported by the desktop distribution |
+
+Older Word hosts expose only the tools supported by their available Office.js
+requirement sets. Unsupported tools are hidden or return an explicit capability
+message instead of failing silently.
+
+## Get started
+
+For packaged installation, model setup, WPS registration, and platform-specific
+requirements, start with the [English user guide](docs/USER_GUIDE.en-US.md).
+
+For development, install Node.js 24, .NET SDK 8, and PowerShell 7:
 
 ```powershell
 git clone https://github.com/ByronLeeeee/wordollama.js.git
@@ -56,81 +103,26 @@ cd officejs/apps/addin
 npm ci
 npm run certs:install
 cd ../../..
-```
 
-`npm run certs:install` 安装开发用 localhost HTTPS 证书。正式桌面包不使用开发
-证书，生产证书流程见“打包后本机测试”以及 `TODO.md`。
-
-## 开发启动
-
-开发模式需要一个 Bridge 终端和一个 Vite 终端。只有开发时需要 Vite。
-
-### 1. 注册开发 manifest
-
-在实际运行 Word 的同一个用户账户执行：
-
-```powershell
 pwsh ./packaging/install-office-addin-dev.ps1
 ```
 
-Windows 写入当前用户的 Office WEF Developer 登记；macOS 将 manifest 复制到
-Word 容器的 `wef` 目录。它不会注册 COM/VSTO ProgId。
-
-正式 Windows 安装器会登记 WPS 加载项；macOS PKG 在检测到 WPS 容器时会安全
-维护其 `publish.xml`，因此 Word 和 WPS 共用一个 Bridge 安装包。Mac WPS 当前
-仍需要真实 Apple Silicon 设备完成最终宿主验收。
-
-Linux x64 使用 WPS 官方 `~/.local/share/Kingsoft/wps/jsaddons/publish.xml`
-注册路径，并通过仅监听 `127.0.0.1` 的同源 HTTP Bridge 提供 Ribbon、任务窗格和
-API。Linux 不安装 Microsoft Office manifest，也不会开放非回环 HTTP。
-
-### 2. 启动 Desktop Bridge
-
-终端 A：
+Run the Bridge and frontend in separate terminals:
 
 ```powershell
 dotnet run --project ./src/WordOllama.DesktopBridge/WordOllama.DesktopBridge.csproj
 ```
-
-开发 Bridge 默认监听 `http://127.0.0.1:37421`。受信任的开发前端会自动建立会话，
-不需要在 Word 中复制配对码。手动配对接口只在 Development 环境保留给诊断回归，
-不会出现在正式 Ribbon。
-
-### 3. 启动 React 前端
-
-终端 B：
 
 ```powershell
 cd officejs/apps/addin
 npm run dev
 ```
 
-开发前端监听 `https://localhost:3000`。完全退出所有 Word 窗口后重新打开 Word，
-进入 `WordOllama.JS` 功能区即可测试。
+Restart Word, then open the **WordOllama.JS** Ribbon tab.
 
-也可以在 Bridge 已运行时使用：
+## Validation
 
-```powershell
-cd officejs/apps/addin
-npm run start:desktop
-```
-
-该命令由 Office 调试工具启动开发服务器和桌面 Word；如果出现端口占用，不要同时
-运行 `npm run dev`。
-
-### 4. 停止与移除开发旁加载
-
-在两个终端按 `Ctrl+C` 停止 Bridge/Vite，然后执行：
-
-```powershell
-pwsh ./packaging/uninstall-office-addin-dev.ps1
-```
-
-再次完全退出并重启 Word。
-
-## 测试
-
-### 完整统一回归
+Run the complete local regression gate:
 
 ```powershell
 pwsh ./tools/unified-smoke-test.ps1 `
@@ -138,222 +130,56 @@ pwsh ./tools/unified-smoke-test.ps1 `
   -SkipManifestValidation
 ```
 
-它覆盖 TypeScript、React bundle、i18n、38 个 Word 工具、四档宿主能力矩阵、
-Agent、Provider、MCP、Skills、文档比较、加密恢复、OAuth PKCE、更新门禁和真实
-Bridge 重启持久化。
-
-Agent 对长任务采用 30 分钟/200 轮硬预算，并会在上下文接近模型窗口时压缩较早的
-工具结果。联网搜索、URL 获取、MCP/向量检索返回的外部 URL 会显示为可点击的来源卡片。
-任务完成后可以填写反馈并将成功流程整理为 Skill；也可以使用 `/make-skill`，或在
-设置的 Skills 页面直接描述需求，由模型根据当前 Office.js 工具目录生成并校验
-`SKILL.md`。模型详情中的“能力体检”会实际检查模型列表、普通对话、流式响应和原生
-工具调用，适合诊断 llama.cpp、LM Studio、vLLM 等兼容接口。
-
-如果当前网络可以访问 Microsoft manifest 验证服务，可去掉
-`-SkipManifestValidation`。
-
-### 发布包生命周期回归
+It covers the TypeScript/Vite build, i18n, 38 Word tools, four host-capability
+profiles, WPS adapters, Agent, providers, MCP, Skills, sandboxing, update gates,
+and live Bridge restart recovery. The Windows package lifecycle gate is:
 
 ```powershell
 pwsh ./tools/bridge-package-smoke-test.ps1 -Configuration Release
 ```
 
-它覆盖 Bridge ZIP 布局、本地 `wwwroot`、manifest、HTTPS 失败关闭、自启、回滚、
-Windows 安装/卸载以及 macOS PKG 脚本结构。
-
-在目标原生 CI 或具备两个正式 runtime 构建条件的机器上，还可以执行：
-
-```powershell
-pwsh ./tools/bridge-package-smoke-test.ps1 `
-  -Configuration Release `
-  -IncludeCrossBuilds
-```
-
-异平台 `CrossBuildOnly` 只验证编译，不生成可冒充正式包的 ZIP。
-
-### 单独测试前端
-
-```powershell
-cd officejs/apps/addin
-npm run build
-npm run test:ui
-npm run test:settings-i18n
-npm run test:ribbon
-npm run bundle
-```
-
-所有可用测试命令见 `officejs/apps/addin/package.json`。
-
-## 构建桌面包
-
-正式桌面版的前端和 API 使用同一个本地 origin：
-`https://localhost:37421`。
-
-### Windows 测试候选
-
-版本名包含 `smoke` 或 `test` 时可生成未签名测试产物：
-
-```powershell
-pwsh ./packaging/package-unified-release.ps1 `
-  -Runtime win-x64 `
-  -Configuration Release `
-  -Version desktop-smoke `
-  -ManifestVersion 1.2.0.0 `
-  -SkipManifestValidation
-```
-
-主要输出：
+## Repository layout
 
 ```text
-artifacts/unified/addin/WordOllama.JS-Addin-desktop-smoke.zip
-artifacts/unified/bridge/desktop-smoke-win-x64/
-artifacts/unified/bridge/WordOllama-Bridge-desktop-smoke-win-x64.zip
-artifacts/unified/unified-build-desktop-smoke-win-x64.json
+officejs/   React task panes, settings, Office.js/WPS adapters, and host tests
+src/        .NET contracts, Agent/provider core, MCP, platform code, and Bridge
+packaging/  Add-in, Bridge, Windows, macOS, Linux, signing, and update scripts
+tools/      Regression, package lifecycle, secret-store, and host-evidence tools
+docs/       User guides, security notes, architecture plans, and evidence
 ```
 
-Bridge 发布目录中应包含：
+Packaging and release commands are documented in
+[`packaging/README.zh-CN.md`](packaging/README.zh-CN.md).
 
-```text
-WordOllama.DesktopBridge.exe
-WordOllama.JS.xml
-appsettings.json
-wwwroot/index.html
-wwwroot/settings.html
-wwwroot/assets/
-```
+## Security and privacy
 
-生成仅供 smoke 的未签名 Windows EXE：
+WordOllama.JS has no developer-operated telemetry service. Task data is sent
+only to providers or external tools configured by the user. Credentials use the
+Windows Credential Manager, macOS Keychain, or Linux Secret Service where
+available.
 
-```powershell
-pwsh ./packaging/package-windows-installer.ps1 `
-  -ArtifactRoot ./artifacts/unified/bridge `
-  -Version desktop-smoke `
-  -BuildUnsignedForTests
-```
+Read [PRIVACY.md](PRIVACY.md) before using online providers with sensitive
+documents. Report vulnerabilities privately according to
+[SECURITY.md](SECURITY.md); never put credentials or private documents in a
+public issue.
 
-未签名开关不能用于普通正式版本。
+## Contributing
 
-### macOS 测试构建
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before opening a pull request.
 
-必须在对应架构的 macOS 上生成正式 ZIP：
+## Contact
 
-```powershell
-pwsh ./packaging/package-unified-release.ps1 `
-  -Runtime osx-arm64 `
-  -Configuration Release `
-  -Version desktop-smoke `
-  -ManifestVersion 1.2.0.0 `
-  -SkipManifestValidation
-```
+- Website: [WordOllama.com](https://wordollama.com)
+- Creator: 李伯阳 / Boyang Li
+- WeChat: `legal-lby`
+- Email: [liboyang@lslby.com](mailto:liboyang@lslby.com)
 
-macOS 正式版仅支持 Apple Silicon（`osx-arm64`）。在 Windows 上只能加
-`-CrossBuildOnly` 验证，不会生成正式 macOS ZIP。
+## License
 
-## 正式签名与安装器
+Copyright © 2026 李伯阳 / Boyang Li.
 
-先生成统一包，然后在目标操作系统签名 Bridge：
-
-```powershell
-# Windows
-pwsh ./packaging/sign-bridge-release.ps1 `
-  -Runtime win-x64 `
-  -ArtifactRoot ./artifacts/unified/bridge `
-  -Version 1.0.0 `
-  -WindowsCertificateThumbprint <thumbprint>
-
-pwsh ./packaging/package-windows-installer.ps1 `
-  -ArtifactRoot ./artifacts/unified/bridge `
-  -Version 1.0.0 `
-  -WindowsCertificateThumbprint <thumbprint> `
-  -ExpectedPublisherSubject "CN=<exact publisher subject>"
-```
-
-```powershell
-# macOS Apple Silicon
-pwsh ./packaging/sign-bridge-release.ps1 `
-  -Runtime osx-arm64 `
-  -ArtifactRoot ./artifacts/unified/bridge `
-  -Version 1.0.0 `
-  -MacSigningIdentity "Developer ID Application: <name> (<TEAMID>)" `
-  -MacNotaryProfile wordollama-notary `
-  -MacNotarizationEvidencePath ./artifacts/unified/bridge/macos-notarization.json
-
-pwsh ./packaging/package-macos-installer.ps1 `
-  -Runtime osx-arm64 `
-  -ArtifactRoot ./artifacts/unified/bridge `
-  -Version 1.0.0 `
-  -MacInstallerIdentity "Developer ID Installer: <name> (<TEAMID>)" `
-  -MacNotaryProfile wordollama-notary `
-  -BridgeNotarizationEvidencePath ./artifacts/unified/bridge/macos-notarization.json
-```
-
-没有 Developer ID 的 Apple Silicon 本地自签名发布使用显式模式；此模式不会运行或
-伪造 Apple 公证，最终用户必须按用户指南显式信任：
-
-```powershell
-pwsh ./packaging/sign-bridge-release.ps1 `
-  -Runtime osx-arm64 -ArtifactRoot ./artifacts/unified/bridge `
-  -Version 1.0.0 -MacSigningIdentity "WordOllama.JS Local Application" `
-  -LocalSelfSignedMacRelease
-
-pwsh ./packaging/package-macos-installer.ps1 `
-  -Runtime osx-arm64 -ArtifactRoot ./artifacts/unified/bridge `
-  -Version 1.0.0 -MacInstallerIdentity "WordOllama.JS Local Installer" `
-  -LocalSelfSignedRelease `
-  -BridgeLocalSignatureEvidencePath `
-  ./artifacts/unified/bridge/WordOllama-Bridge-1.0.0-osx-arm64.local-signature.json
-```
-
-终审本地自签名候选时，还要给 `finalize-unified-release.ps1` 传入上述本地签名证据、
-安装器证据、`-PlatformLifecycleEvidencePath`、两个精确签名身份和
-`-MacLocalSelfSignedRelease`。生命周期证据必须由目标平台的
-`record-windows-release-lifecycle.ps1` 或 `record-macos-release-lifecycle.ps1` 在干净
-当前用户账户实际执行安装、升级、回滚和卸载后生成。这只证明产物身份固定且可复现，
-不代表 Apple 已公证。
-
-完整签名、终审证据和更新索引流程见
-[`packaging/README.zh-CN.md`](packaging/README.zh-CN.md)。
-
-## 打包后本机测试
-
-正式安装器会先生成产品专用 localhost PFX，再显示用途、指纹和有效期；只有用户明确
-确认后才写入当前用户信任库。开发/离线 ZIP 也可手动提供 SAN 包含 `localhost`、
-`127.0.0.1` 和 `::1` 的 PFX：
-
-```powershell
-# Windows
-pwsh ./packaging/provision-bridge-https.ps1 `
-  -InstallRoot "$env:LOCALAPPDATA/WordOllama.JS/DesktopBridge" `
-  -CertificatePath <trusted-localhost.pfx>
-```
-
-```powershell
-# macOS
-pwsh ./packaging/provision-bridge-https.ps1 `
-  -InstallRoot "$HOME/Library/Application Support/WordOllama.JS/DesktopBridge" `
-  -CertificatePath <trusted-localhost.pfx>
-```
-
-脚本验证证书、复制 PFX、将密码写入 Credential Manager/Keychain，并启动已注册的
-用户级自启项。随后访问：
-
-```text
-https://localhost:37421/health
-https://localhost:37421/index.html
-```
-
-两者正常后，完全退出并重新打开 Word。安装器携带的 manifest 已指向本地 Bridge，
-不再需要 Vite 或在线前端。
-
-## 当前验证状态
-
-在提交 `97efd94` 上已通过：
-
-- .NET Release 零警告构建。
-- 完整 `unified-smoke-test.ps1`。
-- 完整 `bridge-package-smoke-test.ps1`（Windows x64）。
-- 打包后的 Bridge 实进程返回 `/health`、`index.html`、`settings.html` 和静态资源。
-- Windows smoke EXE 安装/卸载，前端、manifest、launcher 和 Startup 载荷完整。
-- Bridge 空闲实测约 65.6 MB 工作集、49.3 MB 私有内存，空闲 CPU 接近 0。
-
-下一步和未完成事项见 [`TODO.md`](TODO.md)。
+WordOllama.JS is free software licensed under
+[GPL-3.0-only](LICENSE). Corresponding-source information is in
+[SOURCE.md](SOURCE.md), and component notices are in
+[docs/THIRD-PARTY-NOTICES.md](docs/THIRD-PARTY-NOTICES.md).

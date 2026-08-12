@@ -1445,8 +1445,16 @@
     "creatorValue": "Boyang Li / 李伯阳",
     "wechat": "WeChat",
     "email": "Email",
-    "privacy": "WordOllama.JS does not collect personal information. Requests are sent only to the local or online provider you configure.",
+    "legalTitle": "Copyright and open-source license",
+    "copyright": "Copyright",
+    "copyrightValue": "Copyright © 2026 Boyang Li / 李伯阳",
+    "license": "License",
+    "source": "Corresponding source",
+    "privacyPolicy": "Privacy notice",
+    "viewPrivacyPolicy": "View PRIVACY.md",
+    "privacy": "The project operator runs no telemetry or personal-data collection service. Task data is sent only to providers or external tools you configure.",
     "disclaimer": "AI-generated content may be inaccurate. Review it before use.",
+    "noWarranty": "This software is licensed under GPL-3.0-only. You may redistribute and modify it under that license, without any warranty.",
     "free": "WordOllama.JS is free software. Verify the source if you paid to obtain it."
   }
 }

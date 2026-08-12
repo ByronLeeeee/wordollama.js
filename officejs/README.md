@@ -30,8 +30,7 @@ Agent 权限按能力独立控制：本地代码与进程、直接 HTTPS 请求�
 把三类权限分别发送给 Bridge；`read_skill` 始终只读可用，本地执行和 HTTP 请求仍
 需要逐次确认。当前执行器不会调用 Shell 解析器，也没有通用文件写入工具：可以运行
 白名单中的 Python/.NET 或 Skill 已带的脚本，但不能默认创建任意脚本、使用管道或
-执行 PowerShell/CMD。需要稳定自动化时优先封装为 Skill/MCP；临时代码工作区方案见
-仓库根目录 `TODO.md`。
+执行 PowerShell/CMD。需要稳定自动化时优先封装为 Skill/MCP。
 
 文档对比提供 `/documents/compare` 跨平台 v2 引擎：先按正文段落、标题样式和表格单元格进行 LCS/唯一锚点对齐，避免中间插入造成后续级联误报，再为修改块返回词级位置、原/新段落索引、OOXML 位置和结构摘要。任务窗格支持选择两份 DOCX、预览并复制完整 JSON；结果继续明确标记 `isApproximate`，不冒充 Word 原生修订文档。
 

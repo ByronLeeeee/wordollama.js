@@ -115,6 +115,51 @@ if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
     throw "Published Bridge executable is missing: $executablePath"
 }
 
+$legalOutput = Join-Path $output "legal"
+New-Item -ItemType Directory -Force -Path $legalOutput | Out-Null
+foreach ($legalFile in @(
+    @{ Source = "LICENSE"; Destination = "LICENSE.txt" },
+    @{ Source = "NOTICE"; Destination = "NOTICE.txt" },
+    @{ Source = "SOURCE.md"; Destination = "SOURCE.md" },
+    @{ Source = "PRIVACY.md"; Destination = "PRIVACY.md" },
+    @{ Source = "docs\THIRD-PARTY-NOTICES.md"; Destination = "THIRD-PARTY-NOTICES.md" }
+)) {
+    $sourcePath = Join-Path $repoRoot $legalFile.Source
+    if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+        throw "Required legal document is missing: $sourcePath"
+    }
+    Copy-Item -LiteralPath $sourcePath `
+        -Destination (Join-Path $legalOutput $legalFile.Destination) -Force
+}
+
+$sdkLines = @(& dotnet --list-sdks)
+if ($LASTEXITCODE -ne 0 -or $sdkLines.Count -eq 0) {
+    throw "Could not locate the .NET SDK legal notices."
+}
+$selectedSdkVersion = (& dotnet --version).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($selectedSdkVersion)) {
+    throw "Could not identify the selected .NET SDK version."
+}
+$sdkLine = $sdkLines |
+    Where-Object { $_.StartsWith("$selectedSdkVersion ", [StringComparison]::Ordinal) } |
+    Select-Object -First 1
+if ([string]::IsNullOrWhiteSpace($sdkLine)) {
+    throw "Could not find selected .NET SDK $selectedSdkVersion in dotnet --list-sdks."
+}
+if ($sdkLine -notmatch '\[(.+)\]\s*$') {
+    throw "Could not parse the .NET SDK location from: $sdkLine"
+}
+$dotnetRoot = Split-Path -Parent $Matches[1]
+$dotnetLegalOutput = Join-Path $legalOutput "dotnet"
+New-Item -ItemType Directory -Force -Path $dotnetLegalOutput | Out-Null
+foreach ($dotnetLegalFile in @("LICENSE.txt", "ThirdPartyNotices.txt")) {
+    $sourcePath = Join-Path $dotnetRoot $dotnetLegalFile
+    if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+        throw "The .NET redistribution notice is missing: $sourcePath"
+    }
+    Copy-Item -LiteralPath $sourcePath -Destination $dotnetLegalOutput -Force
+}
+
 $activeSettingsPath = Join-Path $output "appsettings.json"
 Copy-Item -LiteralPath $configurationTemplate -Destination $activeSettingsPath -Force
 $productionSettings = Get-Content -LiteralPath $activeSettingsPath -Raw | ConvertFrom-Json
@@ -151,7 +196,13 @@ if (-not [string]::IsNullOrWhiteSpace($AddinStaticRoot)) {
         "wps.html",
         "wps-addin/index.html",
         "wps-addin/main.js",
-        "wps-addin/ribbon.xml"
+        "wps-addin/ribbon.xml",
+        "legal/LICENSE.txt",
+        "legal/NOTICE.txt",
+        "legal/SOURCE.md",
+        "legal/PRIVACY.md",
+        "legal/THIRD-PARTY-NOTICES.md",
+        "legal/THIRD-PARTY-LICENSES.txt"
     )) {
         if (-not (Test-Path -LiteralPath (Join-Path $addinStaticRootFullPath $requiredFile) -PathType Leaf)) {
             throw "Packaged Add-in static root is missing $requiredFile."
@@ -172,6 +223,9 @@ if (-not [string]::IsNullOrWhiteSpace($AddinStaticRoot)) {
     }
     Copy-Item -LiteralPath (Join-Path $addinStaticRootFullPath "manifest.xml") `
         -Destination (Join-Path $output "WordOllama.JS.xml") -Force
+    Copy-Item -LiteralPath `
+        (Join-Path $addinStaticRootFullPath "legal\THIRD-PARTY-LICENSES.txt") `
+        -Destination (Join-Path $legalOutput "frontend-THIRD-PARTY-LICENSES.txt") -Force
 }
 
 if ($CrossBuildOnly) {

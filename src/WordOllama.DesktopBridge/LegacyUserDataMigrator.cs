@@ -106,7 +106,7 @@ public static class LegacyUserDataMigrator
             }
             var relative = Path.GetRelativePath(sourceRoot, file.FullName);
             if (relative.Split(
-                    [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                    new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
                     StringSplitOptions.RemoveEmptyEntries).Length > MaximumSkillDepth)
             {
                 throw new InvalidDataException(

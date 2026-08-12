@@ -267,7 +267,7 @@ public sealed class AgentWorkspaceToolExecutor : IInternalToolExecutor, IDisposa
         var current = _root;
         RejectReparsePoint(current);
         if (relative == ".") return;
-        foreach (var segment in relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+        foreach (var segment in relative.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
                      StringSplitOptions.RemoveEmptyEntries))
         {
             current = Path.Combine(current, segment);
@@ -282,7 +282,7 @@ public sealed class AgentWorkspaceToolExecutor : IInternalToolExecutor, IDisposa
         var relative = Path.GetRelativePath(_root, parent);
         var current = _root;
         if (relative == ".") return;
-        foreach (var segment in relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+        foreach (var segment in relative.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
                      StringSplitOptions.RemoveEmptyEntries))
         {
             current = Path.Combine(current, segment);

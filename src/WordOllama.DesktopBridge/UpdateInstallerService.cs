@@ -348,7 +348,7 @@ public sealed class SystemUpdateInstallerPlatform : IUpdateInstallerPlatform
             ["--check-signature", installerPath],
             cancellationToken);
         var publisherMatched = signature.Output
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.Trim())
             .Select(line =>
             {

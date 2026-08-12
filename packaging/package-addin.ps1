@@ -71,6 +71,8 @@ New-Item -ItemType Directory -Force -Path $output | Out-Null
 
 $npmInfo = Get-Command npm.cmd -ErrorAction SilentlyContinue
 $npmCommand = if ($null -ne $npmInfo) { $npmInfo.Source } else { "npm" }
+$nodeInfo = Get-Command node.exe -ErrorAction SilentlyContinue
+$nodeCommand = if ($null -ne $nodeInfo) { $nodeInfo.Source } else { "node" }
 
 function Invoke-Checked {
     param(
@@ -116,6 +118,29 @@ Copy-Item -LiteralPath (Join-Path $addinRoot "assets") -Destination $output -Rec
 New-Item -ItemType Directory -Force -Path (Join-Path $output "wps-addin\assets") | Out-Null
 Copy-Item -LiteralPath (Join-Path $addinRoot "assets\ribbon") `
     -Destination (Join-Path $output "wps-addin\assets") -Recurse -Force
+
+$legalOutput = Join-Path $output "legal"
+New-Item -ItemType Directory -Force -Path $legalOutput | Out-Null
+foreach ($legalFile in @(
+    @{ Source = "LICENSE"; Destination = "LICENSE.txt" },
+    @{ Source = "NOTICE"; Destination = "NOTICE.txt" },
+    @{ Source = "SOURCE.md"; Destination = "SOURCE.md" },
+    @{ Source = "PRIVACY.md"; Destination = "PRIVACY.md" },
+    @{ Source = "docs\THIRD-PARTY-NOTICES.md"; Destination = "THIRD-PARTY-NOTICES.md" }
+)) {
+    $sourcePath = Join-Path $repoRoot $legalFile.Source
+    if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+        throw "Required legal document is missing: $sourcePath"
+    }
+    Copy-Item -LiteralPath $sourcePath `
+        -Destination (Join-Path $legalOutput $legalFile.Destination) -Force
+}
+Invoke-Checked -Command $nodeCommand `
+    -Arguments @(
+        (Join-Path $addinRoot "scripts\collect-runtime-notices.mjs"),
+        (Join-Path $legalOutput "THIRD-PARTY-LICENSES.txt")
+    ) `
+    -Label "Frontend third-party notice generation"
 
 # commands.html is a Vite entry point. Keep the bundled file copied from dist;
 # copying the source entry here would restore its /src/commands.ts reference,

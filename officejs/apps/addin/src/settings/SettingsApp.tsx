@@ -2226,8 +2226,54 @@ function AboutPage() {
               </div>
             </dl>
           </div>
+          <div className="settings-about-contact" aria-label={t("about.legalTitle")}>
+            <h3>{t("about.legalTitle")}</h3>
+            <dl>
+              <div>
+                <dt>{t("about.copyright")}</dt>
+                <dd>{t("about.copyrightValue")}</dd>
+              </div>
+              <div>
+                <dt>{t("about.license")}</dt>
+                <dd>
+                  <a
+                    href="https://github.com/ByronLeeeee/wordollama.js/blob/main/LICENSE"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    GPL-3.0-only
+                  </a>
+                </dd>
+              </div>
+              <div>
+                <dt>{t("about.source")}</dt>
+                <dd>
+                  <a
+                    href="https://github.com/ByronLeeeee/wordollama.js"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    GitHub
+                  </a>
+                </dd>
+              </div>
+              <div>
+                <dt>{t("about.privacyPolicy")}</dt>
+                <dd>
+                  <a
+                    href="https://github.com/ByronLeeeee/wordollama.js/blob/main/PRIVACY.md"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t("about.viewPrivacyPolicy")}
+                  </a>
+                </dd>
+              </div>
+            </dl>
+          </div>
           <p>{t("about.privacy")}</p>
           <p>{t("about.disclaimer")}</p>
+          <p>{t("about.noWarranty")}</p>
           <p>{t("about.free")}</p>
         </div>
       </Card>

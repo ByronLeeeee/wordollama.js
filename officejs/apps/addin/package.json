@@ -2,11 +2,25 @@
   "name": "wordollama-office-addin",
   "private": true,
   "version": "0.1.0",
+  "description": "WordOllama.JS unified Office.js and WPS frontend",
+  "license": "GPL-3.0-only",
+  "homepage": "https://wordollama.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ByronLeeeee/wordollama.js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ByronLeeeee/wordollama.js/issues"
+  },
+  "engines": {
+    "node": ">=24"
+  },
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
     "bundle": "vite build",
     "icons:generate": "node scripts/generate-icons.mjs",
+    "notices:generate": "node scripts/collect-runtime-notices.mjs",
     "test:mock": "node --experimental-strip-types ../../test-fixtures/officejs-registry-smoke.ts",
     "test:matrix": "node --experimental-strip-types ../../test-fixtures/officejs-host-matrix.ts",
     "test:golden": "node --experimental-strip-types ../../test-fixtures/officejs-golden-runner-smoke.ts",
@@ -56,8 +70,7 @@
     "office-addin-manifest": "^2.1.6",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5",
-    "wpsjs": "2.2.3"
+    "vite": "^8.1.5"
   },
   "dependencies": {
     "i18next": "^26.3.6",

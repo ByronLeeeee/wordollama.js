@@ -1,0 +1,32 @@
+name: Feature request
+description: Propose a user-visible improvement
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: hosts
+    attributes:
+      label: Relevant hosts
+      options:
+        - label: Microsoft Word on Windows
+        - label: Microsoft Word on macOS
+        - label: WPS on Windows
+        - label: WPS on macOS
+        - label: WPS on Linux
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Security, privacy, or compatibility considerations
