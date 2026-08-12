@@ -28,7 +28,7 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: officejs/apps/addin/package-lock.json
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
       - name: Install Office.js dependencies
