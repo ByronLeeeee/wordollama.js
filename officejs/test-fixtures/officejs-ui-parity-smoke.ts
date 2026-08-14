@@ -117,8 +117,6 @@ assert(
 );
 
 for (const promptFieldId of [
-  "agent-goal",
-  "agent-requirement",
   "workflow-instruction",
   "workflow-prompt-content",
   "table-requirement",
@@ -134,11 +132,20 @@ for (const promptFieldId of [
     `prompt input ${promptFieldId} must expose the AI improve action`,
   );
 }
+for (const agentFieldId of ["agent-goal", "agent-requirement"]) {
+  assert(
+    !new RegExp(`<(?:input|textarea)[^>]*id="${agentFieldId}"[^>]*data-prompt-enhance`).test(compactTaskpaneMarkup),
+    `agent input ${agentFieldId} must leave the full composer width available`,
+  );
+}
 assert(
   main.includes("initializePromptEnhancers()") &&
     main.includes("await runtime.chat([") &&
     main.includes('field.dispatchEvent(new Event("input"') &&
     css.includes(".prompt-enhance-button") &&
+    /\.prompt-enhance-field\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto;/u.test(css) &&
+    /\.prompt-enhance-button\s*\{[\s\S]*?grid-column:\s*2;[\s\S]*?justify-self:\s*end;/u.test(css) &&
+    !/\.prompt-enhance-field\s*>\s*:is\(input,\s*textarea\)\s*\{[^}]*padding-right:/u.test(css) &&
     settingsEnglish.includes('"promptEnhance"') &&
     settingsChinese.includes('"promptEnhance"'),
   "prompt improvement must call the active model, write back the result, and stay localized",
