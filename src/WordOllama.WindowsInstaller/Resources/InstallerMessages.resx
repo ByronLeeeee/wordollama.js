@@ -24,29 +24,12 @@ Close WPS now and continue installation?
 Choosing No cancels setup.</value></data>
   <data name="CloseWpsFailed" xml:space="preserve"><value>WPS Office could not be closed. Close it in Task Manager, then run setup again.</value></data>
   <data name="Failed" xml:space="preserve"><value>Setup failed: {0}</value></data>
-  <data name="WelcomeTitle" xml:space="preserve"><value>Welcome to WordOllama.JS Setup</value></data>
-  <data name="WelcomeBody" xml:space="preserve"><value>This wizard installs the WordOllama.JS Desktop Bridge and registers the Word add-in for your Windows account.
+  <data name="InstallPrompt" xml:space="preserve"><value>Install WordOllama.JS for the current user?
 
-Close Microsoft Word before continuing when possible. Save any open WPS documents; Setup can offer to close WPS before files are updated.
+Version: {0}
+Install location: {1}
 
-No administrator account is required.</value></data>
-  <data name="ReviewTitle" xml:space="preserve"><value>Ready to install</value></data>
-  <data name="ReviewBody" xml:space="preserve"><value>Review the components and security setting below, then select Install.</value></data>
-  <data name="VersionLabel" xml:space="preserve"><value>Version</value></data>
-  <data name="InstallLocationLabel" xml:space="preserve"><value>Install location (current user)</value></data>
-  <data name="ComponentsLabel" xml:space="preserve"><value>Components</value></data>
-  <data name="ComponentsValue" xml:space="preserve"><value>Desktop Bridge · Microsoft Word add-in · WPS Writer add-in · Automatic startup</value></data>
-  <data name="CertificateConsent" xml:space="preserve"><value>I agree to create and trust a current-user certificate restricted to localhost, 127.0.0.1, and ::1. It only secures the local Bridge and is removed during uninstall.</value></data>
-  <data name="StartAfterInstall" xml:space="preserve"><value>Start the Desktop Bridge after installation</value></data>
-  <data name="InstallingTitle" xml:space="preserve"><value>Installing WordOllama.JS</value></data>
-  <data name="InstallingBody" xml:space="preserve"><value>Setup is verifying the package, installing the local service, registering Office and WPS, and checking the secure connection. This can take a moment.</value></data>
-  <data name="CompleteTitle" xml:space="preserve"><value>Installation complete</value></data>
-  <data name="CompleteBody" xml:space="preserve"><value>WordOllama.JS was installed successfully for the current user. Open Word and select the WordOllama.JS tab to get started.</value></data>
-  <data name="CompleteRestartWord" xml:space="preserve"><value>Microsoft Word was running during installation. Completely close and reopen Word before testing the updated add-in.</value></data>
-  <data name="Cancelled" xml:space="preserve"><value>Installation was cancelled.</value></data>
-  <data name="Back" xml:space="preserve"><value>&amp;Back</value></data>
-  <data name="Next" xml:space="preserve"><value>&amp;Next</value></data>
-  <data name="Install" xml:space="preserve"><value>&amp;Install</value></data>
-  <data name="Finish" xml:space="preserve"><value>&amp;Finish</value></data>
-  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
+Setup installs the Desktop Bridge and registers the Microsoft Word and WPS Writer add-ins. It also creates a current-user certificate restricted to localhost, 127.0.0.1, and ::1 to secure the local connection. The certificate is removed during uninstall.
+
+Select Yes to start installation.</value></data>
 </root>

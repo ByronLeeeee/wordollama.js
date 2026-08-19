@@ -99,9 +99,9 @@ pwsh ./packaging/package-windows-installer.ps1 `
   -ExpectedPublisherSubject "CN=Your Exact Publisher Subject"
 ```
 
-安装器是 .NET 8 自包含单文件 WinExe，内嵌已签名 Bridge ZIP 及 SHA-256 元数据。双击时显示
-中英文向导，依次提供欢迎页、版本/安装位置/组件与本机证书确认、安装进度和完成页；只有用户
-明确点击“安装”后才开始修改本机状态。`--quiet` 等自动升级和回归参数继续使用无界面路径；
+安装器是 .NET 8 自包含单文件 WinExe，内嵌已签名 Bridge ZIP 及 SHA-256 元数据。双击时只显示
+一次中英文确认，列出版本、安装位置、Office/WPS 组件和本机证书用途；用户选择“是”后立即
+安装。`--quiet` 等自动升级和回归参数继续使用无界面路径；
 默认安装到 `%LOCALAPPDATA%\WordOllama.JS\DesktopBridge`，维护版本指针，写入当前用户
 “应用和功能”卸载登记，并用隐藏 VBS 启动器注册当前用户 Startup。重复安装同版本是幂等的，
 卸载只停止和删除该安装根目录内的 Bridge。可信 PFX 尚未配置时 launcher 安静退出；
