@@ -10,14 +10,14 @@ React 前端与本地 API。Bridge 以当前用户身份登录自启；用户安
 # 在 Windows 发布机执行；桌面前端与 API 使用本地 HTTPS
 pwsh ./packaging/publish-bridge.ps1 -Runtime win-x64 `
   -AddinOrigin https://localhost:37421 `
-  -AddinStaticRoot ./artifacts/addin/0.1.0 `
+  -AddinStaticRoot ./artifacts/addin/0.2.0 `
   -UpdateIndexUrl https://downloads.wordollama.com/js/index.json `
   -ExpectedUpdatePublisherSubject "CN=Your Exact Publisher Subject"
 
 # 在 macOS 发布机执行
 pwsh ./packaging/publish-bridge.ps1 -Runtime osx-arm64 `
   -AddinOrigin https://localhost:37421 `
-  -AddinStaticRoot ./artifacts/addin/0.1.0 `
+  -AddinStaticRoot ./artifacts/addin/0.2.0 `
   -UpdateIndexUrl https://downloads.wordollama.com/js/index.json `
   -ExpectedUpdatePublisherSubject "Developer ID Installer: Example (TEAMID)"
 ```
@@ -33,7 +33,7 @@ Bridge 的 CORS allowlist。`UpdateIndexUrl` 留空表示不启用检查更新�
 
 ```powershell
 pwsh ./packaging/package-unified-release.ps1 -Runtime win-x64 `
-  -Version 0.1.0 -ManifestVersion 1.2.0.0 `
+  -Version 0.2.0 -ManifestVersion 1.2.0.4 `
   -BaseUrl https://localhost:37421 `
   -BridgeUrl https://localhost:37421 `
   -UpdateIndexUrl https://downloads.wordollama.com/js/index.json `
@@ -50,7 +50,7 @@ Linux x64 WPS 构建和用户安装包：
 
 ```powershell
 pwsh ./packaging/package-unified-release.ps1 `
-  -Runtime linux-x64 -Version 1.0.0 -ManifestVersion 1.2.0.0 `
+  -Runtime linux-x64 -Version 1.0.0 -ManifestVersion 1.2.0.4 `
   -BaseUrl http://127.0.0.1:37421 -BridgeUrl http://127.0.0.1:37421 `
   -OutputRoot ./artifacts/linux
 
@@ -81,9 +81,9 @@ pwsh ./tools/bridge-package-smoke-test.ps1 -Configuration Release -IncludeCrossB
 
 ```powershell
 pwsh ./packaging/sign-bridge-release.ps1 -Runtime win-x64 -ArtifactRoot ./artifacts/bridge `
-  -Version 0.1.0 -WindowsCertificateThumbprint <thumbprint>
+  -Version 0.2.0 -WindowsCertificateThumbprint <thumbprint>
 pwsh ./packaging/sign-bridge-release.ps1 -Runtime osx-arm64 -ArtifactRoot ./artifacts/bridge `
-  -Version 0.1.0 -MacSigningIdentity "Developer ID Application: Example (TEAMID)" `
+  -Version 0.2.0 -MacSigningIdentity "Developer ID Application: Example (TEAMID)" `
   -MacNotaryProfile wordollama-notary `
   -MacNotarizationEvidencePath ./artifacts/bridge/macos-arm64-notarization.json
 ```
@@ -94,7 +94,7 @@ pwsh ./packaging/sign-bridge-release.ps1 -Runtime osx-arm64 -ArtifactRoot ./arti
 
 ```powershell
 pwsh ./packaging/package-windows-installer.ps1 `
-  -ArtifactRoot ./artifacts/bridge -Version 0.1.0 `
+  -ArtifactRoot ./artifacts/bridge -Version 0.2.0 `
   -WindowsCertificateThumbprint <thumbprint> `
   -ExpectedPublisherSubject "CN=Your Exact Publisher Subject"
 ```
@@ -115,7 +115,7 @@ pwsh ./packaging/package-windows-installer.ps1 `
 
 ```powershell
 pwsh ./packaging/package-macos-installer.ps1 `
-  -Runtime osx-arm64 -ArtifactRoot ./artifacts/bridge -Version 0.1.0 `
+  -Runtime osx-arm64 -ArtifactRoot ./artifacts/bridge -Version 0.2.0 `
   -MacInstallerIdentity "Developer ID Installer: Example (TEAMID)" `
   -MacNotaryProfile wordollama-notary `
   -BridgeNotarizationEvidencePath ./artifacts/bridge/macos-arm64-notarization.json
@@ -186,9 +186,9 @@ Bridge 更新流程：两个受支持 runtime 都完成终审后，用 `create-u
 
 ```powershell
 pwsh ./packaging/install-bridge-update.ps1 `
-  -ArchivePath ./WordOllama-Bridge-0.1.0-win-x64.zip `
+  -ArchivePath ./WordOllama-Bridge-0.2.0-win-x64.zip `
   -InstallRoot "$env:LOCALAPPDATA/WordOllama.JS/DesktopBridge" `
-  -Version 0.1.0 -ExpectedSha256 <update-index 中的 sha256> `
+  -Version 0.2.0 -ExpectedSha256 <update-index 中的 sha256> `
   -RequirePlatformSignature -ExpectedPublisherSubject "<证书 Subject 或 Developer ID Authority>"
 ```
 

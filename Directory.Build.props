@@ -3,6 +3,7 @@
     <Authors>Boyang Li</Authors>
     <Company>WordOllama</Company>
     <Product>WordOllama.JS</Product>
+    <Version>0.2.0</Version>
     <Copyright>Copyright © 2026 Boyang Li</Copyright>
     <RepositoryUrl>https://github.com/ByronLeeeee/wordollama.js</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

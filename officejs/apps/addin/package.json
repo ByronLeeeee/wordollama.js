@@ -1,7 +1,7 @@
 {
   "name": "wordollama-office-addin",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "WordOllama.JS unified Office.js and WPS frontend",
   "license": "GPL-3.0-only",
   "homepage": "https://wordollama.com",

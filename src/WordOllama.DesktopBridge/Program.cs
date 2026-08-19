@@ -194,7 +194,7 @@ var bridgeVersion = typeof(Program).Assembly
     .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
     .InformationalVersion.Split('+', 2)[0]
     ?? typeof(Program).Assembly.GetName().Version?.ToString()
-    ?? "0.1.0";
+    ?? "0.2.0";
 var updateIndexUrl = builder.Configuration["Bridge:Updates:IndexUrl"] ?? string.Empty;
 var expectedUpdatePublisherSubject =
     builder.Configuration["Bridge:Updates:ExpectedPublisherSubject"] ?? string.Empty;

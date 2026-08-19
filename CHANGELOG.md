@@ -3,7 +3,7 @@
 Notable user-visible changes will be recorded here. This project has not yet
 declared a stable release; test build identifiers are not compatibility promises.
 
-## Unreleased
+## 0.2.0 - 2026-08-19
 
 ### Added
 

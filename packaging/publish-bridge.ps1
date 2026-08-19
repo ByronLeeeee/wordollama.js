@@ -4,7 +4,7 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
     [ValidatePattern("^[0-9A-Za-z][0-9A-Za-z._-]*$")]
-    [string]$Version = "0.1.0",
+    [string]$Version = "0.2.0",
     [string]$AddinOrigin = "https://localhost:37421",
     [string]$AddinStaticRoot = "",
     [string]$UpdateIndexUrl = "",
