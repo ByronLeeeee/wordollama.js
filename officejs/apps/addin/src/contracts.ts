@@ -101,11 +101,25 @@ export interface ToolCatalogResponse {
   protocolVersion: string;
   registeredOfficeToolCount: number;
   tools: OfficeToolDescriptor[];
+  externalMcpEnabled: boolean;
 }
 
 export interface SkillSummary {
   name: string;
   description: string;
+}
+
+export interface ExternalOfficeToolCall {
+  callId: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface WordMcpSettingsView {
+  enabled: boolean;
+  configured: boolean;
+  endpoint: string;
+  accessToken?: string;
 }
 
 export interface GenerateSkillRequest {

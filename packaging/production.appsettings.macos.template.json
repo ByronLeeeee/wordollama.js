@@ -8,6 +8,10 @@
     "AllowedOrigins": [
       "https://addin.wordollama.com"
     ],
+    "WordMcp": {
+      "Enabled": false,
+      "AccessToken": ""
+    },
     "Updates": {
       "IndexUrl": "",
       "ExpectedPublisherSubject": ""

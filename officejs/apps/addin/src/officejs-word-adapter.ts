@@ -13,6 +13,12 @@ export interface WordSelection {
   documentUrl?: string;
 }
 
+export interface ExactTextSelectionResult {
+  selected: true;
+  matchCount: 1;
+  text: string;
+}
+
 export interface SearchResult {
   keyword: string;
   count: number;
@@ -173,7 +179,7 @@ export class OfficeJsWordAdapter {
       return true;
     }
 
-    const wordApi14 = ["read_comments", "add_comment"];
+    const wordApi14 = ["read_comments", "add_comment", "apply_precise_revision"];
     const wordApi13 = [
       "read_table",
       "table_insert_row",
@@ -346,6 +352,33 @@ export class OfficeJsWordAdapter {
     });
   }
 
+  async selectExactText(text: string): Promise<ExactTextSelectionResult> {
+    if (!text || text.length > 255) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.exactSelectionLength"));
+    }
+    return Word.run(async (context) => {
+      const matches = context.document.body.search(text, {
+        matchCase: true,
+        matchWholeWord: false,
+        matchWildcards: false,
+      });
+      matches.load("items/text");
+      await context.sync();
+      const exactMatches = matches.items.filter((match) => match.text === text);
+      if (exactMatches.length === 0) {
+        throw new Error(i18n.t("taskpane.wordAdapter.errors.exactSelectionNotFound"));
+      }
+      if (exactMatches.length !== 1) {
+        throw new Error(i18n.t("taskpane.wordAdapter.errors.exactSelectionAmbiguous", {
+          count: exactMatches.length,
+        }));
+      }
+      exactMatches[0].select();
+      await context.sync();
+      return { selected: true, matchCount: 1, text };
+    });
+  }
+
   async replaceSelection(text: string): Promise<void> {
     await Word.run(async (context) => {
       const selection = context.document.getSelection();
@@ -400,6 +433,10 @@ export class OfficeJsWordAdapter {
   }
 
   async applyPreciseRevision(original: string, revised: string): Promise<boolean> {
+    const current = await this.getSelection();
+    if (current.text !== original) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.preciseRevisionSelectionChanged"));
+    }
     const hunks = buildTextRevisionHunks(original, revised);
     if (!hunks.length) return true;
     const previousTrackingMode = await this.beginTrackedChanges();

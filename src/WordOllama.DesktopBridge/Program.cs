@@ -128,6 +128,23 @@ var modelProviderEndpoint = builder.Configuration["Bridge:ModelProvider:Endpoint
     ?? builder.Configuration["Bridge:Ollama:Endpoint"]
     ?? "http://127.0.0.1:11434";
 var secretStore = new PlatformSecretStore();
+var storedWordMcpEnabled = bool.TryParse(
+    secretStore.Get(WordMcpOptions.EnabledSecretName),
+    out var enabledFromSecret) && enabledFromSecret;
+var wordMcpEnabled = builder.Configuration.GetValue("Bridge:WordMcp:Enabled", false) ||
+    storedWordMcpEnabled;
+var wordMcpAccessToken = new[]
+{
+    builder.Configuration["Bridge:WordMcp:AccessToken"],
+    Environment.GetEnvironmentVariable(WordMcpOptions.TokenSecretName),
+    secretStore.Get(WordMcpOptions.TokenSecretName),
+}.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+if (wordMcpEnabled && wordMcpAccessToken.Length < 32)
+{
+    throw new InvalidOperationException(
+        "Bridge:WordMcp:Enabled requires a Word MCP bearer token containing at least 32 characters.");
+}
+var wordMcpOptions = new WordMcpOptions(wordMcpEnabled, wordMcpAccessToken);
 var modelProviderApiKey = builder.Configuration["Bridge:ModelProvider:ApiKey"];
 if (string.IsNullOrWhiteSpace(modelProviderApiKey))
 {
@@ -209,6 +226,11 @@ var httpsCertificatePassword =
 var bridgeEndpoints = bridgeUrls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     .Select(url => new Uri(url, UriKind.Absolute))
     .ToArray();
+if (wordMcpEnabled && bridgeEndpoints.Any(endpoint => !endpoint.IsLoopback))
+{
+    throw new InvalidOperationException(
+        "The Word MCP endpoint controls a live document and may only be enabled on loopback Bridge URLs.");
+}
 if (bridgeEndpoints.Any(endpoint => endpoint.Scheme == Uri.UriSchemeHttps))
 {
     if (string.IsNullOrWhiteSpace(httpsCertificatePath) &&
@@ -256,6 +278,8 @@ else
     builder.WebHost.UseUrls(bridgeUrls);
 }
 builder.Services.AddSingleton<BridgeSessionStore>();
+builder.Services.AddSingleton<OfficeToolBroker>();
+builder.Services.AddSingleton(wordMcpOptions);
 builder.Services.AddSingleton<IProcessRunner, ProcessRunner>();
 builder.Services.AddSingleton<ISystemFolderLauncher, SystemFolderLauncher>();
 builder.Services.AddSingleton(new LocalToolPolicy(
@@ -386,7 +410,8 @@ app.Use(async (context, next) =>
         return;
     }
     if (unsafeMethod &&
-        !context.Request.Path.StartsWithSegments("/pair"))
+        !context.Request.Path.StartsWithSegments("/pair") &&
+        !string.Equals(context.Request.Path.Value, WordMcpEndpoint.Path, StringComparison.OrdinalIgnoreCase))
     {
         var token = context.Request.Headers[BridgeProtocol.SessionHeader].FirstOrDefault()
             ?? context.Request.Cookies[BridgeSessionStore.CookieName];
@@ -614,7 +639,9 @@ app.MapPost("/commands", async (
 app.MapPost("/capabilities", (
     HttpRequest httpRequest,
     ToolCatalogRequest request,
-    BridgeSessionStore sessions) =>
+    BridgeSessionStore sessions,
+    OfficeToolBroker officeTools,
+    WordMcpOptions wordMcp) =>
 {
     var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
     var origin = httpRequest.Headers["Origin"].FirstOrDefault();
@@ -623,11 +650,156 @@ app.MapPost("/capabilities", (
         return Results.Unauthorized();
     }
 
+    var hostId = string.IsNullOrWhiteSpace(request.HostId) ? token! : request.HostId.Trim();
+    if (hostId.Length > 128 || hostId.Any(character =>
+            !char.IsAsciiLetterOrDigit(character) && character is not '-' and not '_' and not '.'))
+    {
+        return Results.BadRequest(new { error = "office_host_id_invalid" });
+    }
     sessions.RegisterOfficeTools(token!, request.Tools);
+    officeTools.RegisterHost(token!, hostId, origin!, request.Tools);
     return Results.Ok(new ToolCatalogResponse(
         BridgeProtocol.CurrentVersion,
         request.Tools.Count,
-        request.Tools));
+        request.Tools,
+        wordMcp.Enabled));
+});
+
+app.MapGet("/office-tools/hosts/{hostId}/requests/next", async (
+    HttpRequest httpRequest,
+    string hostId,
+    BridgeSessionStore sessions,
+    OfficeToolBroker officeTools,
+    CancellationToken cancellationToken) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers.Origin.FirstOrDefault();
+    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
+    var call = await officeTools.WaitForCallAsync(token!, hostId, cancellationToken);
+    return call is null ? Results.NoContent() : Results.Ok(call);
+});
+
+app.MapPost("/office-tools/hosts/{hostId}/requests/{callId}/result", (
+    HttpRequest httpRequest,
+    string hostId,
+    string callId,
+    ExternalOfficeToolResultRequest request,
+    BridgeSessionStore sessions,
+    OfficeToolBroker officeTools) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers.Origin.FirstOrDefault();
+    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
+    return officeTools.CompleteCall(token!, hostId, callId, request)
+        ? Results.Ok(new { accepted = true })
+        : Results.NotFound(new { error = "office_tool_call_not_pending" });
+});
+
+app.MapPost(WordMcpEndpoint.Path, WordMcpEndpoint.HandleAsync);
+
+app.MapGet("/settings/word-mcp", (
+    HttpRequest httpRequest,
+    BridgeSessionStore sessions,
+    WordMcpOptions wordMcp) =>
+{
+    var token = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers.Origin.FirstOrDefault();
+    if (!sessions.TryGet(token, origin, out _)) return Results.Unauthorized();
+    return Results.Ok(new
+    {
+        enabled = wordMcp.Enabled,
+        configured = !string.IsNullOrWhiteSpace(wordMcp.AccessToken),
+        endpoint = $"{httpRequest.Scheme}://{httpRequest.Host}{WordMcpEndpoint.Path}",
+    });
+});
+
+app.MapPost("/settings/word-mcp/token/generate", (
+    HttpRequest httpRequest,
+    BridgeSessionStore sessions,
+    WordMcpOptions wordMcp,
+    IMutableSecretStore secrets) =>
+{
+    var sessionToken = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers.Origin.FirstOrDefault();
+    if (!sessions.TryGet(sessionToken, origin, out _)) return Results.Unauthorized();
+    try
+    {
+        var accessToken = wordMcp.GenerateAndEnable(secrets);
+        return Results.Ok(new
+        {
+            enabled = true,
+            configured = true,
+            endpoint = $"{httpRequest.Scheme}://{httpRequest.Host}{WordMcpEndpoint.Path}",
+            accessToken,
+        });
+    }
+    catch (PlatformNotSupportedException exception)
+    {
+        return Results.Problem(exception.Message, statusCode: StatusCodes.Status501NotImplemented);
+    }
+});
+
+app.MapPost("/settings/word-mcp/enable", (
+    HttpRequest httpRequest,
+    BridgeSessionStore sessions,
+    WordMcpOptions wordMcp,
+    IMutableSecretStore secrets) =>
+{
+    var sessionToken = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers.Origin.FirstOrDefault();
+    if (!sessions.TryGet(sessionToken, origin, out _)) return Results.Unauthorized();
+    try
+    {
+        wordMcp.Enable(secrets);
+        return Results.Ok(new { enabled = true, configured = true,
+            endpoint = $"{httpRequest.Scheme}://{httpRequest.Host}{WordMcpEndpoint.Path}" });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+});
+
+app.MapPost("/settings/word-mcp/disable", (
+    HttpRequest httpRequest,
+    BridgeSessionStore sessions,
+    WordMcpOptions wordMcp,
+    IMutableSecretStore secrets) =>
+{
+    var sessionToken = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers.Origin.FirstOrDefault();
+    if (!sessions.TryGet(sessionToken, origin, out _)) return Results.Unauthorized();
+    wordMcp.Disable(secrets);
+    return Results.Ok(new { enabled = false, configured = true,
+        endpoint = $"{httpRequest.Scheme}://{httpRequest.Host}{WordMcpEndpoint.Path}" });
+});
+
+app.MapPost("/settings/word-mcp/agent-config", (
+    HttpRequest httpRequest,
+    BridgeSessionStore sessions,
+    WordMcpOptions wordMcp) =>
+{
+    var sessionToken = httpRequest.Headers[BridgeProtocol.SessionHeader].FirstOrDefault();
+    var origin = httpRequest.Headers.Origin.FirstOrDefault();
+    if (!sessions.TryGet(sessionToken, origin, out _)) return Results.Unauthorized();
+    if (wordMcp.AccessToken.Length < 32)
+        return Results.BadRequest(new { error = "Generate a Word MCP access token first." });
+    var endpoint = $"{httpRequest.Scheme}://{httpRequest.Host}{WordMcpEndpoint.Path}";
+    var configuration = JsonSerializer.Serialize(new
+    {
+        mcpServers = new Dictionary<string, object>
+        {
+            ["wordollama_word"] = new
+            {
+                url = endpoint,
+                headers = new Dictionary<string, string>
+                {
+                    ["Authorization"] = $"Bearer {wordMcp.AccessToken}",
+                },
+            },
+        },
+    }, new JsonSerializerOptions { WriteIndented = true });
+    return Results.Ok(new { configuration });
 });
 
 async Task<IResult> ChatWithProvider(

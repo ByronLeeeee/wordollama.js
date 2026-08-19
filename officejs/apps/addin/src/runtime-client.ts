@@ -39,6 +39,8 @@ import {
   type UpdateRollbackStatus,
   type UpdateRollbackResult,
   type ResourceDiagnosticsSnapshot,
+  type ExternalOfficeToolCall,
+  type WordMcpSettingsView,
 } from "./contracts";
 import i18n from "./i18n";
 
@@ -75,6 +77,9 @@ import {
 } from "./pairing-session";
 
 export class RuntimeClient {
+  private readonly officeHostId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `word-host-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   private cookieSession = false;
   private sessionToken: string | undefined;
   private csrfToken: string | undefined;
@@ -255,7 +260,7 @@ export class RuntimeClient {
         "Content-Type": "application/json",
         "X-WordOllama-Session": this.sessionToken,
       },
-      body: JSON.stringify({ tools }),
+      body: JSON.stringify({ tools, hostId: this.officeHostId }),
     });
 
     if (!response.ok) {
@@ -434,6 +439,32 @@ export class RuntimeClient {
     return this.settingsRequest<ReviewSettingsView>("/settings/review");
   }
 
+  async getWordMcpSettings(): Promise<WordMcpSettingsView> {
+    return this.settingsRequest<WordMcpSettingsView>("/settings/word-mcp");
+  }
+
+  async generateWordMcpToken(): Promise<WordMcpSettingsView> {
+    return this.settingsRequest<WordMcpSettingsView>("/settings/word-mcp/token/generate", {
+      method: "POST",
+    });
+  }
+
+  async enableWordMcp(): Promise<WordMcpSettingsView> {
+    return this.settingsRequest<WordMcpSettingsView>("/settings/word-mcp/enable", { method: "POST" });
+  }
+
+  async disableWordMcp(): Promise<WordMcpSettingsView> {
+    return this.settingsRequest<WordMcpSettingsView>("/settings/word-mcp/disable", { method: "POST" });
+  }
+
+  async getWordMcpAgentConfig(): Promise<string> {
+    const result = await this.settingsRequest<{ configuration: string }>(
+      "/settings/word-mcp/agent-config",
+      { method: "POST" },
+    );
+    return result.configuration;
+  }
+
   async saveReviewSettings(
     outputPreference: string,
     autoMemory: boolean,
@@ -444,6 +475,49 @@ export class RuntimeClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ outputPreference, autoMemory, memoryProviderProfileId }),
     });
+  }
+
+  async waitForExternalOfficeTool(): Promise<ExternalOfficeToolCall | null> {
+    if (!this.sessionToken) throw new Error(tr("runtime.pairFirst"));
+    const response = await this.sessionFetch(
+      BRIDGE_URL + "/office-tools/hosts/" + encodeURIComponent(this.officeHostId) + "/requests/next",
+      {
+      headers: {
+        Accept: "application/json",
+        "X-WordOllama-Session": this.sessionToken,
+      },
+    });
+    if (response.status === 204) return null;
+    if (!response.ok) {
+      throw new Error(tr("runtime.externalOfficeToolPollFailed", { status: response.status }));
+    }
+    return response.json() as Promise<ExternalOfficeToolCall>;
+  }
+
+  async submitExternalOfficeToolResult(
+    callId: string,
+    result: unknown,
+    isError = false,
+  ): Promise<void> {
+    if (!this.sessionToken) throw new Error(tr("runtime.pairFirst"));
+    const response = await this.sessionFetch(
+      BRIDGE_URL + "/office-tools/hosts/" + encodeURIComponent(this.officeHostId) +
+        "/requests/" + encodeURIComponent(callId) + "/result",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-WordOllama-Session": this.sessionToken,
+        },
+        body: JSON.stringify({
+          result: typeof result === "string" ? result : JSON.stringify(result),
+          isError,
+        }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(tr("runtime.externalOfficeToolResultFailed", { status: response.status }));
+    }
   }
 
   async addMemory(content: string): Promise<ReviewSettingsView> {

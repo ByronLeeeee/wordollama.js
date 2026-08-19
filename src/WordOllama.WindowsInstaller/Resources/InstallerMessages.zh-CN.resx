@@ -24,4 +24,29 @@ SHA-256 指纹：{0}
 选择“否”将取消安装。</value></data>
   <data name="CloseWpsFailed" xml:space="preserve"><value>无法关闭 WPS Office。请在任务管理器中结束 WPS 进程，然后重新运行安装程序。</value></data>
   <data name="Failed" xml:space="preserve"><value>安装失败：{0}</value></data>
+  <data name="WelcomeTitle" xml:space="preserve"><value>欢迎使用 WordOllama.JS 安装向导</value></data>
+  <data name="WelcomeBody" xml:space="preserve"><value>本向导将为当前 Windows 用户安装 WordOllama.JS Desktop Bridge，并注册 Word 插件。
+
+建议先关闭 Microsoft Word。请保存所有 WPS 文档；更新文件前，安装程序可以提示并关闭 WPS。
+
+安装不需要管理员账户。</value></data>
+  <data name="ReviewTitle" xml:space="preserve"><value>准备安装</value></data>
+  <data name="ReviewBody" xml:space="preserve"><value>请确认下面的组件和安全设置，然后点击“安装”。</value></data>
+  <data name="VersionLabel" xml:space="preserve"><value>版本</value></data>
+  <data name="InstallLocationLabel" xml:space="preserve"><value>安装位置（当前用户）</value></data>
+  <data name="ComponentsLabel" xml:space="preserve"><value>安装组件</value></data>
+  <data name="ComponentsValue" xml:space="preserve"><value>Desktop Bridge · Microsoft Word 插件 · WPS Writer 插件 · 登录自动启动</value></data>
+  <data name="CertificateConsent" xml:space="preserve"><value>我同意创建并信任仅限当前用户、仅适用于 localhost、127.0.0.1 和 ::1 的证书。该证书只保护本机 Bridge，卸载时会被移除。</value></data>
+  <data name="StartAfterInstall" xml:space="preserve"><value>安装完成后启动 Desktop Bridge</value></data>
+  <data name="InstallingTitle" xml:space="preserve"><value>正在安装 WordOllama.JS</value></data>
+  <data name="InstallingBody" xml:space="preserve"><value>正在校验安装包、安装本机服务、注册 Office 与 WPS，并检查安全连接。请稍候。</value></data>
+  <data name="CompleteTitle" xml:space="preserve"><value>安装完成</value></data>
+  <data name="CompleteBody" xml:space="preserve"><value>已为当前用户成功安装 WordOllama.JS。打开 Word 并选择 WordOllama.JS 标签即可开始使用。</value></data>
+  <data name="CompleteRestartWord" xml:space="preserve"><value>安装时 Microsoft Word 正在运行。测试新版插件前，请完全退出并重新打开 Word。</value></data>
+  <data name="Cancelled" xml:space="preserve"><value>安装已取消。</value></data>
+  <data name="Back" xml:space="preserve"><value>上一步(&amp;B)</value></data>
+  <data name="Next" xml:space="preserve"><value>下一步(&amp;N)</value></data>
+  <data name="Install" xml:space="preserve"><value>安装(&amp;I)</value></data>
+  <data name="Finish" xml:space="preserve"><value>完成(&amp;F)</value></data>
+  <data name="Cancel" xml:space="preserve"><value>取消</value></data>
 </root>

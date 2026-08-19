@@ -10,7 +10,7 @@ Office.js 前端不再复制受 XAML 约束的视觉外观。XAML 与后台代�
 
 同日又在真实窄 Word 任务窗格中检查模型、Gemini OAuth 与 Ollama 服务设置：字段与按钮可见、纵向滚动可达；发现设置页在深处切换分类时沿用旧滚动位置，已改为每次切页回到顶部并将当前分类保持在横向导航可见区域。该检查未使用真实 Google OAuth 凭据，也未改写本机 Ollama 环境。
 
-随后按原版“多个工作台”结构重构 manifest：16 类高频或需直接操作文档的任务分别使用独立 `TaskpaneId`，只在同一任务的子命令之间共享窗格。设置使用 Office Dialog，38 工具金样本与运行日志移入独立诊断窗格；前端继续共用同一 TypeScript bundle，以 `surface`/`workflow` 路由保持 Windows/Mac 一致。微软在线 manifest 验证已通过。Windows 真机已验证上述 16 个 Office.js 窗格可连续打开并由 Word 右侧窗格标签切换，设置弹窗可独立打开和切换分类。macOS 多窗格与弹窗仍须实测。
+随后按原版“多个工作台”结构重构 manifest：16 类高频或需直接操作文档的任务分别使用独立 `TaskpaneId`，只在同一任务的子命令之间共享窗格。设置使用 Office Dialog，39 工具金样本与运行日志移入独立诊断窗格；前端继续共用同一 TypeScript bundle，以 `surface`/`workflow` 路由保持 Windows/Mac 一致。微软在线 manifest 验证已通过。Windows 真机已验证上述 16 个 Office.js 窗格可连续打开并由 Word 右侧窗格标签切换，设置弹窗可独立打开和切换分类。macOS 多窗格与弹窗仍须实测。
 
 同日完成新版 UI 的 340×700、640×760、浅色和深色浏览器回归，并重新旁加载到真实 Windows Word 窄任务窗格，逐页确认 Agent、按需修改、文档审阅与设置：没有横向溢出或重复标题，Agent 输入框固定在底部，文本生成结果在产生内容前隐藏，审阅工作区按范围/生成/要求纵向分组，设置分类可横向滑动。该结果只覆盖 Windows 当前 Office WebView2；macOS Word 的字体、滚动、深色和触控板行为仍需独立验收。
 
@@ -100,9 +100,9 @@ Writing、Translator、LawSearch、MootCourt、TextToTable、CreateHTML、ChatWi
 
 ## 诊断专用功能
 
-38 工具金样本与运行日志位于独立 `DiagnosticsPane`。配对、Bridge 健康和 Ollama 服务管理保留在设置弹窗的进阶页；DOCX comparer 使用专注的比较页面。它们不再占据 Agent 主面板，开发验收能力也不计入原版 UI 完成度。
+39 工具金样本与运行日志位于独立 `DiagnosticsPane`。配对、Bridge 健康和 Ollama 服务管理保留在设置弹窗的进阶页；DOCX comparer 使用专注的比较页面。它们不再占据 Agent 主面板，开发验收能力也不计入原版 UI 完成度。
 
-Windows Word 16.0.20228.20110（zh-CN）已完成当时版本的 36/36 真实宿主金样本，通过报告归档于 `docs/evidence/windows-word-16.0.20228.20110-golden-2026-07-29.json`；后来新增的 2 个表格工具尚待重新完成 38/38 验收。实测同时发现 Word WebView2 不可靠支持 `window.confirm()`/`window.prompt()` 的交互，金样本启动确认与 `ask_human` 已改为窗格内 HTML 交互；修复后的第二次运行失败、不支持和阻塞均为 0。
+Windows Word 16.0.20228.20110（zh-CN）已完成当时版本的 36/36 真实宿主金样本，通过报告归档于 `docs/evidence/windows-word-16.0.20228.20110-golden-2026-07-29.json`；后来新增的 2 个表格工具、精确修订工具和安全精确选中工具尚待重新完成 40/40 验收。实测同时发现 Word WebView2 不可靠支持 `window.confirm()`/`window.prompt()` 的交互，金样本启动确认与 `ask_human` 已改为窗格内 HTML 交互；修复后的第二次运行失败、不支持和阻塞均为 0。
 
 同一真实 Windows Word 宿主已完成 1,000/5,000 段长文档验收，两档均通过全文读取、末端 50 段分块、语义映射和“在目标前插入段落”后的稳定锚点重定位，所有单项均低于 30 秒预算。5,000 段档共 393,892 字符，建档 3,567 ms、全文读取 279 ms、末端分块 288 ms、语义映射 278 ms、重定位 4,306 ms；原始报告归档于 `docs/evidence/windows-word-16.0.20228.20110-long-document-2026-07-29.json`。该结果证明 Windows 当前版本的单客户端长文档与模拟插入漂移，不替代真实双客户端共同编辑、修订降级和 macOS 验收。
 

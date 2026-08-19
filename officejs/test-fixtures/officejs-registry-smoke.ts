@@ -1,4 +1,5 @@
 import { OfficeJsToolRegistry } from "../apps/addin/src/officejs-tool-registry.ts";
+import { OfficeJsWordAdapter } from "../apps/addin/src/officejs-word-adapter.ts";
 import i18n from "../apps/addin/src/i18n.ts";
 
 type AnyRecord = Record<string, unknown>;
@@ -26,18 +27,20 @@ await i18n.changeLanguage("en-US");
 const names = registry.list().map((tool) => tool.name);
 const expected = [
   "search_text",
+  "select_exact_text",
   "replace_paragraph",
   "read_comments",
   "insert_table",
   "get_document_outline",
   "replace_exact_text",
+  "apply_precise_revision",
   "ask_human",
 ];
 for (const name of expected) {
   if (!names.includes(name)) throw new Error(`missing Office.js tool: ${name}`);
 }
-if (names.length !== 38) {
-  throw new Error(`expected 38 Office.js descriptors, got ${names.length}`);
+if (names.length !== 40) {
+  throw new Error(`expected 40 Office.js descriptors, got ${names.length}`);
 }
 if (registry.list().find((tool) => tool.name === "get_selection")?.description !==
     "Read text from the current Word selection.") {
@@ -63,15 +66,17 @@ for (const unavailable of ["insert_image", "page_setup", "update_toc"]) {
 
 const selection = await registry.execute("get_selection");
 if ((selection as { text: string }).text !== "fixture") throw new Error("get_selection dispatch failed");
+await registry.execute("select_exact_text", { text: "fixture" });
 const replacement = await registry.execute("replace_exact_text", { find: "old", replace: "new" });
 if ((replacement as { count: number }).count !== 1) throw new Error("replace_exact_text dispatch failed");
 const answer = await registry.execute("ask_human", { question: "continue?" });
 if (answer !== "approved") throw new Error("ask_human dispatch failed");
-if (!calls.includes("getSelection") || !calls.includes("findReplace") || !calls.includes("askHuman")) {
+if (!calls.includes("getSelection") || !calls.includes("selectExactText") || !calls.includes("findReplace") || !calls.includes("askHuman")) {
   throw new Error("Office.js dispatch call trace is incomplete");
 }
 
 const dispatchArguments: Record<string, AnyRecord> = {
+  select_exact_text: { text: "fixture" },
   search_text: { keyword: "term" },
   insert_text_at_end: { text: "text" },
   read_paragraphs: { start: 0, end: 1 },
@@ -97,10 +102,50 @@ const dispatchArguments: Record<string, AnyRecord> = {
   header_footer: { element: "header", text: "header" },
   update_toc: { action: "update" },
   replace_exact_text: { find: "old", replace: "new" },
+  apply_precise_revision: { original: "old", revised: "new" },
   ask_human: { question: "continue?" },
 };
 for (const descriptor of registry.list()) {
   await registry.execute(descriptor.name, dispatchArguments[descriptor.name] ?? {});
 }
+
+let exactSelectCalls = 0;
+let exactFixtureTexts = ["Unique target"];
+(globalThis as AnyRecord).Office = {
+  context: { document: { url: "fixture.docx" } },
+};
+(globalThis as AnyRecord).Word = {
+  run: async (callback: (context: AnyRecord) => Promise<unknown>) => callback({
+    document: {
+      body: {
+        search: () => ({
+          items: exactFixtureTexts.map((text) => ({
+            text,
+            select: () => { exactSelectCalls += 1; },
+          })),
+          load: () => undefined,
+        }),
+      },
+    },
+    sync: async () => undefined,
+  }),
+};
+const exactWord = new OfficeJsWordAdapter();
+const exactResult = await exactWord.selectExactText("Unique target");
+if (!exactResult.selected || exactResult.matchCount !== 1 || exactSelectCalls !== 1) {
+  throw new Error("unique exact selection failed");
+}
+exactFixtureTexts = ["Repeated", "Repeated"];
+await exactWord.selectExactText("Repeated").then(
+  () => { throw new Error("ambiguous exact selection must fail"); },
+  () => undefined,
+);
+if (exactSelectCalls !== 1) throw new Error("ambiguous exact selection changed the selection");
+exactFixtureTexts = [];
+await exactWord.selectExactText("Missing").then(
+  () => { throw new Error("missing exact selection must fail"); },
+  () => undefined,
+);
+if (exactSelectCalls !== 1) throw new Error("missing exact selection changed the selection");
 
 console.log(`Office.js registry smoke passed (${names.length} tools).`);

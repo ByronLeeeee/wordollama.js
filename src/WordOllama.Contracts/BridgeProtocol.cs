@@ -56,12 +56,24 @@ public sealed record OfficeToolDescriptor(
     bool IsWriteOperation,
     JsonElement ParameterSchema);
 
-public sealed record ToolCatalogRequest(IReadOnlyList<OfficeToolDescriptor> Tools);
+public sealed record ToolCatalogRequest(
+    IReadOnlyList<OfficeToolDescriptor> Tools,
+    string? HostId = null);
 
 public sealed record ToolCatalogResponse(
     string ProtocolVersion,
     int RegisteredOfficeToolCount,
-    IReadOnlyList<OfficeToolDescriptor> Tools);
+    IReadOnlyList<OfficeToolDescriptor> Tools,
+    bool ExternalMcpEnabled = false);
+
+public sealed record ExternalOfficeToolCall(
+    string CallId,
+    string Name,
+    JsonElement Arguments);
+
+public sealed record ExternalOfficeToolResultRequest(
+    string Result,
+    bool IsError = false);
 
 public sealed record ChatMessage(
     string Role,

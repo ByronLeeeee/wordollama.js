@@ -1,5 +1,9 @@
 import "./styles.css";
 import {
+  SHARED_RUNTIME_NAVIGATION_EVENT,
+  type SharedRuntimeRoute,
+} from "./commands";
+import {
   ADDIN_VERSION,
   BRIDGE_PROTOCOL_VERSION,
   type ReleaseTestIdentity,
@@ -127,9 +131,9 @@ if (wpsHost) {
 }
 
 const routeParams = new URLSearchParams(window.location.search);
-const requestedSurface = routeParams.get("surface");
-const requestedWorkflow = routeParams.get("workflow");
-const activeSurface: AddinSurface = (
+let requestedSurface = routeParams.get("surface");
+let requestedWorkflow = routeParams.get("workflow");
+let activeSurface: AddinSurface = (
   requestedSurface === "create" ||
   requestedSurface === "edit" ||
   requestedSurface === "review" ||
@@ -376,28 +380,36 @@ const workflowSurfaceTitleKeys: Record<string, string> = {
   settings: "taskpane.common.settings",
   diagnostics: "taskpane.surfaces.diagnostics",
 };
-surfaceTitle.textContent = i18n.t(
-  (requestedWorkflow && workflowSurfaceTitleKeys[requestedWorkflow]) ||
-    surfaceTitleKeys[activeSurface],
-);
 const surfaceFeatureIcon = required<HTMLElement>("#surface-feature-icon");
-const surfaceFeatureName = requestedWorkflow && workflowSurfaceTitleKeys[requestedWorkflow]
-  ? requestedWorkflow === "diagnostics" ? "settings" : requestedWorkflow
-  : activeSurface === "legal" ? "risk"
-    : activeSurface === "create" ? "writing"
-      : activeSurface === "edit" ? "modify"
-        : activeSurface === "compare" ? "compare"
-          : activeSurface === "review" ? "review"
-            : activeSurface === "settings" || activeSurface === "diagnostics" ? "settings" : "agent";
-const surfaceFeatureUrl = `url("/assets/ribbon/${surfaceFeatureName}.svg")`;
-surfaceFeatureIcon.dataset.featureIcon = surfaceFeatureName;
-surfaceFeatureIcon.style.maskImage = surfaceFeatureUrl;
-surfaceFeatureIcon.style.webkitMaskImage = surfaceFeatureUrl;
-if (activeSurface === "diagnostics") {
-  dialogTitle.textContent = i18n.t("taskpane.surfaces.diagnostics");
-} else if (activeSurface === "compare") {
-  dialogTitle.textContent = i18n.t("taskpane.surfaces.compare");
+function updateRoutePresentation(): void {
+  document.documentElement.dataset.surface = activeSurface;
+  if (activeSurface === "settings" || activeSurface === "diagnostics" || activeSurface === "compare") {
+    document.documentElement.dataset.standaloneDialog = "true";
+  } else {
+    delete document.documentElement.dataset.standaloneDialog;
+  }
+  surfaceTitle.textContent = i18n.t(
+    (requestedWorkflow && workflowSurfaceTitleKeys[requestedWorkflow]) || surfaceTitleKeys[activeSurface],
+  );
+  const surfaceFeatureName = requestedWorkflow && workflowSurfaceTitleKeys[requestedWorkflow]
+    ? requestedWorkflow === "diagnostics" ? "settings" : requestedWorkflow
+    : activeSurface === "legal" ? "risk"
+      : activeSurface === "create" ? "writing"
+        : activeSurface === "edit" ? "modify"
+          : activeSurface === "compare" ? "compare"
+            : activeSurface === "review" ? "review"
+              : activeSurface === "settings" || activeSurface === "diagnostics" ? "settings" : "agent";
+  const surfaceFeatureUrl = `url("/assets/ribbon/${surfaceFeatureName}.svg")`;
+  surfaceFeatureIcon.dataset.featureIcon = surfaceFeatureName;
+  surfaceFeatureIcon.style.maskImage = surfaceFeatureUrl;
+  surfaceFeatureIcon.style.webkitMaskImage = surfaceFeatureUrl;
+  if (activeSurface === "diagnostics") {
+    dialogTitle.textContent = i18n.t("taskpane.surfaces.diagnostics");
+  } else if (activeSurface === "compare") {
+    dialogTitle.textContent = i18n.t("taskpane.surfaces.compare");
+  }
 }
+updateRoutePresentation();
 let lastGoldenReport = "";
 let lastLongDocumentReport = "";
 let lastRevisionHostReport = "";
@@ -449,6 +461,9 @@ let forceSkillCreationForNextRun = false;
 let bridgePaired = false;
 let bridgeCatalog: ToolCatalogResponse | null = null;
 let bridgeActivation: Promise<ToolCatalogResponse> | null = null;
+let externalOfficeToolLoop: Promise<void> | null = null;
+let bridgeReconnectTimer: number | null = null;
+let bridgeReconnectDelayMs = 1_000;
 let officeReady = typeof Office === "undefined";
 let silentLinterTimer: number | null = null;
 let silentLinterRunning = false;
@@ -481,8 +496,59 @@ function appendDiagnostic(category: string, message: string): void {
   writeLocalSettings("wordollama-diagnostic-log", diagnosticLog);
 }
 
+function ensureExternalOfficeToolLoop(): void {
+  if (externalOfficeToolLoop || !bridgeCatalog?.externalMcpEnabled) return;
+  externalOfficeToolLoop = (async () => {
+    while (bridgePaired && bridgeCatalog?.externalMcpEnabled && runtime.hasPairing()) {
+      try {
+        const call = await runtime.waitForExternalOfficeTool();
+        if (!call) continue;
+        try {
+          const result = await tools.execute(call.name, call.arguments || {});
+          await runtime.submitExternalOfficeToolResult(call.callId, result);
+        } catch (toolError) {
+          const message = toolError instanceof Error ? toolError.message : String(toolError);
+          await runtime.submitExternalOfficeToolResult(call.callId, message, true);
+        }
+      } catch (error) {
+        appendDiagnostic(
+          "external-word-mcp",
+          error instanceof Error ? error.message : String(error),
+        );
+        if (!runtime.hasPairing()) {
+          bridgePaired = false;
+          bridgeCatalog = null;
+          break;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+      }
+    }
+  })().finally(() => {
+    externalOfficeToolLoop = null;
+    if (!bridgePaired && officeReady) scheduleBridgeReconnect();
+  });
+}
+
+function scheduleBridgeReconnect(): void {
+  if (bridgeReconnectTimer !== null || !officeReady) return;
+  bridgeReconnectTimer = window.setTimeout(() => {
+    bridgeReconnectTimer = null;
+    void activateBridgeSession().catch((error) => {
+      appendDiagnostic(
+        "bridge",
+        `background re-pairing failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      bridgeReconnectDelayMs = Math.min(30_000, bridgeReconnectDelayMs * 2);
+      scheduleBridgeReconnect();
+    });
+  }, bridgeReconnectDelayMs);
+}
+
 async function activateBridgeSession(): Promise<ToolCatalogResponse> {
-  if (bridgePaired && bridgeCatalog) return bridgeCatalog;
+  if (bridgePaired && bridgeCatalog) {
+    ensureExternalOfficeToolLoop();
+    return bridgeCatalog;
+  }
   if (bridgeActivation) return bridgeActivation;
 
   bridgeActivation = (async () => {
@@ -498,6 +564,12 @@ async function activateBridgeSession(): Promise<ToolCatalogResponse> {
       }
       bridgeCatalog = catalog;
       bridgePaired = true;
+      bridgeReconnectDelayMs = 1_000;
+      if (bridgeReconnectTimer !== null) {
+        window.clearTimeout(bridgeReconnectTimer);
+        bridgeReconnectTimer = null;
+      }
+      ensureExternalOfficeToolLoop();
       configureSilentLinter();
       await refreshAvailableSkills().catch((error) =>
         appendDiagnostic("skills", `automatic refresh failed: ${error instanceof Error ? error.message : String(error)}`));
@@ -2664,6 +2736,20 @@ function initializeWorkflowRoute(): void {
     });
 }
 
+window.addEventListener(SHARED_RUNTIME_NAVIGATION_EVENT, (event) => {
+  const route = (event as CustomEvent<SharedRuntimeRoute>).detail;
+  if (!route) return;
+  requestedSurface = route.surface;
+  requestedWorkflow = route.workflow;
+  activeSurface = route.surface;
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set("surface", route.surface);
+  nextUrl.searchParams.set("workflow", route.workflow);
+  window.history.replaceState(null, "", nextUrl);
+  updateRoutePresentation();
+  initializeWorkflowRoute();
+});
+
 if (wpsHost) {
   officeReady = true;
   hostStatus.textContent = "";
@@ -2683,6 +2769,10 @@ if (wpsHost) {
       ? i18n.t("taskpane.agent.hostConnected", { host: info.host })
       : "";
     initializeWorkflowRoute();
+    if (Office.context.requirements?.isSetSupported?.("SharedRuntime", "1.1")) {
+      void Office.addin.setStartupBehavior(Office.StartupBehavior.load).catch((error) =>
+        appendDiagnostic("shared-runtime", `startup behavior failed: ${error instanceof Error ? error.message : String(error)}`));
+    }
     void activateBridgeSession().catch((error) =>
       appendDiagnostic("bridge", `automatic pairing failed: ${error instanceof Error ? error.message : String(error)}`));
     if (activeSurface === "review") {

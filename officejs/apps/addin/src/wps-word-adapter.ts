@@ -3,6 +3,7 @@ import {
   OfficeJsWordAdapter,
   type AskHumanHandler,
   type DocumentOverview,
+  type ExactTextSelectionResult,
   type ParagraphResult,
   type SearchResult,
   type TrackedRevisionResult,
@@ -17,7 +18,7 @@ import { buildTextRevisionHunks } from "./text-revision-diff.ts";
 import { resolveWpsApplication, type WpsApplication } from "./wps-host.ts";
 
 const WPS_SUPPORTED_TOOLS = new Set([
-  "get_selection", "search_text", "get_doc_overview", "insert_text_at_end",
+  "get_selection", "select_exact_text", "search_text", "get_doc_overview", "insert_text_at_end",
   "read_paragraphs", "read_large_chunk", "build_semantic_map", "read_comments",
   "read_bookmarks", "apply_style", "replace_paragraph", "insert_at_cursor",
   "add_comment", "find_replace", "format_paragraph", "format_text",
@@ -26,7 +27,7 @@ const WPS_SUPPORTED_TOOLS = new Set([
   "check_cross_references", "insert_clause_after", "highlight_risk",
   "apply_legal_format", "validate_citation", "format_list", "page_setup",
   "header_footer", "update_toc", "replace_exact_text", "insert_image",
-  "revisions", "ask_human",
+  "revisions", "apply_precise_revision", "ask_human",
 ]);
 
 const PARAGRAPH_ALIGNMENT: Record<string, number> = {
@@ -299,6 +300,8 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
         return true;
       case "get_selection":
         return Boolean(selection);
+      case "select_exact_text":
+        return typeof document.Range === "function" && typeof document.Content?.Text === "string";
       case "search_text":
       case "get_doc_overview":
       case "read_paragraphs":
@@ -522,6 +525,37 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     };
   }
 
+  override async selectExactText(text: string): Promise<ExactTextSelectionResult> {
+    if (!text || text.length > 255) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.exactSelectionLength"));
+    }
+    const application = this.application();
+    const document = application.ActiveDocument;
+    const rawDocumentText = String(document?.Content?.Text ?? "");
+    const nativeText = text.replace(/\n/gu, "\r");
+    const offsets: number[] = [];
+    let offset = 0;
+    while ((offset = rawDocumentText.indexOf(nativeText, offset)) >= 0) {
+      offsets.push(offset);
+      offset += Math.max(1, nativeText.length);
+    }
+    if (offsets.length === 0) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.exactSelectionNotFound"));
+    }
+    if (offsets.length !== 1) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.exactSelectionAmbiguous", {
+        count: offsets.length,
+      }));
+    }
+    const contentStart = Number(document.Content?.Start ?? 0);
+    const range = document.Range(contentStart + offsets[0], contentStart + offsets[0] + nativeText.length);
+    if (!range || typeof range.Select !== "function" || cleanText(range.Text) !== cleanText(text)) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.exactSelectionChanged"));
+    }
+    range.Select();
+    return { selected: true, matchCount: 1, text };
+  }
+
   override async replaceSelection(text: string): Promise<void> {
     const application = this.application();
     const selection = application.Selection;
@@ -537,7 +571,9 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
   override async applyPreciseRevision(original: string, revised: string): Promise<boolean> {
     const application = this.application();
     const selection = application.Selection;
-    if (!selection || cleanText(selection.Text) !== cleanText(original)) return false;
+    if (!selection || cleanText(selection.Text) !== cleanText(original)) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.preciseRevisionSelectionChanged"));
+    }
     if (!isSafeTextSelection(selection)) {
       throw new Error(i18n.t("taskpane.wordAdapter.errors.safeRevisionUnsupported"));
     }

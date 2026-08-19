@@ -48,6 +48,7 @@ const ONE_PIXEL_PNG =
 
 export const GOLDEN_CASES: GoldenCase[] = [
   { name: "get_selection", selectText: GOLDEN_FIXTURE_MARKER },
+  { name: "select_exact_text", args: { text: GOLDEN_FIXTURE_MARKER } },
   { name: "search_text", args: { keyword: "合同期限" } },
   { name: "get_doc_overview" },
   { name: "insert_text_at_end", args: { text: "\nWORDOLLAMA_END_MARKER" } },
@@ -80,6 +81,11 @@ export const GOLDEN_CASES: GoldenCase[] = [
   { name: "page_setup", args: { margin_top: 72, margin_bottom: 72, margin_left: 72, margin_right: 72, orientation: "Portrait" } },
   { name: "header_footer", args: { element: "header", text: "WordOllama.JS Golden Header" } },
   { name: "update_toc", args: { action: "insert" } },
+  {
+    name: "apply_precise_revision",
+    args: { original: "WORDOLLAMA_PRECISE_OLD", revised: "WORDOLLAMA_PRECISE_NEW" },
+    selectText: "WORDOLLAMA_PRECISE_OLD",
+  },
   { name: "replace_exact_text", args: { find: "WORDOLLAMA_EXACT_OLD", replace: "WORDOLLAMA_EXACT_NEW" } },
   { name: "add_comment", args: { text: "WordOllama.JS golden comment" }, selectText: "合同期限" },
   { name: "read_comments" },
@@ -107,6 +113,7 @@ export class OfficeGoldenHostHarness implements GoldenHostHarness {
       "高风险违约责任需要人工复核。",
       "WORDOLLAMA_FIND_OLD",
       "WORDOLLAMA_EXACT_OLD",
+      "WORDOLLAMA_PRECISE_OLD",
       "WORDOLLAMA_CURSOR_TARGET",
       "WORDOLLAMA_PAGE_BREAK_TARGET",
       "WORDOLLAMA_CLAUSE_ANCHOR",

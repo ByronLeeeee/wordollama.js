@@ -99,7 +99,9 @@ pwsh ./packaging/package-windows-installer.ps1 `
   -ExpectedPublisherSubject "CN=Your Exact Publisher Subject"
 ```
 
-安装器是 .NET 8 自包含单文件 WinExe，内嵌已签名 Bridge ZIP 及 SHA-256 元数据；
+安装器是 .NET 8 自包含单文件 WinExe，内嵌已签名 Bridge ZIP 及 SHA-256 元数据。双击时显示
+中英文向导，依次提供欢迎页、版本/安装位置/组件与本机证书确认、安装进度和完成页；只有用户
+明确点击“安装”后才开始修改本机状态。`--quiet` 等自动升级和回归参数继续使用无界面路径；
 默认安装到 `%LOCALAPPDATA%\WordOllama.JS\DesktopBridge`，维护版本指针，写入当前用户
 “应用和功能”卸载登记，并用隐藏 VBS 启动器注册当前用户 Startup。重复安装同版本是幂等的，
 卸载只停止和删除该安装根目录内的 Bridge。可信 PFX 尚未配置时 launcher 安静退出；
@@ -220,7 +222,7 @@ pwsh ./packaging/unregister-bridge-autostart.ps1 -InstallRoot <install-root>
 Credential Manager/Keychain 的写入、精确读回和删除，并在 `finally` 清理。该工具必须显式传入
 `--allow-user-vault-test`，不应在含有真实同名测试键的共享账户中运行。
 
-签名、HTTPS 和宿主测试全部完成后，使用 `finalize-unified-release.ps1` 生成唯一允许标记 `releaseReady: true` 的终审描述文件。该命令必须在产物目标系统执行，会重新解包并校验所有 Windows PE 的 Authenticode 发布者，或校验 macOS codesign、Gatekeeper 和签名 Authority；同时要求目标版本生成后的 HTTPS 证据、安装/升级/证书/回滚/卸载生命周期证据、38/38 工具报告、1,000/5,000 段报告、修订报告，以及复杂合同、双客户端共同编辑、16 个独立任务窗格、设置 Office Dialog 和中英文/明暗主题/窄宽窗格补充报告：
+签名、HTTPS 和宿主测试全部完成后，使用 `finalize-unified-release.ps1` 生成唯一允许标记 `releaseReady: true` 的终审描述文件。该命令必须在产物目标系统执行，会重新解包并校验所有 Windows PE 的 Authenticode 发布者，或校验 macOS codesign、Gatekeeper 和签名 Authority；同时要求目标版本生成后的 HTTPS 证据、安装/升级/证书/回滚/卸载生命周期证据、40/40 工具报告、1,000/5,000 段报告、修订报告，以及复杂合同、双客户端共同编辑、16 个独立任务窗格、设置 Office Dialog 和中英文/明暗主题/窄宽窗格补充报告：
 
 ```powershell
 pwsh ./packaging/finalize-unified-release.ps1 `

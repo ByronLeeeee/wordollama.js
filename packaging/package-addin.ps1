@@ -184,6 +184,11 @@ if ($null -eq $commandsUrlNode) {
     throw "Manifest Commands.Url resource is missing."
 }
 $commandsUrlNode.DefaultValue = "$newBase/commands.html?v=$ManifestVersion"
+$taskpaneUrlNode = $manifest.SelectSingleNode("//*[@id='Taskpane.Url']")
+if ($null -eq $taskpaneUrlNode) {
+    throw "Manifest Taskpane.Url resource is missing."
+}
+$taskpaneUrlNode.DefaultValue = "$newBase/index.html?v=$ManifestVersion"
 foreach ($node in $manifest.SelectNodes("//*[local-name()='AppDomain']")) {
     if ($node.InnerText -eq $oldBase) {
         $node.InnerText = $newBase
@@ -200,6 +205,9 @@ if ($productionManifestText -notmatch "<Version>$([Regex]::Escape($ManifestVersi
 }
 if ($productionManifestText -notmatch "commands\.html\?v=$([Regex]::Escape($ManifestVersion))") {
     throw "Production Commands.Url was not cache-busted with manifest version $ManifestVersion."
+}
+if ($productionManifestText -notmatch "index\.html\?v=$([Regex]::Escape($ManifestVersion))") {
+    throw "Production Taskpane.Url was not cache-busted with manifest version $ManifestVersion."
 }
 $productionManifest = [xml]$productionManifestText
 $defaultLocaleNode = $productionManifest.SelectSingleNode(

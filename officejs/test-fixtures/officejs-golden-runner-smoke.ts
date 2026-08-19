@@ -16,8 +16,8 @@ if (resolveBuiltInStyleName("Heading 1") !== "Heading1" ||
 
 
 const names = GOLDEN_CASES.map((testCase) => testCase.name);
-if (names.length !== 38 || new Set(names).size !== 38) {
-  throw new Error(`golden runner must contain 38 unique tools, got ${names.length}`);
+if (names.length !== 40 || new Set(names).size !== 40) {
+  throw new Error(`golden runner must contain 40 unique tools, got ${names.length}`);
 }
 
 const unsupportedName = "update_toc";
@@ -55,10 +55,10 @@ const harness: GoldenHostHarness = {
 const report = await runOfficeGoldenMatrix(registry, harness, () => {
   progressEvents += 1;
 });
-if (report.results.length !== 38 || progressEvents !== 38) {
+if (report.results.length !== 40 || progressEvents !== 40) {
   throw new Error("golden runner did not report every tool");
 }
-if (report.supportedToolCount !== 37 || report.passed !== 36 || report.failed !== 1 ||
+if (report.supportedToolCount !== 39 || report.passed !== 38 || report.failed !== 1 ||
     report.unsupported !== 1 || report.blocked !== 0) {
   throw new Error(`unexpected golden summary: ${JSON.stringify(report)}`);
 }
@@ -74,7 +74,7 @@ const blockedHarness: GoldenHostHarness = {
   selectText: async () => undefined,
 };
 const blockedReport = await runOfficeGoldenMatrix(registry, blockedHarness);
-if (blockedReport.blocked !== 37 || blockedReport.unsupported !== 1 ||
+if (blockedReport.blocked !== 39 || blockedReport.unsupported !== 1 ||
     blockedReport.passed !== 0 || blockedReport.failed !== 0) {
   throw new Error("fixture failure did not block all supported tools");
 }
@@ -82,4 +82,4 @@ if (blockedReport.results.find((result) => result.status === "blocked")?.error !
   throw new Error("fixture failure reason was not preserved");
 }
 
-console.log("Office.js golden runner smoke passed (38 tools, locale-safe styles, capability and failure isolation).");
+console.log("Office.js golden runner smoke passed (40 tools, locale-safe styles, capability and failure isolation).");

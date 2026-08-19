@@ -107,6 +107,13 @@ pwsh ./packaging/rollback-bridge.ps1 -InstallRoot <DesktopBridge 安装目录>
 除上述 Office 宿主引导脚本外，任务窗格的 React/CSS/SVG、设置、Bridge API 和本地
 功能均随安装包在 localhost 提供；构建门禁会拒绝新增的远程字体、图片、脚本或样式。
 
+## 外部 Agent 与 Word MCP
+
+需要让 Codex 等外部 Agent 操作当前 Word 文档时，可以显式启用 Desktop Bridge 的
+本机 Word MCP。该接口默认关闭，需要随机 Bearer Token，并要求目标文档中的
+WordOllama.JS 任务窗格保持打开。启用步骤、Codex 配置和精确修订参数见
+[外部 Word MCP 指南](WORD_MCP.zh-CN.md)。
+
 ## 卸载
 
 Windows 在“设置 > 应用 > 已安装的应用”中卸载 WordOllama.JS。卸载器停止本产品

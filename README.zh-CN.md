@@ -24,6 +24,7 @@
 <p align="center">
   <a href="https://wordollama.com">官方网站</a> ·
   <a href="docs/USER_GUIDE.zh-CN.md">用户指南</a> ·
+  <a href="docs/WORD_MCP.zh-CN.md">外部 Word MCP</a> ·
   <a href="https://github.com/ByronLeeeee/wordollama.js/issues">问题反馈</a> ·
   <a href="CONTRIBUTING.md">参与贡献</a>
 </p>
@@ -126,7 +127,7 @@ pwsh ./tools/unified-smoke-test.ps1 `
   -SkipManifestValidation
 ```
 
-该门禁覆盖 TypeScript/Vite 构建、i18n、38 个 Word 工具、四档宿主能力、WPS
+该门禁覆盖 TypeScript/Vite 构建、i18n、40 个 Word 工具、四档宿主能力、WPS
 适配器、Agent、Provider、MCP、Skills、沙箱、更新门禁及真实 Bridge 重启恢复。
 Windows 发布包生命周期回归为：
 

@@ -130,7 +130,7 @@ pwsh ./tools/unified-smoke-test.ps1 `
   -SkipManifestValidation
 ```
 
-It covers the TypeScript/Vite build, i18n, 38 Word tools, four host-capability
+It covers the TypeScript/Vite build, i18n, 40 Word tools, four host-capability
 profiles, WPS adapters, Agent, providers, MCP, Skills, sandboxing, update gates,
 and live Bridge restart recovery. The Windows package lifecycle gate is:
 

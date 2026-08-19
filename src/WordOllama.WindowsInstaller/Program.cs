@@ -122,6 +122,48 @@ internal static class Program
                 "--trust-localhost-certificate");
             var rotateLocalhostCertificate = options.ContainsKey(
                 "--rotate-localhost-certificate");
+            if (!quiet && args.Length == 0)
+            {
+                var metadata = ReadMetadata(Assembly.GetExecutingAssembly());
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                using var wizard = new InstallerWizard(
+                    metadata.Version,
+                    installRoot,
+                    wizardOptions =>
+                    {
+                        var wizardWordProcessIds = Process.GetProcessesByName("WINWORD")
+                            .Select(process => process.Id)
+                            .ToArray();
+                        if (!skipRegistration && !EnsureWpsClosedBeforeInstall(quiet: false))
+                        {
+                            return new InstallerWizardResult(
+                                Success: false,
+                                RestartWord: false,
+                                Error: InstallerText.Cancelled);
+                        }
+                        Install(
+                            installRoot,
+                            startupRoot,
+                            noStart: !wizardOptions.StartBridge,
+                            skipRegistration,
+                            trustLocalhostCertificate: true,
+                            promptForLocalhostCertificateTrust: false,
+                            rotateLocalhostCertificate: false);
+                        if (!skipRegistration && wizardWordProcessIds.Length > 0)
+                        {
+                            ScheduleOfficeAddinRegistrationRepair(
+                                installRoot,
+                                wizardWordProcessIds);
+                        }
+                        return new InstallerWizardResult(
+                            Success: true,
+                            RestartWord: wizardWordProcessIds.Length > 0,
+                            Error: null);
+                    });
+                Application.Run(wizard);
+                return wizard.ExitCode;
+            }
             var promptForLocalhostCertificateTrust =
                 !quiet && !trustLocalhostCertificate;
             var runningWordProcessIds = Process.GetProcessesByName("WINWORD")

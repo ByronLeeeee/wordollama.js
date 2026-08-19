@@ -34,6 +34,7 @@ assert(
     packaging.includes("THIRD-PARTY-LICENSES.txt") &&
     packaging.includes("$env:WORDOLLAMA_ADDIN_VERSION = $ManifestVersion") &&
     packaging.includes('commands.html?v=$ManifestVersion') &&
+    packaging.includes('index.html?v=$ManifestVersion') &&
     packaging.includes("Production Commands.Url was not cache-busted"),
   "production packaging must compile the runtime client against the local HTTPS Bridge and keep only a loopback development fallback",
 );

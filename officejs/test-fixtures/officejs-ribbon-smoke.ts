@@ -23,8 +23,14 @@ function assert(condition: unknown, message: string): asserts condition {
 
 assert(
   compactManifest.includes('<bt:SetName="AddinCommands"MinVersion="1.1"/>') &&
+    compactManifest.includes('<bt:SetName="SharedRuntime"MinVersion="1.1"/>') &&
     !compactManifest.includes('<bt:SetName="WordApi"MinVersion="1.1"/>'),
-  "Ribbon VersionOverrides must require AddinCommands 1.1 instead of repeating WordApi",
+  "Ribbon VersionOverrides must require AddinCommands 1.1 and SharedRuntime 1.1",
+);
+assert(
+  compactManifest.includes('<Runtimes><Runtimeresid="Taskpane.Url"lifetime="long"/></Runtimes>') &&
+    compactManifest.includes('<FunctionFileresid="Taskpane.Url"/>'),
+  "Ribbon commands and the task pane must share one long-lived runtime",
 );
 assert(
   compactManifest.includes('<CustomTabid="WordOllama.JS.Tab">'),
@@ -72,33 +78,25 @@ assert(
   "translation Ribbon entry must be one direct button instead of a menu",
 );
 
-for (const [resource, taskpane] of [
-  ["Writing.Url", "WritingPane"],
-  ["Modify.Url", "ModifyPane"],
-  ["Polish.Url", "PolishPane"],
-  ["Expand.Url", "ExpandPane"],
-  ["Simplify.Url", "SimplifyPane"],
-  ["Continue.Url", "ContinuePane"],
-  ["Summarize.Url", "SummarizePane"],
-  ["Fix.Url", "FixPane"],
-  ["Image.Url", "ImagePane"],
-  ["Table.Url", "TablePane"],
-  ["Html.Url", "HtmlPane"],
-  ["Markdown.Url", "MarkdownPane"],
-  ["Agent.Url", "AgentPane"],
-  ["Compare.Url", "ComparePane"],
-  ["Translate.Url", "TranslatePane"],
-  ["Risk.Url", "RiskPane"],
-  ["Fairness.Url", "FairnessPane"],
-  ["MootCourt.Url", "MootCourtPane"],
-  ["ContractCompare.Url", "ContractComparePane"],
-  ["LawSearch.Url", "LawSearchPane"],
-  ["Review.Url", "ReviewPane"],
-  ["CustomPrompts.Url", "CustomPromptPane"],
+for (const [control, functionName] of [
+  ["Writing", "openWriting"], ["Modify", "openModify"], ["Polish", "openPolish"],
+  ["Expand", "openExpand"], ["Simplify", "openSimplify"], ["Continue", "openContinue"],
+  ["Summarize", "openSummarize"], ["Fix", "openFix"], ["Image", "openImage"],
+  ["Table", "openTable"], ["Html", "openHtml"], ["Markdown", "openMarkdown"],
+  ["Agent", "openAgent"], ["Compare", "openCompare"], ["Translate", "openTranslate"],
+  ["Risk", "openRisk"], ["Fairness", "openFairness"], ["MootCourt", "openMootCourt"],
+  ["ContractCompare", "openContractCompare"], ["LawSearch", "openLawSearch"],
+  ["Review", "openReview"], ["CustomPrompts", "openCustomPrompts"],
 ] as const) {
-  const actionPattern =
-    `<TaskpaneId>WordOllama.JS.${taskpane}</TaskpaneId><SourceLocationresid="${resource}"/>`;
-  assert(compactManifest.includes(actionPattern), `${resource} must use independent ${taskpane}`);
+  const controlStart = compactManifest.indexOf(`<Controlxsi:type="Button"id="WordOllama.JS.${control}">`);
+  const controlEnd = compactManifest.indexOf("</Control>", controlStart);
+  const controlMarkup = compactManifest.slice(controlStart, controlEnd);
+  assert(
+    controlStart >= 0 && controlMarkup.includes(
+      `<Actionxsi:type="ExecuteFunction"><FunctionName>${functionName}</FunctionName></Action>`,
+    ),
+    `${control} must dispatch ${functionName} through the shared runtime`,
+  );
 }
 assert(
   compactManifest.includes(
@@ -113,12 +111,19 @@ assert(
 );
 assert(
   commandsHtml.includes('src="/src/commands.ts"') &&
+    main.includes('from "./commands"') &&
     commands.includes("Office.context.ui.displayDialogAsync(") &&
     commands.includes('"/settings.html"') &&
     commands.includes('dialogUrl.searchParams.set("v", ADDIN_VERSION)') &&
     settingsHtml.includes('src="/src/settings/main.tsx"') &&
     commands.includes('Office.actions.associate("openSettingsDialog"'),
-  "the function file must register the dedicated React settings Office Dialog",
+  "the shared function file must register workflow commands and the dedicated React settings dialog",
+);
+assert(
+  commands.includes("Office.addin?.showAsTaskpane?.()") &&
+    commands.includes("SHARED_RUNTIME_NAVIGATION_EVENT") &&
+    main.includes("Office.addin.setStartupBehavior(Office.StartupBehavior.load)"),
+  "the shared runtime must reveal the pane on demand and auto-load on document reopen",
 );
 assert(
   commands.includes("DialogMessageReceived") &&

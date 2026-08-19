@@ -193,7 +193,14 @@ const application = {
     Paragraphs: paragraphs,
     Content: {
       get Text() { return paragraphValues.join("\r"); },
+      Start: 0,
       InsertAfter(value: string) { paragraphValues.push(value); },
+    },
+    Range(start: number, end: number) {
+      return {
+        get Text() { return paragraphValues.join("\r").slice(start, end); },
+        Select() { values.set("exactSelected", `${start}:${end}`); },
+      };
     },
     Comments: {
       get Count() { return comments.length; },
@@ -229,6 +236,13 @@ assert.deepEqual(await word.getSelection(), {
   text: "用户选区",
   documentUrl: "C:\\docs\\sample.docx",
 });
+assert.equal(word.supportsTool("select_exact_text"), true);
+assert.deepEqual(await word.selectExactText("第二段包含关键字"), {
+  selected: true,
+  matchCount: 1,
+  text: "第二段包含关键字",
+});
+assert.ok(values.get("exactSelected"));
 assert.equal((await word.getDocumentOverview()).paragraphCount, 3);
 assert.equal(paragraphItemReads, 0, "bulk WPS document reads must avoid one native call per paragraph");
 assert.deepEqual((await word.readParagraphs(2, 3)).paragraphs, ["第二段包含关键字", "第三段"]);

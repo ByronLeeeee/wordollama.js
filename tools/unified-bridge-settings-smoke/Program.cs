@@ -38,6 +38,85 @@ try
     Assert(sessionStore.GetOfficeTools(sharedSession.Token).Count == 0,
         "creating a fresh session cleans expired session capabilities");
 
+    var brokerClock = new ManualTimeProvider(DateTimeOffset.Parse("2026-08-18T00:00:00Z"));
+    var officeBroker = new OfficeToolBroker(
+        brokerClock,
+        hostTimeout: TimeSpan.FromSeconds(45),
+        toolTimeout: TimeSpan.FromSeconds(5));
+    var preciseRevisionTool = new OfficeToolDescriptor(
+        "apply_precise_revision",
+        "Apply changed hunks as tracked revisions.",
+        true,
+        System.Text.Json.JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new { original = new { type = "string" }, revised = new { type = "string" } },
+            required = new[] { "original", "revised" },
+        }));
+    officeBroker.RegisterHost(
+        "office-session",
+        "office-host",
+        "https://localhost:37421",
+        [preciseRevisionTool]);
+    var externalCallTask = officeBroker.CallAsync(
+        "apply_precise_revision",
+        System.Text.Json.JsonSerializer.SerializeToElement(new { original = "old", revised = "new" }));
+    var relayedCall = await officeBroker.WaitForCallAsync("office-session", "office-host");
+    Assert(relayedCall is not null &&
+           relayedCall.Name == "apply_precise_revision" &&
+           relayedCall.Arguments.GetProperty("original").GetString() == "old",
+        "external MCP calls are relayed to the authenticated Office host");
+    Assert(officeBroker.CompleteCall(
+            "office-session",
+            "office-host",
+            relayedCall!.CallId,
+            new ExternalOfficeToolResultRequest("{\"precise\":true}")),
+        "Office host results complete the matching external tool call");
+    var externalResult = await externalCallTask;
+    Assert(!externalResult.IsError && externalResult.Result.Contains("precise", StringComparison.Ordinal),
+        "external MCP receives the Office tool result");
+    Assert(officeBroker.GetStatus().HostConnected && officeBroker.GetTools().Count == 1,
+        "connected Office host publishes its live tool catalog");
+    officeBroker.RegisterHost(
+        "office-session",
+        "second-office-host",
+        "https://localhost:37421",
+        [preciseRevisionTool]);
+    var ambiguousHostRejected = false;
+    try
+    {
+        _ = await officeBroker.CallAsync(
+            "apply_precise_revision",
+            System.Text.Json.JsonSerializer.SerializeToElement(new { original = "old", revised = "new" }));
+    }
+    catch (InvalidOperationException exception)
+    {
+        ambiguousHostRejected = exception.Message.Contains("Multiple Word", StringComparison.Ordinal);
+    }
+    Assert(ambiguousHostRejected && officeBroker.GetStatus().Hosts.Count == 2,
+        "multiple Word panes require an explicit opaque host identifier");
+    brokerClock.Advance(TimeSpan.FromSeconds(46));
+    Assert(!officeBroker.GetStatus().HostConnected && officeBroker.GetTools().Count == 0,
+        "stale Office hosts are removed from the external MCP catalog");
+
+    var wordMcpSecrets = new MemorySecretStore();
+    var wordMcpOptions = new WordMcpOptions(false, string.Empty);
+    var generatedWordMcpToken = wordMcpOptions.GenerateAndEnable(wordMcpSecrets);
+    Assert(
+        generatedWordMcpToken.Length == 32 &&
+        wordMcpOptions.Enabled &&
+        wordMcpOptions.AccessToken == generatedWordMcpToken &&
+        wordMcpSecrets.Get(WordMcpOptions.TokenSecretName) == generatedWordMcpToken &&
+        wordMcpSecrets.Get(WordMcpOptions.EnabledSecretName) == bool.TrueString,
+        "Word MCP token generation enables the endpoint and persists only in the platform secret store");
+    wordMcpOptions.Disable(wordMcpSecrets);
+    Assert(!wordMcpOptions.Enabled &&
+           wordMcpSecrets.Get(WordMcpOptions.EnabledSecretName) == bool.FalseString,
+        "Word MCP can be disabled without deleting its protected token");
+    wordMcpOptions.Enable(wordMcpSecrets);
+    Assert(wordMcpOptions.Enabled && wordMcpOptions.AccessToken == generatedWordMcpToken,
+        "Word MCP can be re-enabled with the protected token without rotating it");
+
     Assert(
         Path.GetFileName(PlatformPaths.GetSettingsRoot()) ==
             PlatformPaths.ProductDirectoryName &&

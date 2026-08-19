@@ -5,6 +5,38 @@ type DialogCommandEvent = {
   completed: (options?: { allowEvent?: boolean }) => void;
 };
 
+export const SHARED_RUNTIME_NAVIGATION_EVENT = "wordollama:shared-runtime-navigate";
+
+export type SharedRuntimeRoute = {
+  surface: "agent" | "create" | "edit" | "review" | "legal" | "compare";
+  workflow: string;
+};
+
+const WORKFLOW_COMMANDS: Record<string, SharedRuntimeRoute> = {
+  openWriting: { surface: "create", workflow: "writing" },
+  openImage: { surface: "create", workflow: "image" },
+  openTable: { surface: "create", workflow: "table" },
+  openHtml: { surface: "create", workflow: "html" },
+  openMarkdown: { surface: "create", workflow: "markdown" },
+  openAgent: { surface: "agent", workflow: "agent" },
+  openCustomPrompts: { surface: "create", workflow: "custom-prompts" },
+  openPolish: { surface: "edit", workflow: "polish" },
+  openExpand: { surface: "edit", workflow: "expand" },
+  openSimplify: { surface: "edit", workflow: "simplify" },
+  openModify: { surface: "edit", workflow: "modify" },
+  openContinue: { surface: "edit", workflow: "continue" },
+  openSummarize: { surface: "edit", workflow: "summarize" },
+  openFix: { surface: "edit", workflow: "fix" },
+  openTranslate: { surface: "edit", workflow: "translate" },
+  openRisk: { surface: "legal", workflow: "risk" },
+  openFairness: { surface: "legal", workflow: "fairness" },
+  openMootCourt: { surface: "legal", workflow: "moot-court" },
+  openContractCompare: { surface: "compare", workflow: "contract-compare" },
+  openCompare: { surface: "compare", workflow: "compare" },
+  openLawSearch: { surface: "legal", workflow: "law-search" },
+  openReview: { surface: "review", workflow: "review" },
+};
+
 type DialogRequest =
   | { id: string; method: "word.listStyles" }
   | { id: string; method: "word.createParagraphStyle"; name: string }
@@ -96,6 +128,25 @@ function openSettingsDialog(event: DialogCommandEvent): void {
   );
 }
 
+function openWorkflow(route: SharedRuntimeRoute, event: DialogCommandEvent): void {
+  window.dispatchEvent(new CustomEvent<SharedRuntimeRoute>(
+    SHARED_RUNTIME_NAVIGATION_EVENT,
+    { detail: route },
+  ));
+  const showTaskpane = Office.addin?.showAsTaskpane?.();
+  if (showTaskpane) {
+    void showTaskpane.then(() => event.completed()).catch((error) => {
+      console.error("[shared-runtime-show-taskpane-failed]", error);
+      event.completed();
+    });
+    return;
+  }
+  event.completed();
+}
+
 Office.onReady(() => {
   Office.actions.associate("openSettingsDialog", openSettingsDialog);
+  for (const [name, route] of Object.entries(WORKFLOW_COMMANDS)) {
+    Office.actions.associate(name, (event: DialogCommandEvent) => openWorkflow(route, event));
+  }
 });

@@ -12,6 +12,21 @@ const descriptors: OfficeToolDescriptor[] = [
     parameterSchema: { type: "object", properties: {}, required: [] },
   },
   {
+    name: "select_exact_text",
+    description: "select_exact_text",
+    // Selection is visible, shared host state. Treat it as a write for MCP
+    // approval and multi-document targeting even though document text is unchanged.
+    isWriteOperation: true,
+    parameterSchema: {
+      type: "object",
+      properties: {
+        text: { type: "string", minLength: 1, maxLength: 255 },
+      },
+      required: ["text"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "search_text",
     description: "search_text",
     isWriteOperation: false,
@@ -408,6 +423,19 @@ const descriptors: OfficeToolDescriptor[] = [
     },
   },
   {
+    name: "apply_precise_revision",
+    description: "apply_precise_revision",
+    isWriteOperation: true,
+    parameterSchema: {
+      type: "object",
+      properties: {
+        original: { type: "string" },
+        revised: { type: "string" },
+      },
+      required: ["original", "revised"],
+    },
+  },
+  {
     name: "ask_human",
     description: "ask_human",
     isWriteOperation: false,
@@ -443,6 +471,8 @@ export class OfficeJsToolRegistry {
     switch (name) {
       case "get_selection":
         return this.word.getSelection();
+      case "select_exact_text":
+        return this.word.selectExactText(this.requireString(args, "text"));
       case "search_text":
         return this.word.searchText(this.requireString(args, "keyword"));
       case "get_doc_overview":
@@ -611,6 +641,13 @@ export class OfficeJsToolRegistry {
         });
       case "replace_exact_text":
         return this.word.findReplace(this.requireString(args, "find"), this.requireString(args, "replace"));
+      case "apply_precise_revision":
+        return {
+          precise: await this.word.applyPreciseRevision(
+            this.requireString(args, "original"),
+            this.requireString(args, "revised", true),
+          ),
+        };
       case "ask_human":
         return this.word.askHuman(this.requireString(args, "question"));
       default:
@@ -618,9 +655,9 @@ export class OfficeJsToolRegistry {
     }
   }
 
-  private requireString(args: ToolArguments, name: string): string {
+  private requireString(args: ToolArguments, name: string, allowEmpty = false): string {
     const value = args[name];
-    if (typeof value !== "string" || !value.trim()) {
+    if (typeof value !== "string" || (!allowEmpty && !value.trim())) {
       throw new Error(`${name} is required`);
     }
     return value;

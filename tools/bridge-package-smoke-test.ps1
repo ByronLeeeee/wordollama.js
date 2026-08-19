@@ -715,7 +715,7 @@ function Assert-WindowsInstallerLifecycle {
     $englishKeys = @($installerEnglish.root.data.name | Sort-Object)
     $chineseKeys = @($installerChinese.root.data.name | Sort-Object)
     if (($englishKeys -join ",") -ne ($chineseKeys -join ",") -or
-        $englishKeys.Count -ne 9) {
+        $englishKeys.Count -ne 30) {
         throw "Bridge package smoke: Windows installer locales are incomplete or mismatched."
     }
 
@@ -993,6 +993,8 @@ if ($hostRuntime -eq "win-x64") {
     $windowsInstallerSource = Get-Content -LiteralPath $windowsInstallerScript -Raw
     $windowsInstallerProgram = Get-Content -LiteralPath `
         (Join-Path $repoRoot "src/WordOllama.WindowsInstaller/Program.cs") -Raw
+    $windowsInstallerWizard = Get-Content -LiteralPath `
+        (Join-Path $repoRoot "src/WordOllama.WindowsInstaller/InstallerWizard.cs") -Raw
     $signedCandidateWorkflow = Get-Content -LiteralPath `
         (Join-Path $repoRoot ".github/workflows/officejs-signed-candidate.yml") -Raw
     if ($windowsInstallerProgram -notmatch 'SubjectAlternativeNameBuilder' -or
@@ -1012,6 +1014,12 @@ if ($hostRuntime -eq "win-x64") {
         $windowsInstallerProgram -notmatch '"jsaddons"' -or
         $windowsInstallerProgram -notmatch 'https://localhost:37421/wps-addin/') {
         throw "Bridge package smoke: Windows installer lacks owned certificate, Office, or WPS registration."
+    }
+    if ($windowsInstallerProgram -notmatch 'Application\.Run\(wizard\)' -or
+        $windowsInstallerWizard -notmatch 'ProgressBarStyle\.Marquee' -or
+        $windowsInstallerWizard -notmatch 'CertificateConsent' -or
+        $windowsInstallerWizard -notmatch 'Installation complete|CompleteTitle') {
+        throw "Bridge package smoke: Windows installer lacks the interactive setup wizard."
     }
     if ($signedCandidateWorkflow -notmatch 'WINDOWS_SIGNING_PFX_BASE64' -or
         $signedCandidateWorkflow -notmatch 'WINDOWS_SIGNING_PFX_PASSWORD' -or

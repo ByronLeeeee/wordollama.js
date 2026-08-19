@@ -189,7 +189,7 @@ function DiagnosticsPanel() {
         warningKey="taskpane.utility.diagnostics.blankWarning"
         warning="Run only in an unsaved blank document that can be discarded."
         runKey="taskpane.utility.diagnostics.runGolden"
-        runLabel="Run the 38-tool golden suite"
+        runLabel="Run the 40-tool golden suite"
         open
       />
       <AcceptancePanel

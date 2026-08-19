@@ -14,14 +14,18 @@ import {
   Boxes,
   ChevronDown,
   CircleCheck,
+  Copy,
   Eye,
   FileCode2,
   FolderOpen,
   House,
   Info,
+  KeyRound,
   Network,
   Pencil,
   Plus,
+  Power,
+  PowerOff,
   RefreshCw,
   Server,
   Settings2,
@@ -46,6 +50,7 @@ import type {
   SkillSummary,
   UpdateCheckResult,
   UpdateRollbackStatus,
+  WordMcpSettingsView,
 } from "../contracts";
 import { RuntimeClient, RuntimeRequestError } from "../runtime-client";
 import {
@@ -1485,6 +1490,10 @@ function McpPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importJson, setImportJson] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [wordMcp, setWordMcp] = useState<WordMcpSettingsView | null>(null);
+  const [wordMcpStatus, setWordMcpStatus] = useState<StatusState>(null);
+  const [generatingWordMcpToken, setGeneratingWordMcpToken] = useState(false);
+  const [wordMcpRegenerateOpen, setWordMcpRegenerateOpen] = useState(false);
 
   const load = async () => {
     try {
@@ -1495,6 +1504,52 @@ function McpPage() {
     }
   };
   useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void runtime.getWordMcpSettings()
+      .then(setWordMcp)
+      .catch((error) => setWordMcpStatus(toStatus(error, "common.notConnected")));
+  }, []);
+
+  const generateWordMcpToken = async () => {
+    setGeneratingWordMcpToken(true);
+    try {
+      const generated = await runtime.generateWordMcpToken();
+      setWordMcp(generated);
+      setWordMcpStatus(translatedStatus("mcp.wordHostGenerated"));
+    } catch (error) {
+      setWordMcpStatus(toStatus(error, "mcp.wordHostGenerateFailed"));
+    } finally {
+      setGeneratingWordMcpToken(false);
+    }
+  };
+
+  const copyWordMcpValue = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setWordMcpStatus(translatedStatus("mcp.wordHostCopied"));
+    } catch (error) {
+      setWordMcpStatus(toStatus(error, "mcp.wordHostCopyFailed"));
+    }
+  };
+
+  const setWordMcpEnabled = async (enabled: boolean) => {
+    try {
+      const next = enabled ? await runtime.enableWordMcp() : await runtime.disableWordMcp();
+      setWordMcp((current) => ({ ...next, accessToken: current?.accessToken }));
+      setWordMcpStatus(translatedStatus(enabled ? "mcp.wordHostEnabledStatus" : "mcp.wordHostDisabledStatus"));
+    } catch (error) {
+      setWordMcpStatus(toStatus(error, "mcp.wordHostStateFailed"));
+    }
+  };
+
+  const copyWordMcpAgentConfig = async () => {
+    try {
+      await navigator.clipboard.writeText(await runtime.getWordMcpAgentConfig());
+      setWordMcpStatus(translatedStatus("mcp.wordHostConfigCopied"));
+    } catch (error) {
+      setWordMcpStatus(toStatus(error, "mcp.wordHostCopyFailed"));
+    }
+  };
 
   const select = async (server: McpServerView) => {
     setForm({
@@ -1561,6 +1616,59 @@ function McpPage() {
   return (
     <div className="settings-page">
       <PageHeading title={t("mcp.title")} />
+      <Card title={t("mcp.wordHostTitle")} wide>
+        <p className="settings-help">{t("mcp.wordHostHint")}</p>
+        <div className="settings-model-editor-grid">
+          <fieldset className="fieldset settings-model-editor-wide">
+            <legend className="fieldset-legend">{t("mcp.wordHostEndpoint")}</legend>
+            <div className="join w-full">
+              <input className="input input-sm join-item w-full" readOnly value={wordMcp?.endpoint ?? ""} />
+              <button className="btn btn-sm join-item" type="button" disabled={!wordMcp?.endpoint} onClick={() => void copyWordMcpValue(wordMcp?.endpoint ?? "")}><Copy size={14} />{t("common.copy")}</button>
+            </div>
+          </fieldset>
+          {wordMcp?.accessToken ? (
+            <fieldset className="fieldset settings-model-editor-wide">
+              <legend className="fieldset-legend">{t("mcp.wordHostToken")}</legend>
+              <div className="join w-full">
+                <input className="input input-sm join-item w-full font-mono" readOnly value={wordMcp.accessToken} />
+                <button className="btn btn-sm join-item" type="button" onClick={() => void copyWordMcpValue(wordMcp.accessToken ?? "")}><Copy size={14} />{t("common.copy")}</button>
+              </div>
+              <p className="label">{t("mcp.wordHostTokenOnce")}</p>
+            </fieldset>
+          ) : null}
+        </div>
+        <div className="card-actions justify-start">
+          <button className="btn btn-primary btn-sm" type="button" disabled={generatingWordMcpToken} onClick={() => wordMcp?.configured ? setWordMcpRegenerateOpen(true) : void generateWordMcpToken()}>
+            <KeyRound size={14} />{generatingWordMcpToken ? t("mcp.wordHostGenerating") : t(wordMcp?.configured ? "mcp.wordHostRegenerate" : "mcp.wordHostGenerate")}
+          </button>
+          <button className="btn btn-sm" type="button" disabled={!wordMcp?.configured || !wordMcp?.enabled} onClick={() => void copyWordMcpAgentConfig()}><Copy size={14} />{t("mcp.wordHostCopyConfig")}</button>
+          {wordMcp?.enabled ? (
+            <button className="btn btn-error btn-outline btn-sm" type="button" onClick={() => void setWordMcpEnabled(false)}><PowerOff size={14} />{t("mcp.wordHostDisable")}</button>
+          ) : wordMcp?.configured ? (
+            <button className="btn btn-sm" type="button" onClick={() => void setWordMcpEnabled(true)}><Power size={14} />{t("mcp.wordHostEnable")}</button>
+          ) : null}
+          {wordMcp?.enabled ? <span className="badge badge-success badge-soft">{t("mcp.wordHostEnabled")}</span> : null}
+        </div>
+        <Status value={wordMcpStatus} />
+      </Card>
+      {wordMcpRegenerateOpen ? (
+        <dialog className="modal modal-open" open onCancel={() => setWordMcpRegenerateOpen(false)}>
+          <div className="modal-box settings-confirm-modal">
+            <h2>{t("mcp.wordHostRegenerateTitle")}</h2>
+            <p>{t("mcp.wordHostRegenerateConfirm")}</p>
+            <div className="modal-action">
+              <button className="btn btn-sm" type="button" onClick={() => setWordMcpRegenerateOpen(false)}>{t("common.cancel")}</button>
+              <button className="btn btn-error btn-sm" type="button" onClick={() => {
+                setWordMcpRegenerateOpen(false);
+                void generateWordMcpToken();
+              }}>{t("mcp.wordHostConfirmRegenerate")}</button>
+            </div>
+          </div>
+          <form method="dialog" className="modal-backdrop" onSubmit={() => setWordMcpRegenerateOpen(false)}>
+            <button aria-label={t("common.close")}>{t("common.close")}</button>
+          </form>
+        </dialog>
+      ) : null}
       <Card
         title={t("mcp.servers")}
         wide
