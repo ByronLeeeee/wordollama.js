@@ -178,7 +178,7 @@ const paragraphs = {
 
 const selection = {
   Text: "用户选区",
-  Range: {},
+  Range: { Start: 0, End: 4 },
   InsertAfter(value: string) { values.set("selectionAfter", value); },
   TypeText(value: string) { values.set("typed", value); },
   InsertBreak() { values.set("break", "page"); },
@@ -199,7 +199,11 @@ const application = {
     Range(start: number, end: number) {
       return {
         get Text() { return paragraphValues.join("\r").slice(start, end); },
-        Select() { values.set("exactSelected", `${start}:${end}`); },
+        Select() {
+          values.set("exactSelected", `${start}:${end}`);
+          selection.Text = paragraphValues.join("\r").slice(start, end);
+          selection.Range = { Start: start, End: end };
+        },
       };
     },
     Comments: {
@@ -232,16 +236,16 @@ window.wps = activeWpsApplication;
 const word = new WpsWordAdapter();
 assert.equal(word.supportsTool("get_selection"), true);
 assert.equal(word.supportsTool("revisions"), false, "tools must follow the active WPS document capabilities");
-assert.deepEqual(await word.getSelection(), {
-  text: "用户选区",
-  documentUrl: "C:\\docs\\sample.docx",
-});
+const initialSelection = await word.getSelection();
+assert.equal(initialSelection.text, "用户选区");
+assert.equal(initialSelection.documentUrl, "C:\\docs\\sample.docx");
+assert.match(initialSelection.selectionHash, /^[0-9a-f]{64}$/u);
 assert.equal(word.supportsTool("select_exact_text"), true);
-assert.deepEqual(await word.selectExactText("第二段包含关键字"), {
-  selected: true,
-  matchCount: 1,
-  text: "第二段包含关键字",
-});
+const exactSelection = await word.selectExactText("第二段包含关键字");
+assert.equal(exactSelection.selected, true);
+assert.equal(exactSelection.matchCount, 1);
+assert.equal(exactSelection.text, "第二段包含关键字");
+assert.match(exactSelection.selectionHash, /^[0-9a-f]{64}$/u);
 assert.ok(values.get("exactSelected"));
 assert.equal((await word.getDocumentOverview()).paragraphCount, 3);
 assert.equal(paragraphItemReads, 0, "bulk WPS document reads must avoid one native call per paragraph");

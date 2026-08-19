@@ -5,6 +5,7 @@ import i18n from "../apps/addin/src/i18n.ts";
 type AnyRecord = Record<string, unknown>;
 
 const calls: string[] = [];
+const selectionHash = "a".repeat(64);
 const fakeWord = new Proxy({
   supportsTool: () => true,
 } as AnyRecord, {
@@ -14,7 +15,7 @@ const fakeWord = new Proxy({
     }
     return (..._args: unknown[]) => {
       calls.push(String(property));
-      if (property === "getSelection") return { text: "fixture" };
+      if (property === "getSelection") return { text: "fixture", selectionHash };
       if (property === "findReplace") return { count: 1 };
       if (property === "askHuman") return "approved";
       return undefined;
@@ -42,8 +43,25 @@ for (const name of expected) {
 if (names.length !== 40) {
   throw new Error(`expected 40 Office.js descriptors, got ${names.length}`);
 }
+for (const name of [
+  "insert_at_cursor",
+  "add_comment",
+  "format_text",
+  "insert_page_break",
+  "format_list",
+  "apply_precise_revision",
+]) {
+  const schema = registry.list().find((tool) => tool.name === name)?.parameterSchema as {
+    required?: string[];
+    properties?: Record<string, { pattern?: string }>;
+  } | undefined;
+  if (!schema?.required?.includes("expected_selection_hash") ||
+      schema.properties?.expected_selection_hash?.pattern !== "^[0-9a-f]{64}$") {
+    throw new Error(`${name} does not require the guarded selection hash schema`);
+  }
+}
 if (registry.list().find((tool) => tool.name === "get_selection")?.description !==
-    "Read text from the current Word selection.") {
+    "Read the current Word selection and return the selectionHash required by selection-based write tools.") {
   throw new Error("English Office.js tool descriptions were not localized");
 }
 await i18n.changeLanguage("zh-CN");
@@ -83,10 +101,12 @@ const dispatchArguments: Record<string, AnyRecord> = {
   read_large_chunk: { start_paragraph: 0 },
   apply_style: { paragraph_index: 0, style_name: "Normal" },
   replace_paragraph: { paragraph_index: 0, new_text: "text" },
-  insert_at_cursor: { text: "text" },
-  add_comment: { text: "comment" },
+  insert_at_cursor: { text: "text", expected_selection_hash: selectionHash },
+  add_comment: { text: "comment", expected_selection_hash: selectionHash },
   find_replace: { find: "old", replace: "new" },
   format_paragraph: { paragraph_index: 0 },
+  format_text: { bold: true, expected_selection_hash: selectionHash },
+  insert_page_break: { expected_selection_hash: selectionHash },
   read_table: { table_index: 0 },
   insert_table: { rows: 1, columns: 1, header_row: ["Header"] },
   table_insert_row: { table_index: 0, after_row: 0 },
@@ -98,11 +118,11 @@ const dispatchArguments: Record<string, AnyRecord> = {
   highlight_risk: { keyword: "risk" },
   validate_citation: { citation: "citation" },
   insert_image: { base64: "aGVsbG8=", alt_text: "image" },
-  format_list: { list_type: "bullet" },
+  format_list: { list_type: "bullet", expected_selection_hash: selectionHash },
   header_footer: { element: "header", text: "header" },
   update_toc: { action: "update" },
   replace_exact_text: { find: "old", replace: "new" },
-  apply_precise_revision: { original: "old", revised: "new" },
+  apply_precise_revision: { original: "old", revised: "new", expected_selection_hash: selectionHash },
   ask_human: { question: "continue?" },
 };
 for (const descriptor of registry.list()) {
@@ -115,15 +135,21 @@ let exactFixtureTexts = ["Unique target"];
   context: { document: { url: "fixture.docx" } },
 };
 (globalThis as AnyRecord).Word = {
+  RangeLocation: { start: "Start" },
   run: async (callback: (context: AnyRecord) => Promise<unknown>) => callback({
     document: {
       body: {
         search: () => ({
           items: exactFixtureTexts.map((text) => ({
             text,
+            load: () => undefined,
+            getRange: () => ({}),
             select: () => { exactSelectCalls += 1; },
           })),
           load: () => undefined,
+        }),
+        getRange: () => ({
+          expandTo: () => ({ text: "", load: () => undefined }),
         }),
       },
     },
@@ -147,5 +173,43 @@ await exactWord.selectExactText("Missing").then(
   () => undefined,
 );
 if (exactSelectCalls !== 1) throw new Error("missing exact selection changed the selection");
+
+let prefixText = "before";
+let insertedText = "";
+const guardedSelection = {
+  text: "target",
+  load: () => undefined,
+  getRange: () => ({}),
+  insertText: (text: string) => { insertedText = text; },
+};
+(globalThis as AnyRecord).Word = {
+  RangeLocation: { start: "Start" },
+  InsertLocation: { replace: "Replace" },
+  run: async (callback: (context: AnyRecord) => Promise<unknown>) => callback({
+    document: {
+      getSelection: () => guardedSelection,
+      body: {
+        getRange: () => ({
+          expandTo: () => ({ get text() { return prefixText; }, load: () => undefined }),
+        }),
+      },
+    },
+    sync: async () => undefined,
+  }),
+};
+const guardedWord = new OfficeJsWordAdapter();
+const guardedSnapshot = await guardedWord.getSelection();
+if (!/^[0-9a-f]{64}$/u.test(guardedSnapshot.selectionHash)) {
+  throw new Error("get_selection did not return a SHA-256 selection hash");
+}
+prefixText = "before changed";
+await guardedWord.insertAtCursor("unsafe", guardedSnapshot.selectionHash).then(
+  () => { throw new Error("stale selection hash must reject the write"); },
+  () => undefined,
+);
+if (insertedText) throw new Error("stale selection hash changed the document");
+prefixText = "before";
+await guardedWord.insertAtCursor("safe", guardedSnapshot.selectionHash);
+if (insertedText !== "safe") throw new Error("matching selection hash did not allow the write");
 
 console.log(`Office.js registry smoke passed (${names.length} tools).`);

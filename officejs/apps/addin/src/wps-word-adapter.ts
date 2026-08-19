@@ -519,10 +519,32 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
 
   override async getSelection(): Promise<WordSelection> {
     const application = this.application();
+    return this.captureWpsSelection(application);
+  }
+
+  private async captureWpsSelection(application: WpsApplication): Promise<WordSelection> {
+    const selection = application.Selection;
+    const start = Number(selection?.Range?.Start);
+    const end = Number(selection?.Range?.End);
+    if (!selection || !Number.isFinite(start) || !Number.isFinite(end)) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.selectionHashUnsupported"));
+    }
+    const documentUrl = String(application.ActiveDocument?.FullName ?? "");
+    const text = cleanText(selection.Text);
     return {
-      text: cleanText(application.Selection?.Text),
-      documentUrl: String(application.ActiveDocument?.FullName ?? "") || undefined,
+      text,
+      documentUrl: documentUrl || undefined,
+      selectionHash: await this.createSelectionHash({ documentUrl, start, end, text }),
     };
+  }
+
+  private async assertExpectedWpsSelection(
+    application: WpsApplication,
+    expectedSelectionHash?: string,
+  ): Promise<WordSelection> {
+    const snapshot = await this.captureWpsSelection(application);
+    this.assertSelectionHash(snapshot.selectionHash, expectedSelectionHash);
+    return snapshot;
   }
 
   override async selectExactText(text: string): Promise<ExactTextSelectionResult> {
@@ -553,7 +575,8 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
       throw new Error(i18n.t("taskpane.wordAdapter.errors.exactSelectionChanged"));
     }
     range.Select();
-    return { selected: true, matchCount: 1, text };
+    const snapshot = await this.captureWpsSelection(application);
+    return { selected: true, matchCount: 1, text, selectionHash: snapshot.selectionHash };
   }
 
   override async replaceSelection(text: string): Promise<void> {
@@ -568,10 +591,13 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     }
   }
 
-  override async applyPreciseRevision(original: string, revised: string): Promise<boolean> {
+  override async applyPreciseRevision(original: string, revised: string, expectedSelectionHash?: string): Promise<boolean> {
     const application = this.application();
     const selection = application.Selection;
-    if (!selection || cleanText(selection.Text) !== cleanText(original)) {
+    const currentText = expectedSelectionHash
+      ? (await this.assertExpectedWpsSelection(application, expectedSelectionHash)).text
+      : cleanText(selection?.Text);
+    if (!selection || currentText !== cleanText(original)) {
       throw new Error(i18n.t("taskpane.wordAdapter.errors.preciseRevisionSelectionChanged"));
     }
     if (!isSafeTextSelection(selection)) {
@@ -723,15 +749,18 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     selection.InsertAfter(text);
   }
 
-  override async insertAtCursor(text: string): Promise<void> {
-    const selection = this.application().Selection;
+  override async insertAtCursor(text: string, expectedSelectionHash?: string): Promise<void> {
+    const application = this.application();
+    if (expectedSelectionHash) await this.assertExpectedWpsSelection(application, expectedSelectionHash);
+    const selection = application.Selection;
     if (typeof selection?.TypeText === "function") selection.TypeText(text);
     else if (typeof selection?.InsertAfter === "function") selection.InsertAfter(text);
     else unsupported("insert at cursor");
   }
 
-  override async addComment(text: string): Promise<void> {
+  override async addComment(text: string, expectedSelectionHash?: string): Promise<void> {
     const application = this.application();
+    if (expectedSelectionHash) await this.assertExpectedWpsSelection(application, expectedSelectionHash);
     const comments = application.ActiveDocument?.Comments;
     if (typeof comments?.Add !== "function") unsupported("comments");
     comments.Add(application.Selection?.Range, text);
@@ -809,8 +838,10 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     if (typeof spaceAfter === "number") format.SpaceAfter = spaceAfter;
   }
 
-  override async formatText(options: { bold?: boolean; italic?: boolean; underline?: boolean; fontName?: string; fontSize?: number; color?: string }): Promise<void> {
-    const font = this.application().Selection?.Font;
+  override async formatText(options: { bold?: boolean; italic?: boolean; underline?: boolean; fontName?: string; fontSize?: number; color?: string }, expectedSelectionHash?: string): Promise<void> {
+    const application = this.application();
+    if (expectedSelectionHash) await this.assertExpectedWpsSelection(application, expectedSelectionHash);
+    const font = application.Selection?.Font;
     if (!font) unsupported("text formatting");
     if (options.bold !== undefined) font.Bold = options.bold ? 1 : 0;
     if (options.italic !== undefined) font.Italic = options.italic ? 1 : 0;
@@ -820,8 +851,10 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     if (options.color) font.Color = cssColorToWps(options.color);
   }
 
-  override async insertPageBreak(): Promise<void> {
-    const selection = this.application().Selection;
+  override async insertPageBreak(expectedSelectionHash?: string): Promise<void> {
+    const application = this.application();
+    if (expectedSelectionHash) await this.assertExpectedWpsSelection(application, expectedSelectionHash);
+    const selection = application.Selection;
     if (typeof selection?.InsertBreak !== "function") unsupported("page break");
     selection.InsertBreak();
   }
@@ -1147,8 +1180,10 @@ export class WpsWordAdapter extends OfficeJsWordAdapter {
     }
   }
 
-  override async formatList(listType: string): Promise<void> {
-    const listFormat = this.application().Selection?.Range?.ListFormat;
+  override async formatList(listType: string, expectedSelectionHash?: string): Promise<void> {
+    const application = this.application();
+    if (expectedSelectionHash) await this.assertExpectedWpsSelection(application, expectedSelectionHash);
+    const listFormat = application.Selection?.Range?.ListFormat;
     if (!listFormat) unsupported("list formatting");
     const normalized = listType.toLocaleLowerCase();
     if (normalized.startsWith("bullet")) listFormat.ApplyBulletDefault?.();

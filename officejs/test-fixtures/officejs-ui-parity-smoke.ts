@@ -378,31 +378,23 @@ assert(
   css.includes('[id$="-status"]:empty { display: none; }'),
   "empty status elements must not reserve vertical space",
 );
-for (const independentPane of [
-  "WordOllama.JS.AgentPane",
-  "WordOllama.JS.WritingPane",
-  "WordOllama.JS.ModifyPane",
-  "WordOllama.JS.ImagePane",
-  "WordOllama.JS.TablePane",
-  "WordOllama.JS.HtmlPane",
-  "WordOllama.JS.MarkdownPane",
-  "WordOllama.JS.PolishPane",
-  "WordOllama.JS.ExpandPane",
-  "WordOllama.JS.SimplifyPane",
-  "WordOllama.JS.ContinuePane",
-  "WordOllama.JS.SummarizePane",
-  "WordOllama.JS.FixPane",
-  "WordOllama.JS.TranslatePane",
-  "WordOllama.JS.ComparePane",
-  "WordOllama.JS.ReviewPane",
-  "WordOllama.JS.RiskPane",
-  "WordOllama.JS.FairnessPane",
-  "WordOllama.JS.MootCourtPane",
-  "WordOllama.JS.ContractComparePane",
-  "WordOllama.JS.LawSearchPane",
-  "WordOllama.JS.CustomPromptPane",
+assert(
+  manifest.includes('<bt:Set Name="SharedRuntime" MinVersion="1.1" />') &&
+    manifest.includes('<Runtime resid="Taskpane.Url" lifetime="long" />') &&
+    manifest.includes('<FunctionFile resid="Taskpane.Url" />'),
+  "manifest must route ribbon commands through the long-lived shared runtime",
+);
+for (const workflowFunction of [
+  "openAgent", "openWriting", "openModify", "openImage", "openTable", "openHtml",
+  "openMarkdown", "openPolish", "openExpand", "openSimplify", "openContinue",
+  "openSummarize", "openFix", "openTranslate", "openCompare", "openReview",
+  "openRisk", "openFairness", "openMootCourt", "openContractCompare",
+  "openLawSearch", "openCustomPrompts",
 ]) {
-  assert(manifest.includes(`<TaskpaneId>${independentPane}</TaskpaneId>`), `manifest is missing independent pane ${independentPane}`);
+  assert(
+    manifest.includes(`<FunctionName>${workflowFunction}</FunctionName>`),
+    `manifest is missing shared-runtime command ${workflowFunction}`,
+  );
 }
 assert(
   manifest.includes("<FunctionName>openSettingsDialog</FunctionName>") &&

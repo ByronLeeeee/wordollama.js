@@ -43,6 +43,14 @@ export interface GoldenHostHarness {
 }
 
 export const GOLDEN_FIXTURE_MARKER = "WORDOLLAMA_GOLDEN_ANCHOR";
+const SELECTION_GUARDED_TOOLS = new Set([
+  "insert_at_cursor",
+  "add_comment",
+  "format_text",
+  "insert_page_break",
+  "format_list",
+  "apply_precise_revision",
+]);
 const ONE_PIXEL_PNG =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
@@ -163,7 +171,13 @@ export async function runOfficeGoldenMatrix(
     } else {
       try {
         if (testCase.selectText) await harness.selectText(testCase.selectText);
-        await registry.execute(testCase.name, testCase.args ?? {});
+        let args = testCase.args ?? {};
+        if (SELECTION_GUARDED_TOOLS.has(testCase.name)) {
+          const selection = await registry.execute("get_selection") as { selectionHash?: string };
+          if (!selection.selectionHash) throw new Error("get_selection did not return selectionHash");
+          args = { ...args, expected_selection_hash: selection.selectionHash };
+        }
+        await registry.execute(testCase.name, args);
         result = { name: testCase.name, status: "passed", durationMs: Math.round(performance.now() - started) };
       } catch (error) {
         result = {

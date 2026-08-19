@@ -11,12 +11,14 @@ import { buildTextRevisionHunks, occurrenceBefore } from "./text-revision-diff.t
 export interface WordSelection {
   text: string;
   documentUrl?: string;
+  selectionHash: string;
 }
 
 export interface ExactTextSelectionResult {
   selected: true;
   matchCount: 1;
   text: string;
+  selectionHash: string;
 }
 
 export interface SearchResult {
@@ -96,11 +98,64 @@ export function markdownNoteToPlainText(value: string): string {
     .trim();
 }
 
+function createSelectionHashSalt(): string {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto?.getRandomValues?.(bytes);
+  if (bytes.some((value) => value !== 0)) {
+    return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  }
+  return `${Date.now()}:${Math.random()}:${Math.random()}`;
+}
+
+async function selectionHash(
+  salt: string,
+  snapshot: { documentUrl: string; start: number; end: number; text: string },
+): Promise<string> {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error(i18n.t("taskpane.wordAdapter.errors.selectionHashUnsupported"));
+  }
+  const input = new TextEncoder().encode(JSON.stringify([
+    "wordollama-selection-v1",
+    salt,
+    snapshot.documentUrl,
+    snapshot.start,
+    snapshot.end,
+    snapshot.text,
+  ]));
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", input);
+  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+function equalSelectionHash(actual: string, expected: string): boolean {
+  if (actual.length !== expected.length) return false;
+  let difference = 0;
+  for (let index = 0; index < actual.length; index += 1) {
+    difference |= actual.charCodeAt(index) ^ expected.charCodeAt(index);
+  }
+  return difference === 0;
+}
+
 export class OfficeJsWordAdapter {
   private readonly askHumanHandler?: AskHumanHandler;
+  protected readonly selectionHashSalt = createSelectionHashSalt();
 
   constructor(askHumanHandler?: AskHumanHandler) {
     this.askHumanHandler = askHumanHandler;
+  }
+
+  protected createSelectionHash(snapshot: {
+    documentUrl: string;
+    start: number;
+    end: number;
+    text: string;
+  }): Promise<string> {
+    return selectionHash(this.selectionHashSalt, snapshot);
+  }
+
+  protected assertSelectionHash(actual: string, expectedSelectionHash?: string): void {
+    if (expectedSelectionHash && !equalSelectionHash(actual, expectedSelectionHash)) {
+      throw new Error(i18n.t("taskpane.wordAdapter.errors.selectionHashMismatch"));
+    }
   }
 
   async readDocumentSetting<T>(key: string): Promise<T | null> {
@@ -181,6 +236,11 @@ export class OfficeJsWordAdapter {
 
     const wordApi14 = ["read_comments", "add_comment", "apply_precise_revision"];
     const wordApi13 = [
+      "get_selection",
+      "select_exact_text",
+      "insert_at_cursor",
+      "format_text",
+      "insert_page_break",
       "read_table",
       "table_insert_row",
       "table_set_cell",
@@ -342,12 +402,12 @@ export class OfficeJsWordAdapter {
   async getSelection(): Promise<WordSelection> {
     return Word.run(async (context) => {
       const selection = context.document.getSelection();
-      selection.load("text");
-      await context.sync();
+      const snapshot = await this.captureSelection(context, selection);
 
       return {
-        text: selection.text,
+        text: snapshot.text,
         documentUrl: Office.context.document.url,
+        selectionHash: snapshot.hash,
       };
     });
   }
@@ -375,8 +435,42 @@ export class OfficeJsWordAdapter {
       }
       exactMatches[0].select();
       await context.sync();
-      return { selected: true, matchCount: 1, text };
+      const snapshot = await this.captureSelection(context, exactMatches[0]);
+      return { selected: true, matchCount: 1, text, selectionHash: snapshot.hash };
     });
+  }
+
+  private async captureSelection(
+    context: Word.RequestContext,
+    selection: Word.Range,
+  ): Promise<{ text: string; hash: string }> {
+    const selectionStart = selection.getRange(Word.RangeLocation.start);
+    const prefix = context.document.body
+      .getRange(Word.RangeLocation.start)
+      .expandTo(selectionStart);
+    selection.load("text");
+    prefix.load("text");
+    await context.sync();
+    const start = prefix.text.length;
+    return {
+      text: selection.text,
+      hash: await this.createSelectionHash({
+        documentUrl: Office.context.document.url || "",
+        start,
+        end: start + selection.text.length,
+        text: selection.text,
+      }),
+    };
+  }
+
+  private async assertExpectedSelection(
+    context: Word.RequestContext,
+    selection: Word.Range,
+    expectedSelectionHash?: string,
+  ): Promise<string> {
+    const snapshot = await this.captureSelection(context, selection);
+    this.assertSelectionHash(snapshot.hash, expectedSelectionHash);
+    return snapshot.text;
   }
 
   async replaceSelection(text: string): Promise<void> {
@@ -432,21 +526,29 @@ export class OfficeJsWordAdapter {
     });
   }
 
-  async applyPreciseRevision(original: string, revised: string): Promise<boolean> {
-    const current = await this.getSelection();
-    if (current.text !== original) {
-      throw new Error(i18n.t("taskpane.wordAdapter.errors.preciseRevisionSelectionChanged"));
-    }
+  async applyPreciseRevision(original: string, revised: string, expectedSelectionHash?: string): Promise<boolean> {
     const hunks = buildTextRevisionHunks(original, revised);
-    if (!hunks.length) return true;
     const previousTrackingMode = await this.beginTrackedChanges();
-    if (previousTrackingMode === null) {
-      await this.replaceSelection(revised);
-      return false;
-    }
     try {
-      const precise = await Word.run(async (context) => {
+      return await Word.run(async (context) => {
         const selection = context.document.getSelection();
+        let currentText: string;
+        if (expectedSelectionHash) {
+          currentText = await this.assertExpectedSelection(context, selection, expectedSelectionHash);
+        } else {
+          selection.load("text");
+          await context.sync();
+          currentText = selection.text;
+        }
+        if (currentText !== original) {
+          throw new Error(i18n.t("taskpane.wordAdapter.errors.preciseRevisionSelectionChanged"));
+        }
+        if (!hunks.length) return true;
+        if (previousTrackingMode === null) {
+          selection.insertText(revised, Word.InsertLocation.replace);
+          await context.sync();
+          return false;
+        }
         const targets = hunks.map((hunk) => {
           const needle = hunk.originalText || hunk.rightAnchor || hunk.leftAnchor;
           const location = hunk.originalText || hunk.rightAnchor ? "replace-or-before" : "after";
@@ -465,7 +567,11 @@ export class OfficeJsWordAdapter {
           return { hunk, matches, location, occurrence: occurrenceBefore(original, needle, needleStart) };
         });
         await context.sync();
-        if (targets.some((target) => !target || !target.matches.items[target.occurrence])) return false;
+        if (targets.some((target) => !target || !target.matches.items[target.occurrence])) {
+          selection.insertText(revised, Word.InsertLocation.replace);
+          await context.sync();
+          return false;
+        }
         for (const target of [...targets].reverse()) {
           if (!target) return false;
           const range = target.matches.items[target.occurrence];
@@ -480,8 +586,6 @@ export class OfficeJsWordAdapter {
         await context.sync();
         return true;
       });
-      if (!precise) await this.replaceSelection(revised);
-      return precise;
     } finally {
       await this.restoreTrackedChanges(previousTrackingMode);
     }
@@ -1012,12 +1116,14 @@ export class OfficeJsWordAdapter {
     });
   }
 
-  async insertAtCursor(text: string): Promise<void> {
+  async insertAtCursor(text: string, expectedSelectionHash?: string): Promise<void> {
     if (!text) {
       throw new Error("text is required");
     }
     await Word.run(async (context) => {
-      context.document.getSelection().insertText(text, Word.InsertLocation.replace);
+      const selection = context.document.getSelection();
+      if (expectedSelectionHash) await this.assertExpectedSelection(context, selection, expectedSelectionHash);
+      selection.insertText(text, Word.InsertLocation.replace);
       await context.sync();
     });
   }
@@ -1052,12 +1158,14 @@ export class OfficeJsWordAdapter {
     });
   }
 
-  async addComment(text: string): Promise<void> {
+  async addComment(text: string, expectedSelectionHash?: string): Promise<void> {
     if (!text.trim()) {
       throw new Error("text is required");
     }
     await Word.run(async (context) => {
-      context.document.getSelection().insertComment(text);
+      const selection = context.document.getSelection();
+      if (expectedSelectionHash) await this.assertExpectedSelection(context, selection, expectedSelectionHash);
+      selection.insertComment(text);
       await context.sync();
     });
   }
@@ -1090,9 +1198,11 @@ export class OfficeJsWordAdapter {
     });
   }
 
-  async formatText(options: { bold?: boolean; italic?: boolean; underline?: boolean; fontName?: string; fontSize?: number; color?: string }): Promise<void> {
+  async formatText(options: { bold?: boolean; italic?: boolean; underline?: boolean; fontName?: string; fontSize?: number; color?: string }, expectedSelectionHash?: string): Promise<void> {
     await Word.run(async (context) => {
-      const font = context.document.getSelection().font;
+      const selection = context.document.getSelection();
+      if (expectedSelectionHash) await this.assertExpectedSelection(context, selection, expectedSelectionHash);
+      const font = selection.font;
       if (typeof options.bold === "boolean") font.bold = options.bold;
       if (typeof options.italic === "boolean") font.italic = options.italic;
       if (typeof options.underline === "boolean") font.underline = options.underline ? Word.UnderlineType.single : Word.UnderlineType.none;
@@ -1103,9 +1213,11 @@ export class OfficeJsWordAdapter {
     });
   }
 
-  async insertPageBreak(): Promise<void> {
+  async insertPageBreak(expectedSelectionHash?: string): Promise<void> {
     await Word.run(async (context) => {
-      context.document.getSelection().insertBreak(Word.BreakType.page, Word.InsertLocation.after);
+      const selection = context.document.getSelection();
+      if (expectedSelectionHash) await this.assertExpectedSelection(context, selection, expectedSelectionHash);
+      selection.insertBreak(Word.BreakType.page, Word.InsertLocation.after);
       await context.sync();
     });
   }
@@ -1411,9 +1523,11 @@ export class OfficeJsWordAdapter {
     });
   }
 
-  async formatList(listType: string): Promise<void> {
+  async formatList(listType: string, expectedSelectionHash?: string): Promise<void> {
     await Word.run(async (context) => {
-      const listFormat = context.document.getSelection().listFormat;
+      const selection = context.document.getSelection();
+      if (expectedSelectionHash) await this.assertExpectedSelection(context, selection, expectedSelectionHash);
+      const listFormat = selection.listFormat;
       if (listType.toLowerCase().startsWith("bullet")) {
         listFormat.applyBulletDefault("Word97");
       } else if (listType.toLowerCase().startsWith("number")) {

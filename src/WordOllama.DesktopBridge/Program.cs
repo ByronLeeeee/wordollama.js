@@ -650,7 +650,9 @@ app.MapPost("/capabilities", (
         return Results.Unauthorized();
     }
 
-    var hostId = string.IsNullOrWhiteSpace(request.HostId) ? token! : request.HostId.Trim();
+    var hostId = string.IsNullOrWhiteSpace(request.HostId)
+        ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token!))).ToLowerInvariant()
+        : request.HostId.Trim();
     if (hostId.Length > 128 || hostId.Any(character =>
             !char.IsAsciiLetterOrDigit(character) && character is not '-' and not '_' and not '.'))
     {

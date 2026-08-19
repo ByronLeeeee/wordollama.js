@@ -40,6 +40,7 @@ const registry: GoldenRegistry = {
   execute: async (name) => {
     executed.push(name);
     if (name === failedName) throw new Error("intentional fixture failure");
+    if (name === "get_selection") return { text: "fixture", selectionHash: "a".repeat(64) };
     return { ok: true };
   },
 };

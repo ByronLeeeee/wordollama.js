@@ -4,6 +4,12 @@ import i18n from "./i18n.ts";
 
 type ToolArguments = Record<string, unknown>;
 
+const expectedSelectionHashSchema = {
+  type: "string",
+  pattern: "^[0-9a-f]{64}$",
+  description: "Opaque selection hash returned by get_selection or select_exact_text. The write is rejected if the selection changed.",
+};
+
 const descriptors: OfficeToolDescriptor[] = [
   {
     name: "get_selection",
@@ -116,8 +122,8 @@ const descriptors: OfficeToolDescriptor[] = [
     isWriteOperation: true,
     parameterSchema: {
       type: "object",
-      properties: { text: { type: "string" } },
-      required: ["text"],
+      properties: { text: { type: "string" }, expected_selection_hash: expectedSelectionHashSchema },
+      required: ["text", "expected_selection_hash"],
     },
   },
   {
@@ -126,8 +132,8 @@ const descriptors: OfficeToolDescriptor[] = [
     isWriteOperation: true,
     parameterSchema: {
       type: "object",
-      properties: { text: { type: "string" } },
-      required: ["text"],
+      properties: { text: { type: "string" }, expected_selection_hash: expectedSelectionHashSchema },
+      required: ["text", "expected_selection_hash"],
     },
   },
   {
@@ -168,15 +174,20 @@ const descriptors: OfficeToolDescriptor[] = [
         font_name: { type: "string" },
         font_size: { type: "number" },
         color: { type: "string" },
+        expected_selection_hash: expectedSelectionHashSchema,
       },
-      required: [],
+      required: ["expected_selection_hash"],
     },
   },
   {
     name: "insert_page_break",
     description: "insert_page_break",
     isWriteOperation: true,
-    parameterSchema: { type: "object", properties: {}, required: [] },
+    parameterSchema: {
+      type: "object",
+      properties: { expected_selection_hash: expectedSelectionHashSchema },
+      required: ["expected_selection_hash"],
+    },
   },
   {
     name: "read_table",
@@ -350,8 +361,11 @@ const descriptors: OfficeToolDescriptor[] = [
     isWriteOperation: true,
     parameterSchema: {
       type: "object",
-      properties: { list_type: { type: "string", enum: ["bullet", "number"] } },
-      required: ["list_type"],
+      properties: {
+        list_type: { type: "string", enum: ["bullet", "number"] },
+        expected_selection_hash: expectedSelectionHashSchema,
+      },
+      required: ["list_type", "expected_selection_hash"],
     },
   },
   {
@@ -431,8 +445,9 @@ const descriptors: OfficeToolDescriptor[] = [
       properties: {
         original: { type: "string" },
         revised: { type: "string" },
+        expected_selection_hash: expectedSelectionHashSchema,
       },
-      required: ["original", "revised"],
+      required: ["original", "revised", "expected_selection_hash"],
     },
   },
   {
@@ -497,10 +512,10 @@ export class OfficeJsToolRegistry {
         await this.word.replaceParagraph(this.requireInt(args, "paragraph_index"), this.requireString(args, "new_text"));
         return { replaced: true };
       case "insert_at_cursor":
-        await this.word.insertAtCursor(this.requireString(args, "text"));
+        await this.word.insertAtCursor(this.requireString(args, "text"), this.requireSelectionHash(args));
         return { inserted: true };
       case "add_comment":
-        await this.word.addComment(this.requireString(args, "text"));
+        await this.word.addComment(this.requireString(args, "text"), this.requireSelectionHash(args));
         return { added: true };
       case "find_replace":
         return this.word.findReplace(this.requireString(args, "find"), this.requireString(args, "replace"));
@@ -520,10 +535,10 @@ export class OfficeJsToolRegistry {
           fontName: this.optionalString(args, "font_name"),
           fontSize: this.optionalNumber(args, "font_size"),
           color: this.optionalString(args, "color"),
-        });
+        }, this.requireSelectionHash(args));
         return { formatted: true };
       case "insert_page_break":
-        await this.word.insertPageBreak();
+        await this.word.insertPageBreak(this.requireSelectionHash(args));
         return { inserted: true };
       case "read_table":
         return this.word.readTable(this.requireInt(args, "table_index"));
@@ -574,7 +589,7 @@ export class OfficeJsToolRegistry {
         await this.word.insertImage(this.requireString(args, "base64"), this.optionalString(args, "alt_text"));
         return { inserted: true };
       case "format_list":
-        await this.word.formatList(this.requireString(args, "list_type"));
+        await this.word.formatList(this.requireString(args, "list_type"), this.requireSelectionHash(args));
         return { formatted: true };
       case "page_setup":
         await this.word.pageSetup({
@@ -646,6 +661,7 @@ export class OfficeJsToolRegistry {
           precise: await this.word.applyPreciseRevision(
             this.requireString(args, "original"),
             this.requireString(args, "revised", true),
+            this.requireSelectionHash(args),
           ),
         };
       case "ask_human":
@@ -659,6 +675,14 @@ export class OfficeJsToolRegistry {
     const value = args[name];
     if (typeof value !== "string" || (!allowEmpty && !value.trim())) {
       throw new Error(`${name} is required`);
+    }
+    return value;
+  }
+
+  private requireSelectionHash(args: ToolArguments): string {
+    const value = this.requireString(args, "expected_selection_hash");
+    if (!/^[0-9a-f]{64}$/u.test(value)) {
+      throw new Error("expected_selection_hash must be a 64-character lowercase hexadecimal hash returned by get_selection or select_exact_text");
     }
     return value;
   }

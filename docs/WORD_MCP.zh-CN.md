@@ -17,6 +17,10 @@ WordOllama.JS 可以把已打开任务窗格中的 Word 工具作为本机 Strea
   `wordollama_status` 返回的随机 `host_id` 明确选择目标。状态不会暴露文档路径或内容。
 - `apply_precise_revision` 会先确认当前选区仍与 `original` 完全一致，再把差异片段写成
   Word 修订；选区变化时拒绝执行。
+- 所有依赖当前选区或光标的写工具都必须提交 `expected_selection_hash`：
+  `insert_at_cursor`、`add_comment`、`format_text`、`insert_page_break`、`format_list` 和
+  `apply_precise_revision`。哈希绑定当前文档、选区起止位置和文本；校验与写入在同一个宿主
+  操作中完成。用户移动光标、改变选区或目标位置发生变化后，旧哈希会失效，工具不会写入。
 - `select_exact_text` 只在全文存在唯一、区分大小写的精确匹配时改变选区；0 个或多个
   匹配都会拒绝，避免外部 Agent 静默选错位置。输入长度限制为 1–255 个字符。虽然不改正文，
   它会改变共享的可见选区，因此在 MCP 元数据中仍按写操作标记，要求写权限/确认。
@@ -88,8 +92,23 @@ MCP 工具或重启该 MCP 连接。
 }
 ```
 
-成功时返回 `{"selected":true,"matchCount":1,"text":"…"}`。失败不会改变当前选区；
+成功时返回 `{"selected":true,"matchCount":1,"text":"…","selectionHash":"…"}`。失败不会改变当前选区；
 Agent 应扩大上下文使目标唯一，而不是反复改用较短文本。
+
+随后把返回的 `selectionHash` 原样传给选区写工具：
+
+```json
+{
+  "name": "add_comment",
+  "arguments": {
+    "text": "请复核此处依据。",
+    "expected_selection_hash": "select_exact_text 返回的 64 位哈希"
+  }
+}
+```
+
+也可以调用 `get_selection` 获取当前选区文本和 `selectionHash`。不要自行计算或复用另一
+文档、另一运行会话的哈希；收到选区已变化错误后应重新读取/选中，再由用户确认写入。
 
 ## 精确修订工具
 
@@ -100,11 +119,13 @@ Agent 应扩大上下文使目标唯一，而不是反复改用较短文本。
   "name": "apply_precise_revision",
   "arguments": {
     "original": "当前选区的完整原文",
-    "revised": "修改后的完整文本"
+    "revised": "修改后的完整文本",
+    "expected_selection_hash": "get_selection 或 select_exact_text 返回的 64 位哈希"
   }
 }
 ```
 
 调用成功时返回 `{"precise":true}`。`revised` 可以是空字符串，以修订方式删除当前
 选区；`original` 不允许为空。外部 Agent 应先调用 `get_selection`，保留返回的完整文本，
-再把它原样作为 `original` 提交，不要自行裁剪空格或换行。
+再把它原样作为 `original` 提交，并把同一响应中的 `selectionHash` 作为
+`expected_selection_hash`，不要自行裁剪空格或换行。

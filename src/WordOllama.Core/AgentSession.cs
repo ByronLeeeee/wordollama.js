@@ -120,7 +120,8 @@ public sealed class AgentSession
                 "succeeded until the tool result confirms it. " +
                 "The active Microsoft Word document is available only through the Office tools " +
                 "such as get_selection, get_doc_overview, read_paragraphs, and read_large_chunk. " +
-                 "Never use isolated-workspace file tools to read the active Word document. " +
+                "Before any selection-based write, call get_selection or select_exact_text and pass the returned selectionHash as expected_selection_hash; refresh it whenever the selection changes. " +
+                "Never use isolated-workspace file tools to read the active Word document. " +
                   "When external search, vector retrieval, MCP retrieval, or URL fetching is used, ground factual claims in the returned evidence and cite the source URLs in the final answer. Never invent a source. " +
                  "Installed Skills are instruction packages that extend your workflow; they are not Office add-ins. " +
                   "Use list_skills when the user asks for a Skill without an exact canonical name, and read_skill before following one. " +

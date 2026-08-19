@@ -13,8 +13,13 @@ const profiles: HostProfile[] = [
   {
     name: "Word 2016 baseline",
     supported: { WordApi: "1.1" },
-    expectedCount: 27,
+    expectedCount: 22,
     unavailable: [
+      "get_selection",
+      "select_exact_text",
+      "insert_at_cursor",
+      "format_text",
+      "insert_page_break",
       "read_comments",
       "read_bookmarks",
       "add_comment",

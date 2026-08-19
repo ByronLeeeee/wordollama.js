@@ -1186,6 +1186,8 @@
         "revisionsApiUnsupported": "This Word version does not support the WordApiDesktop 1.4 revisions API",
         "safeRevisionUnsupported": "This Word version does not support safe revision operations",
         "preciseRevisionSelectionChanged": "The current selection no longer matches the supplied original text. Precise revision was stopped to avoid editing the wrong content.",
+        "selectionHashMismatch": "The selection or cursor position changed. Call get_selection or select_exact_text again and retry with the new expected_selection_hash.",
+        "selectionHashUnsupported": "This host cannot safely identify the selection position, so the selection write was stopped. Upgrade Word/WPS and retry.",
         "exactSelectionLength": "Exact selection text must contain 1 to 255 characters.",
         "exactSelectionNotFound": "No case-sensitive exact match was found. The selection was not changed.",
         "exactSelectionAmbiguous": "Found {{count}} case-sensitive exact matches. The selection was not changed because the target is ambiguous.",
@@ -1249,8 +1251,8 @@
       }
     },
     "toolDescriptions": {
-      "get_selection": "Read text from the current Word selection.",
-      "select_exact_text": "Select text only when one unique, case-sensitive exact match exists in the document; refuses zero or ambiguous matches. Changes the visible Word selection but not document content.",
+      "get_selection": "Read the current Word selection and return the selectionHash required by selection-based write tools.",
+      "select_exact_text": "Select text only when one unique, case-sensitive exact match exists and return its selectionHash; refuses zero or ambiguous matches. Changes the visible Word selection but not document content.",
       "search_text": "Search for text in the current Word document.",
       "get_doc_overview": "Read the document paragraph count and opening preview.",
       "insert_text_at_end": "Insert text at the end of the current Word document.",

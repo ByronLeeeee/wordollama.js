@@ -1186,6 +1186,8 @@
         "revisionsApiUnsupported": "当前 Word 版本不支持 WordApiDesktop 1.4 修订 API",
         "safeRevisionUnsupported": "当前 Word 版本不支持安全修订操作",
         "preciseRevisionSelectionChanged": "当前选区已与提供的原文不一致，精确修订已停止，以免修改错误内容",
+        "selectionHashMismatch": "当前选区或光标位置已发生变化。请重新调用 get_selection 或 select_exact_text 获取新的 expected_selection_hash 后再试。",
+        "selectionHashUnsupported": "当前宿主无法安全标识选区位置，已停止选区写操作。请升级 Word/WPS 后再试。",
         "exactSelectionLength": "精确选中文本必须为 1 到 255 个字符。",
         "exactSelectionNotFound": "未找到区分大小写的精确匹配，选区未改变。",
         "exactSelectionAmbiguous": "找到 {{count}} 处区分大小写的精确匹配；目标不唯一，选区未改变。",
@@ -1249,8 +1251,8 @@
       }
     },
     "toolDescriptions": {
-      "get_selection": "读取当前 Word 选区文本。",
-      "select_exact_text": "仅在文档中存在唯一且区分大小写的精确匹配时选中文本；未找到或匹配不唯一时拒绝操作。它会改变 Word 的可见选区，但不改正文。",
+      "get_selection": "读取当前 Word 选区文本，并返回供选区写工具使用的 selectionHash。",
+      "select_exact_text": "仅在文档中存在唯一且区分大小写的精确匹配时选中文本，并返回 selectionHash；未找到或匹配不唯一时拒绝操作。它会改变 Word 的可见选区，但不改正文。",
       "search_text": "在当前 Word 文档中搜索文本。",
       "get_doc_overview": "读取文档段落数量和开头预览。",
       "insert_text_at_end": "在当前 Word 文档末尾插入文本。",
