@@ -822,7 +822,8 @@ for (const providerBase of [
   "https://api.deepseek.com",
   "https://dashscope.aliyuncs.com/compatible-mode/v1",
   "https://ark.cn-beijing.volces.com/api/v3",
-  "https://open.bigmodel.cn/api/paas/v4",
+  "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions",
   "https://api.moonshot.cn/v1",
   "https://api.siliconflow.cn/v1",
   "https://api.minimaxi.chat/v1",
@@ -831,6 +832,15 @@ for (const providerBase of [
 ]) {
   assert(settingsApp.includes(providerBase), `model settings is missing provider API base ${providerBase}`);
 }
+assert(
+  settingsApp.includes('id: "zhipu"') &&
+    settingsApp.includes('id: "zhipu-coding"') &&
+    setupAssistant.includes('id: "zhipu"') &&
+    setupAssistant.includes('id: "zhipu-coding"') &&
+    settingsApp.includes('onClick={() => void refreshModels()}') &&
+    settingsApp.includes('onClick={() => void probeCapabilities()}'),
+  "ordinary Zhipu and Coding Plan must be distinct presets while model fetch and capability probe keep separate handlers",
+);
 assert(
   updateStatus.includes("!result.configured") &&
     updateStatus.includes("result.updateAvailable && !result.artifact") &&

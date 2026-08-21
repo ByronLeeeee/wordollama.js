@@ -220,6 +220,18 @@ try
         insecureRejected = true;
     }
     Assert(insecureRejected, "non-loopback HTTP provider endpoints are rejected");
+    var modelFetchOptions = providerSettings.BuildOptionsForModelFetch(new ProviderProfileUpdate(
+        "zhipu-fetch",
+        "Zhipu GLM",
+        "OpenAI",
+        "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "",
+        ApiKey: "test-key",
+        ApiMode: "ChatCompletions"));
+    Assert(
+        modelFetchOptions.Model == "" &&
+        modelFetchOptions.Endpoint.EndsWith("/chat/completions", StringComparison.Ordinal),
+        "model discovery accepts an empty model and preserves the complete provider endpoint");
     var tamperedPath = Path.Combine(settingsTestRoot, "tampered.json");
     File.WriteAllText(tamperedPath,
         """{"activeProviderId":"bad","profiles":[{"id":"bad","name":"Bad","type":"OpenAI","endpoint":"http://example.com/v1","model":"bad","toolCallingMode":"Auto","supportsStreaming":true,"supportsVision":false,"supportsJsonOutput":false,"contextWindow":0}]}""");
@@ -347,6 +359,126 @@ using (var compatibleRequest = JsonDocument.Parse(chatReasoningHandler.LastReque
         !message.TryGetProperty("tool_calls", out _),
         "OpenAI-compatible plain messages omit null tool fields for strict llama.cpp parsers");
 }
+
+var ordinaryZhipuHandler = new ProviderSmokeHandler(
+    """{"data":[{"id":"glm-4.7-flash"},{"id":"glm-4v-flash"}]}""");
+var ordinaryZhipuProvider = new OpenAiCompatibleProvider(
+    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "test-key",
+    "",
+    apiMode: "ChatCompletions",
+    httpMessageHandler: ordinaryZhipuHandler);
+var ordinaryZhipuModels = await ordinaryZhipuProvider.FetchModelsAsync();
+Assert(
+    ordinaryZhipuHandler.LastRequestUri?.AbsolutePath == "/api/paas/v4/models" &&
+    ordinaryZhipuModels.SequenceEqual(["glm-4.7-flash", "glm-4v-flash"]),
+    "full ordinary Zhipu chat endpoint is normalized to the correct models URL without conflating GLM model capabilities");
+
+var codingZhipuHandler = new ProviderSmokeHandler("""{"data":[{"id":"glm-coding"}]}""");
+var codingZhipuProvider = new OpenAiCompatibleProvider(
+    "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions",
+    "test-key",
+    "",
+    apiMode: "ChatCompletions",
+    httpMessageHandler: codingZhipuHandler);
+_ = await codingZhipuProvider.FetchModelsAsync();
+Assert(
+    codingZhipuHandler.LastRequestUri?.AbsolutePath == "/api/coding/paas/v4/models",
+    "full Zhipu Coding Plan chat endpoint is normalized to the Coding Plan models URL");
+
+var zhipuToolHandler = new ProviderSmokeHandler("""{"choices":[{"message":{"content":"ok"}}]}""");
+var zhipuToolProvider = new OpenAiCompatibleProvider(
+    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "test-key",
+    "glm-4.7-flash",
+    apiMode: "ChatCompletions",
+    httpMessageHandler: zhipuToolHandler);
+_ = await zhipuToolProvider.ChatAsync(new ProviderChatRequest(
+    [new ChatMessage("user", "Call capability_echo.")],
+    Tools:
+    [
+        new OfficeToolDescriptor(
+            "capability_echo",
+            "Echo a value.",
+            false,
+            JsonSerializer.SerializeToElement(new
+            {
+                type = "object",
+                properties = new { value = new { type = "string" } },
+                required = new[] { "value" },
+            })),
+    ]));
+using (var toolRequest = JsonDocument.Parse(zhipuToolHandler.LastRequestBody!))
+{
+    Assert(
+        toolRequest.RootElement.GetProperty("tool_choice").GetString() == "auto" &&
+        toolRequest.RootElement.GetProperty("tools")[0].GetProperty("type").GetString() == "function" &&
+        toolRequest.RootElement.GetProperty("tools")[0].GetProperty("function").GetProperty("name").GetString() == "capability_echo",
+        "OpenAI-compatible tool probes send standard tools with explicit tool_choice auto");
+}
+
+var zhipuSuccessErrorHandler = new ProviderSmokeHandler(
+    """{"error":{"code":"1113","message":"Insufficient balance or resource package"}}""");
+var zhipuSuccessErrorProvider = new OpenAiCompatibleProvider(
+    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "test-key",
+    "glm-4.7-flash",
+    apiMode: "ChatCompletions",
+    httpMessageHandler: zhipuSuccessErrorHandler);
+var zhipuSuccessErrorThrown = false;
+try
+{
+    _ = await zhipuSuccessErrorProvider.ChatAsync(new ProviderChatRequest([new ChatMessage("user", "hello")]));
+}
+catch (HttpRequestException exception)
+{
+    zhipuSuccessErrorThrown = exception.Message.Contains("1113", StringComparison.Ordinal);
+}
+Assert(zhipuSuccessErrorThrown, "HTTP 200 provider error objects are rejected and preserve Zhipu error code 1113");
+
+var zhipuHttpErrorHandler = new ProviderSmokeHandler(
+    """{"error":{"code":1305,"message":"Free model is busy"}}""",
+    HttpStatusCode.TooManyRequests);
+var zhipuHttpErrorProvider = new OpenAiCompatibleProvider(
+    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "test-key",
+    "glm-4.7-flash",
+    apiMode: "ChatCompletions",
+    httpMessageHandler: zhipuHttpErrorHandler);
+var zhipuHttpErrorThrown = false;
+try
+{
+    _ = await zhipuHttpErrorProvider.ChatAsync(new ProviderChatRequest([new ChatMessage("user", "hello")]));
+}
+catch (HttpRequestException exception)
+{
+    zhipuHttpErrorThrown = exception.StatusCode == HttpStatusCode.TooManyRequests &&
+                           exception.Message.Contains("1305", StringComparison.Ordinal);
+}
+Assert(zhipuHttpErrorThrown, "non-success HTTP responses are rejected and preserve Zhipu error code 1305");
+
+var zhipuStreamErrorHandler = new ProviderSmokeHandler(
+    "data: {\"error\":{\"code\":1305,\"message\":\"Free model is busy\"}}\n\n",
+    mediaType: "text/event-stream");
+var zhipuStreamErrorProvider = new OpenAiCompatibleProvider(
+    "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "test-key",
+    "glm-4.7-flash",
+    apiMode: "ChatCompletions",
+    httpMessageHandler: zhipuStreamErrorHandler);
+var zhipuStreamErrorThrown = false;
+try
+{
+    await foreach (var _ in zhipuStreamErrorProvider.ChatStreamAsync(
+                       new ProviderChatRequest([new ChatMessage("user", "hello")])))
+    {
+    }
+}
+catch (HttpRequestException exception)
+{
+    zhipuStreamErrorThrown = exception.Message.Contains("1305", StringComparison.Ordinal);
+}
+Assert(zhipuStreamErrorThrown, "stream error events are rejected instead of being normalized into a successful done chunk");
 
 var claudeHandler = new JsonCaptureHandler(
     """{"content":[{"type":"thinking","thinking":"summary","signature":"signed-thinking"},{"type":"tool_use","id":"call-1","name":"lookup","input":{"q":"x"}}]}""");
@@ -1099,6 +1231,29 @@ sealed class JsonCaptureHandler(string responseBody) : HttpMessageHandler
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
+        };
+    }
+}
+
+sealed class ProviderSmokeHandler(
+    string responseBody,
+    HttpStatusCode statusCode = HttpStatusCode.OK,
+    string mediaType = "application/json") : HttpMessageHandler
+{
+    public Uri? LastRequestUri { get; private set; }
+    public string? LastRequestBody { get; private set; }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        LastRequestUri = request.RequestUri;
+        LastRequestBody = request.Content is null
+            ? null
+            : await request.Content.ReadAsStringAsync(cancellationToken);
+        return new HttpResponseMessage(statusCode)
+        {
+            Content = new StringContent(responseBody, Encoding.UTF8, mediaType),
         };
     }
 }

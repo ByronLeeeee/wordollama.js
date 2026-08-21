@@ -252,6 +252,7 @@
       "qwen": "Qwen",
       "doubao": "Doubao",
       "zhipu": "Zhipu GLM",
+      "zhipuCoding": "Zhipu GLM Coding Plan",
       "kimi": "Kimi",
       "siliconflow": "SiliconFlow",
       "minimax": "MiniMax",

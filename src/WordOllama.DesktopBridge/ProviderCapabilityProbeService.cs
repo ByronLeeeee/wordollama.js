@@ -59,7 +59,7 @@ public sealed class ProviderCapabilityProbeService
                 [new ChatMessage("user", "Call capability_echo with value 'ok'. Do not answer normally.")],
                 Tools: [echo], ProviderProfileId: profileId), timeout.Token);
             toolCalling = response.ToolCalls?.Any(call => call.Name == "capability_echo") == true;
-            if (!toolCalling) errors["toolCalling"] = "The model did not produce a native tool call.";
+            if (!toolCalling) errors["toolCalling"] = "The request succeeded, but the model did not produce a native tool call.";
         }
         catch (Exception exception) when (exception is not OperationCanceledException) { errors["toolCalling"] = Bound(exception.Message); }
 

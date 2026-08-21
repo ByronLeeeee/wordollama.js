@@ -51,6 +51,8 @@ const quickProviders: QuickProviderPreset[] = [
   { id: "openai", labelKey: "models.providers.openai", name: "OpenAI", type: "OpenAI", endpoint: "https://api.openai.com/v1", apiMode: "Responses", needsApiKey: true },
   { id: "deepseek", labelKey: "models.providers.deepseek", name: "DeepSeek", type: "OpenAI", endpoint: "https://api.deepseek.com", apiMode: "ChatCompletions", needsApiKey: true },
   { id: "qwen", labelKey: "models.providers.qwen", name: "Qwen", type: "OpenAI", endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1", apiMode: "ChatCompletions", needsApiKey: true },
+  { id: "zhipu", labelKey: "models.providers.zhipu", name: "Zhipu GLM", type: "OpenAI", endpoint: "https://open.bigmodel.cn/api/paas/v4/chat/completions", apiMode: "ChatCompletions", needsApiKey: true },
+  { id: "zhipu-coding", labelKey: "models.providers.zhipuCoding", name: "Zhipu GLM Coding Plan", type: "OpenAI", endpoint: "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions", apiMode: "ChatCompletions", needsApiKey: true },
   { id: "gemini", labelKey: "models.providers.gemini", name: "Gemini", type: "Gemini", endpoint: "https://generativelanguage.googleapis.com/v1beta", apiMode: "Auto", needsApiKey: true },
   { id: "custom", labelKey: "models.providers.custom", name: "OpenAI Compatible", type: "OpenAI", endpoint: "", apiMode: "Auto", needsApiKey: true },
 ];

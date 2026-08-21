@@ -74,6 +74,7 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
         EnsureSuccess(response, body);
 
         using var document = JsonDocument.Parse(body);
+        ThrowIfProviderError(document.RootElement, "model list");
         if (!document.RootElement.TryGetProperty("data", out var data) ||
             data.ValueKind != JsonValueKind.Array)
         {
@@ -128,9 +129,15 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
         EnsureSuccess(response, body);
 
         using var document = JsonDocument.Parse(body);
-        var choice = document.RootElement
-            .GetProperty("choices")[0]
-            .GetProperty("message");
+        ThrowIfProviderError(document.RootElement, "chat completion");
+        if (!document.RootElement.TryGetProperty("choices", out var choices) ||
+            choices.ValueKind != JsonValueKind.Array ||
+            choices.GetArrayLength() == 0 ||
+            !choices[0].TryGetProperty("message", out var choice) ||
+            choice.ValueKind != JsonValueKind.Object)
+        {
+            throw new HttpRequestException($"{ProviderType} returned an invalid chat completion response.");
+        }
         var content = choice.TryGetProperty("content", out var contentValue) &&
                       contentValue.ValueKind == JsonValueKind.String
             ? contentValue.GetString() ?? string.Empty
@@ -155,6 +162,7 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
         EnsureSuccess(response, body);
 
         using var document = JsonDocument.Parse(body);
+        ThrowIfProviderError(document.RootElement, "Responses request");
         var (content, toolCalls) = ParseResponsesResult(document.RootElement);
         return new ProviderChatResponse(ProviderType, model, content, toolCalls);
     }
@@ -207,6 +215,7 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
             }
 
             using var document = JsonDocument.Parse(data);
+            ThrowIfProviderError(document.RootElement, "chat completion stream");
             var choice = document.RootElement.TryGetProperty("choices", out var choices) &&
                          choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0
                 ? choices[0]
@@ -460,6 +469,7 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
                 description = tool.Description,
                 parameters = tool.ParameterSchema,
             }).ToArray();
+            payload["tool_choice"] = "auto";
         }
         return payload;
     }
@@ -556,6 +566,7 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
                     parameters = tool.ParameterSchema,
                 },
             }).ToArray();
+            payload["tool_choice"] = "auto";
         }
     }
 
@@ -806,10 +817,20 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
     {
         if (!response.IsSuccessStatusCode)
         {
+            var details = ExtractErrorBody(body);
             throw new HttpRequestException(
-                $"{ProviderType} returned {(int)response.StatusCode}: {Truncate(body)}",
+                $"{ProviderType} returned {(int)response.StatusCode}: {details}",
                 null,
                 response.StatusCode);
+        }
+    }
+
+    private void ThrowIfProviderError(JsonElement root, string operation)
+    {
+        var details = TryExtractProviderError(root);
+        if (!string.IsNullOrWhiteSpace(details))
+        {
+            throw new HttpRequestException($"{ProviderType} {operation} failed: {details}");
         }
     }
 
@@ -827,16 +848,90 @@ public sealed class OpenAiCompatibleProvider : IModelProvider
 
     private static string ExtractErrorMessage(JsonElement root)
     {
+        var details = TryExtractProviderError(root);
+        if (!string.IsNullOrWhiteSpace(details))
+        {
+            return details;
+        }
+        if (root.TryGetProperty("response", out var response))
+        {
+            details = TryExtractProviderError(response);
+            if (!string.IsNullOrWhiteSpace(details)) return details;
+        }
+        return GetString(root, "message") ?? GetString(root, "status") ?? "Unknown error";
+    }
+
+    private static string ExtractErrorBody(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return TryExtractProviderError(document.RootElement) ?? Truncate(body);
+        }
+        catch (JsonException)
+        {
+            return Truncate(body);
+        }
+    }
+
+    private static string? TryExtractProviderError(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object) return null;
         if (root.TryGetProperty("error", out var error))
         {
-            if (error.ValueKind == JsonValueKind.String) return error.GetString() ?? "Unknown error";
-            if (error.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String)
-            {
-                return message.GetString() ?? "Unknown error";
-            }
+            return FormatError(error);
         }
-        return GetString(root, "status") ?? "Unknown error";
+
+        if (!root.TryGetProperty("code", out var code) || !IsErrorCode(code)) return null;
+        var message = GetString(root, "message") ?? GetString(root, "msg");
+        return string.IsNullOrWhiteSpace(message)
+            ? $"code {JsonScalar(code)}"
+            : $"code {JsonScalar(code)}: {message}";
     }
+
+    private static string FormatError(JsonElement error)
+    {
+        if (error.ValueKind == JsonValueKind.String)
+        {
+            return error.GetString() ?? "Unknown error";
+        }
+        if (error.ValueKind != JsonValueKind.Object)
+        {
+            return Truncate(error.GetRawText());
+        }
+
+        var code = error.TryGetProperty("code", out var codeValue)
+            ? JsonScalar(codeValue)
+            : null;
+        var type = GetString(error, "type");
+        var message = GetString(error, "message") ?? GetString(error, "msg");
+        var prefix = !string.IsNullOrWhiteSpace(code)
+            ? $"code {code}"
+            : type;
+        if (!string.IsNullOrWhiteSpace(prefix) && !string.IsNullOrWhiteSpace(message))
+        {
+            return $"{prefix}: {message}";
+        }
+        return prefix ?? message ?? Truncate(error.GetRawText());
+    }
+
+    private static bool IsErrorCode(JsonElement code)
+    {
+        if (code.ValueKind == JsonValueKind.Number)
+        {
+            return !code.TryGetInt64(out var numeric) || numeric is not 0 and not 200;
+        }
+        if (code.ValueKind != JsonValueKind.String) return false;
+        var value = code.GetString()?.Trim();
+        return !string.IsNullOrWhiteSpace(value) &&
+               value is not "0" and not "200" &&
+               !string.Equals(value, "success", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string JsonScalar(JsonElement value) =>
+        value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? string.Empty
+            : value.GetRawText();
 
     private static JsonElement ParseArguments(string? raw)
     {
