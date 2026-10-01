@@ -60,23 +60,23 @@
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/office-js": "^1.0.601",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
-    "daisyui": "^5.7.7",
-    "office-addin-debugging": "^6.1.2",
-    "office-addin-dev-certs": "^2.0.10",
-    "office-addin-manifest": "^2.1.6",
+    "@types/office-js": "^1.0.610",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "daisyui": "^5.7.46",
+    "office-addin-debugging": "^7.0.1",
+    "office-addin-dev-certs": "^3.0.1",
+    "office-addin-manifest": "^3.0.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.1.5"
+    "vite": "^8.3.1"
   },
   "dependencies": {
-    "i18next": "^26.3.6",
-    "lucide-react": "^1.27.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-i18next": "^17.0.11"
+    "i18next": "^26.4.2",
+    "lucide-react": "^1.48.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-i18next": "^17.0.15"
   }
 }
